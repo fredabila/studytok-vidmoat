@@ -11,7 +11,23 @@ accepted and how it is aggregated) and anyone analysing the data.
   (`navigator.sendBeacon`, `text/plain` body).
 * A batch is `{ ctx, events: [...] }`. `ctx` is coarse device context: a per-page-load
   session id, viewport, device pixel ratio, standalone (installed) flag, connection type
-  (`4g`…), time zone, language, platform (`ios` / `android` / `desktop`).
+  (`4g`…), time zone, language, platform (`ios` / `android` / `desktop`), screen orientation,
+  battery level bucket (`low`/`mid`/`high`) and charging, and the current **posture**.
+
+## Device sensors (`public/sensors.js`)
+
+With the viewer's permission (iOS asks; it is requested on the first tap in the feed), the motion
+sensors are sampled on the device and reduced to one word, which is all that is sent:
+
+| Posture | Meaning | What the ranking does with it |
+| --- | --- | --- |
+| `hand` | held upright, still | neutral |
+| `flat` | lying on a table or bed, screen up | late at night: calmer, gentler formats |
+| `moving` | walking or in a vehicle (steady shake) | formats the narration carries win over dense cards |
+| `unknown` | no motion data (desktop, no permission) | neutral |
+
+A **drop** (near free-fall followed by a hard impact) pauses the video and is counted. Raw
+acceleration samples never leave the device, and nothing is recorded when permission is refused.
 * Every event has `type`, `at` (ms epoch) and `seq`; video events have `videoId`. Unknown
   types and fields are dropped, numbers are clamped, strings truncated (`cleanEvent`).
 * Nothing identifies a person beyond the StudyTok user id (the cookie). Nothing is sent to a
@@ -29,12 +45,17 @@ accepted and how it is aggregated) and anyone analysing the data.
 | `end_reached` | | the viewer hit the end-of-feed slide |
 | `impression` | `slot`, `nth`, `status`, `format` | a slide was added to the track |
 | `view` | `nth`, `format`, `source` feed/library | active and ready for 1 s (once per viewer per video) |
-| `heartbeat` | `t`, `watched`, `loops` | every 5 s while playing |
+| `heartbeat` | `t`, `watched`, `loops`, `posture` | every 5 s while playing |
 | `scene` | `sceneId`, `kind`, `t` | playback entered a new scene (hook, beat2, quizQ…) |
 | `pause` / `resume` | `t`, `by` tap/quiz/player | playback state changed |
 | `loop` | `loops` | the video wrapped around |
 | `complete` | | reached the end |
-| `leave` | `t`, `watched`, `maxT`, `pct`, `loops`, `dir` next/prev, `early` | the viewer moved on (one per view) |
+| `leave` | `t`, `watched`, `maxT`, `pct`, `loops`, `dir` next/prev, `early`, `posture` | the viewer moved on (one per view) |
+| `drop` | `videoId`, `t` | the motion sensors saw a free-fall followed by an impact (the video pauses) |
+| `sensors` | `motion` | whether motion data is flowing after the permission prompt |
+| `refresh` | `where` feed/library/profile | a refresh button or pull-to-refresh |
+| `level_up` | `unitId` | a unit crossed the mastery line (the burst) |
+| `recap_share` | `week` | the weekly recap was shared |
 | `rewatch` | | the viewer swiped back to a video they had viewed |
 | `like` / `unlike` / `save` / `unsave` | `t`, `by` button/double-tap | reactions |
 | `less` | `t` | "show me less" |
@@ -60,8 +81,12 @@ accepted and how it is aggregated) and anyone analysing the data.
 | `video:{id}:stats` | hash | `impressions views heartbeats completes leaves watchSec pctSum wf0..wf4 skips loops rewatches pauses likes saves less whyOpens quizShown quizHeld quizRight quizWrong quizSkips answerMs choice0..2 dir_next dir_prev errors` |
 | `video:{id}:scenes` | hash | sceneId → viewers who reached it (the drop-off curve) |
 | `stats:format:{format}` and `stats:format:{format}:{topic}` | hash | `views completes leaves pctSum skips loops rewatches likes saves less quizRight quizWrong quizSkips` |
-| `user:{id}:signals` | JSON | per-format and per-topic `{views completes likes saves skips less right wrong loops rewatches n pctSum}`, `watch {n pctSum completes early}`, `quiz {n right msSum skips}`, `hours[24]`, `sessions`, `prefs` |
-| `user:{id}:session` | JSON | `sid startedAt lastAt served viewed lastFormats[] lastTopics[] wrongStreak rightStreak earlyStreak` (a session ends after 30 quiet minutes or a new page load) |
+| `stats:format:{format}:leaveAt` | hash | scene kind → how many viewers left the video there (`end` = watched through): the drop-off curve per format |
+| `stats:hook:{style}` and `stats:hook:{style}:{topic}` | hash | `n pctSum early` per hook style (curiosity, challenge, number, question, pain, claim, story, secret) |
+| `stats:voice:{voiceId}`, `stats:music:{mood}` | hash | `n pctSum`: how each narrator voice and music mood holds attention |
+| `stats:device` | hash | `drops motionOn motionOff` |
+| `user:{id}:signals` | JSON | per-format and per-topic `{views completes likes saves skips less right wrong loops rewatches n pctSum}`, per-hook-style and per-posture `{n pctSum early}`, `watch {n pctSum completes early}`, `quiz {n right msSum skips}`, `hours[24]`, `days`, `weeks` (recaps), `sessions`, `prefs` |
+| `user:{id}:session` | JSON | `sid startedAt lastAt served viewed lastFormats[] lastTopics[] wrongStreak rightStreak earlyStreak posture hour night` (a session ends after 30 quiet minutes or a new page load) |
 | `user:{id}:progress` | JSON | per-unit learning state (`ranking.js applyEvent`): views, completes, skips, likes, less, quiz right/wrong, Leitner box and due time, watch fraction |
 | `user:{id}:seen|liked|saved|answered` | set | once-per-viewer guards |
 | `popular:units` | zset | views per unit key (cron top-up) |
@@ -75,7 +100,18 @@ viewer who looped counts as 1.0, not 2.0.
 ## Reading the data
 
 * `GET /api/stats` (public, anonymous): per-format completion rate, mean watch fraction, quiz
-  accuracy, likes and saves; event counts per day for the last 14 days; generation waits.
+  accuracy, likes and saves; per-format drop-off by scene kind (`leaveAt`); hook-style and
+  narrator-voice performance; device counters; event counts per day for the last 14 days;
+  generation waits.
+
+## What the app learns from this (closing the loop)
+
+* **Hooks** → `hookGuidance(topic)` tells the writer which opening styles hold attention on that
+  topic and which get skipped (and, per student, which they watch longest after).
+* **Sound** → `bestVoiceFor()` switches a format to a narrator voice that clearly holds attention
+  better, once there are 40+ views of evidence.
+* **Formats** → `formatPerformance(topic)` weights the format rotation.
+* **Context** → the ranking's `context` term reads the session's posture and hour.
 * `events:log` in Redis (`LRANGE events:log 0 -1`) for offline analysis. Each entry is a
   compact JSON object with the user id's first 8 characters, the event, and the video's
   format `f` and topic `tp`.

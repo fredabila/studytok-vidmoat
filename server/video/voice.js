@@ -10,6 +10,7 @@
 import { config } from '../core/config.js';
 import { createSpeech, transcribe, importMedia, getMe } from '../core/vidmoat.js';
 import { scenesFor, format as formatOf } from './formats.js';
+import { bestVoiceFor, VOICES } from '../feed/events.js';
 
 const MAX_CHARS = 1000;
 const r2 = (n) => Math.round(n * 100) / 100;
@@ -111,7 +112,9 @@ export async function narrate(lesson) {
     // Each format has its own narrator (an OpenAI voice) unless a voice is pinned in config or
     // the provider is forced to one without named voices.
     const skinVoice = provider === 'grok' || provider === 'cartesia' || maxCredits < 15 ? '' : formatOf(lesson.format).skin.voice || '';
-    const voiceId = config.voice.voiceId || skinVoice || undefined;
+    // Sound learning: once a voice clearly holds attention better than the format's default (enough views), use it.
+    const learned = skinVoice ? await bestVoiceFor([skinVoice, ...VOICES.filter((v) => v !== skinVoice)]).catch(() => null) : null;
+    const voiceId = config.voice.voiceId || learned || skinVoice || undefined;
     // Delivery instructions only apply to OpenAI voices; send them when OpenAI can be chosen.
     const instructions = provider === 'openai' || (provider === 'auto' && maxCredits >= 15) ? config.voice.instructions : undefined;
     const speech = await createSpeech({ text, provider, voiceId, maxCredits, instructions });

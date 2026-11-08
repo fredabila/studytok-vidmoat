@@ -39,13 +39,16 @@ export const EVENT_SPECS = {
   // feed consumption
   impression: { video: true, fields: { slot: 'i', nth: 'i', status: 's', format: 's' } },
   view: { video: true, fields: { nth: 'i', format: 's', source: 's' } },
-  heartbeat: { video: true, fields: { t: 'n', watched: 'n', loops: 'i' } },
+  heartbeat: { video: true, fields: { t: 'n', watched: 'n', loops: 'i', posture: 's' } },
   scene: { video: true, fields: { sceneId: 's', kind: 's', t: 'n' } },
   pause: { video: true, fields: { t: 'n', by: 's' } },
   resume: { video: true, fields: { t: 'n' } },
   loop: { video: true, fields: { loops: 'i' } },
   complete: { video: true, fields: {} },
-  leave: { video: true, fields: { t: 'n', watched: 'n', maxT: 'n', pct: 'p', loops: 'i', dir: 's', early: 'b', watchedSec: 'n' } },
+  leave: { video: true, fields: { t: 'n', watched: 'n', maxT: 'n', pct: 'p', loops: 'i', dir: 's', early: 'b', watchedSec: 'n', posture: 's' } },
+  drop: { fields: { videoId: 's', t: 'n' } },
+  sensors: { fields: { motion: 'b' } },
+  refresh: { fields: { where: 's' } },
   skip: { video: true, fields: {} }, // legacy: an early leave
   rewatch: { video: true, fields: {} },
   // reactions
@@ -98,6 +101,7 @@ export function cleanContext(ctx = {}) {
   return {
     sid: str(c.sid, 40), vw: Math.round(clampNum(c.vw, 10000)), vh: Math.round(clampNum(c.vh, 10000)), dpr: clampNum(c.dpr, 10),
     standalone: c.standalone === true, conn: str(c.conn, 12), tz: str(c.tz, 48), lang: str(c.lang, 12), platform: str(c.platform, 24),
+    orientation: str(c.orientation, 12), posture: str(c.posture, 12), battery: str(c.battery, 8), charging: c.charging === true,
   };
 }
 
@@ -115,7 +119,10 @@ export function weekKey(at) {
   return d.toISOString().slice(0, 10);
 }
 const emptyWeek = () => ({ watched: 0, completes: 0, watchSec: 0, quizN: 0, quizRight: 0, units: {}, formats: {}, days: {}, mastered: [] });
-export const emptySession = () => ({ sid: '', startedAt: 0, lastAt: 0, served: 0, viewed: 0, lastFormats: [], lastTopics: [], wrongStreak: 0, rightStreak: 0, earlyStreak: 0 });
+export const emptySession = () => ({ sid: '', startedAt: 0, lastAt: 0, served: 0, viewed: 0, lastFormats: [], lastTopics: [], wrongStreak: 0, rightStreak: 0, earlyStreak: 0, posture: 'unknown', hour: null, night: false });
+const POSTURES = new Set(['hand', 'flat', 'moving', 'unknown']);
+/** The scene a timeline time falls in (for drop-off curves), by kind. */
+const sceneKindAt = (video, t) => { const s = (video?.scenes || []).findLast((x) => t >= x.start); return s?.kind || null; };
 const SESSION_GAP_MS = 30 * 60 * 1000;
 
 const bump = (obj, key, field, by = 1) => { obj[key] ||= {}; obj[key][field] = (obj[key][field] || 0) + by; };
@@ -154,7 +161,12 @@ export async function ingest(userId, batch) {
     }
     session.lastAt = Math.max(session.lastAt, e.at);
     signals.lastSeenAt = Math.max(signals.lastSeenAt, e.at);
-    signals.hours[hourOf(e.at, ctx.tz)]++;
+    const hour = hourOf(e.at, ctx.tz);
+    signals.hours[hour]++;
+    // Context the ranking reads: how the phone is held right now, and whether it is late.
+    const posture = POSTURES.has(e.posture) ? e.posture : POSTURES.has(ctx.posture) ? ctx.posture : null;
+    if (posture && posture !== 'unknown') session.posture = posture;
+    session.hour = hour; session.night = hour >= 22 || hour < 5;
     if (['view', 'complete', 'quiz_answer', 'heartbeat'].includes(e.type)) {
       signals.days ||= {};
       signals.days[day(e.at)] = 1;
@@ -231,6 +243,19 @@ export async function ingest(userId, batch) {
         session.lastFormats = [format, ...session.lastFormats].slice(0, 6);
         session.lastTopics = [topic, ...session.lastTopics].slice(0, 6);
         if (e.dir) writes.push(stat(v.id, `dir_${e.dir.replace(/[^a-z]/g, '').slice(0, 8)}`));
+        // Where in the video people leave (by scene kind), per format: the drop-off curve.
+        const leftIn = pct < 0.95 ? sceneKindAt(v, e.t ?? e.maxT ?? 0) : 'end';
+        if (leftIn) writes.push(kv.hincrby(`stats:format:${format}:leaveAt`, leftIn, 1));
+        // Sound: how each narrator voice and music mood holds attention; hooks: which opening styles do.
+        if (v.voice?.voiceId) writes.push(kv.hincrby(`stats:voice:${v.voice.voiceId}`, 'n', 1), kv.hincrby(`stats:voice:${v.voice.voiceId}`, 'pctSum', Math.round(pct * 100)));
+        if (v.musicMood) writes.push(kv.hincrby(`stats:music:${v.musicMood}`, 'n', 1), kv.hincrby(`stats:music:${v.musicMood}`, 'pctSum', Math.round(pct * 100)));
+        if (v.lesson?.hookStyle) {
+          const hk = `stats:hook:${v.lesson.hookStyle}`;
+          writes.push(kv.hincrby(hk, 'n', 1), kv.hincrby(hk, 'pctSum', Math.round(pct * 100)), kv.hincrby(`${hk}:${topic}`, 'n', 1), kv.hincrby(`${hk}:${topic}`, 'pctSum', Math.round(pct * 100)));
+          if (early) writes.push(kv.hincrby(hk, 'early', 1), kv.hincrby(`${hk}:${topic}`, 'early', 1));
+          bump(signals.hooks ||= {}, v.lesson.hookStyle, 'n'); bump(signals.hooks, v.lesson.hookStyle, 'pctSum', pct); if (early) bump(signals.hooks, v.lesson.hookStyle, 'early');
+        }
+        if (e.posture && POSTURES.has(e.posture)) { bump(signals.postures ||= {}, e.posture, 'n'); bump(signals.postures, e.posture, 'pctSum', pct); }
         unitEvent('leave', { pct });
         if (early) {
           writes.push(stat(v.id, 'skips'), fstat(v, 'skips'));
@@ -284,6 +309,8 @@ export async function ingest(userId, batch) {
       }
       case 'quiz_skip': writes.push(stat(v.id, 'quizSkips'), fstat(v, 'quizSkips')); signals.quiz.skips++; bump(signals.formats, format, 'quizSkips'); break;
       case 'player_error': writes.push(stat(v.id, 'errors')); break;
+      case 'drop': writes.push(kv.hincrby('stats:device', 'drops', 1)); break;
+      case 'sensors': writes.push(kv.hincrby('stats:device', e.motion ? 'motionOn' : 'motionOff', 1)); break;
       case 'gen_wait': writes.push(kv.hincrby('stats:generation', e.outcome === 'ready' ? 'waitedReady' : 'waitedGaveUp', 1), kv.hincrby('stats:generation', 'waitMs', Math.round(e.ms || 0))); break;
       case 'pref_change': if (e.key) signals.prefs[e.key.slice(0, 16)] = e.value; break;
       case 'session_start': session.served = session.served || 0; break;
@@ -372,8 +399,53 @@ export async function stats({ formats = [] } = {}) {
     const h = await kv.hgetall(`events:day:${d}`);
     if (h) days[d] = Object.fromEntries(Object.entries(h).map(([k, v]) => [k, Number(v) || 0]));
   }
+  // Where each format loses people, which hooks hold attention, which voices and moods do.
+  const leaveAt = {};
+  for (const f of formats) { const h = await kv.hgetall(`stats:format:${f}:leaveAt`); if (h) leaveAt[f] = Object.fromEntries(Object.entries(h).map(([k, v]) => [k, Number(v) || 0])); }
+  const rate = (h) => ({ n: num(h, 'n'), meanWatch: num(h, 'n') ? +(num(h, 'pctSum') / 100 / num(h, 'n')).toFixed(3) : null, earlyRate: num(h, 'n') ? +(num(h, 'early') / num(h, 'n')).toFixed(3) : null });
+  const hooks = {};
+  for (const s of HOOK_STYLES) { const h = await kv.hgetall(`stats:hook:${s}`); if (h) hooks[s] = rate(h); }
+  const voices = {};
+  for (const vId of VOICES) { const h = await kv.hgetall(`stats:voice:${vId}`); if (h) voices[vId] = rate(h); }
   const gen = (await kv.hgetall('stats:generation')) || {};
-  return { library: await db.readyCount(), byFormat, days, generation: { waitedReady: num(gen, 'waitedReady'), waitedGaveUp: num(gen, 'waitedGaveUp'), meanWaitMs: num(gen, 'waitedReady') + num(gen, 'waitedGaveUp') ? Math.round(num(gen, 'waitMs') / (num(gen, 'waitedReady') + num(gen, 'waitedGaveUp'))) : null } };
+  return { library: await db.readyCount(), byFormat, leaveAt, hooks, voices, device: (await kv.hgetall('stats:device')) || {}, days, generation: { waitedReady: num(gen, 'waitedReady'), waitedGaveUp: num(gen, 'waitedGaveUp'), meanWaitMs: num(gen, 'waitedReady') + num(gen, 'waitedGaveUp') ? Math.round(num(gen, 'waitMs') / (num(gen, 'waitedReady') + num(gen, 'waitedGaveUp'))) : null } };
+}
+
+export const HOOK_STYLES = ['curiosity', 'challenge', 'number', 'question', 'pain', 'claim', 'story', 'secret'];
+export const VOICES = ['alloy', 'ash', 'ballad', 'coral', 'echo', 'fable', 'nova', 'onyx', 'sage', 'shimmer', 'verse', 'marin', 'cedar'];
+
+/**
+ * Which hook styles hold attention on a topic (and for this student, when known): lists for the
+ * writer. A style counts once it has 15+ views; "hold" means mean watch ≥ 55% with few early
+ * leaves, "lose" means early leaves ≥ 35%.
+ */
+export async function hookGuidance(topic, signals = null) {
+  const hold = [], lose = [];
+  for (const s of HOOK_STYLES) {
+    const h = (await kv.hgetall(`stats:hook:${s}:${topic}`)) || (await kv.hgetall(`stats:hook:${s}`));
+    const n = Number(h?.n) || 0;
+    if (n < 15) continue;
+    const mean = Number(h.pctSum) / 100 / n, early = (Number(h.early) || 0) / n;
+    if (early >= 0.35) lose.push(s); else if (mean >= 0.55) hold.push(s);
+  }
+  const mine = signals?.hooks ? Object.entries(signals.hooks).filter(([, v]) => v.n >= 4).sort((a, b) => b[1].pctSum / b[1].n - a[1].pctSum / a[1].n).map(([k]) => k) : [];
+  return { hold, lose, student: mine.slice(0, 3) };
+}
+
+/** The best-performing narrator voice for a format once there is enough evidence, else null. */
+export async function bestVoiceFor(candidates, { minViews = 40, margin = 0.08 } = {}) {
+  let best = null;
+  for (const vId of candidates) {
+    const h = await kv.hgetall(`stats:voice:${vId}`);
+    const n = Number(h?.n) || 0;
+    if (n < minViews) continue;
+    const mean = Number(h.pctSum) / 100 / n;
+    if (!best || mean > best.mean) best = { voiceId: vId, mean, n };
+  }
+  if (!best) return null;
+  const base = candidates[0] && (await kv.hgetall(`stats:voice:${candidates[0]}`));
+  const baseMean = base && Number(base.n) ? Number(base.pctSum) / 100 / Number(base.n) : null;
+  return baseMean == null || best.mean - baseMean >= margin ? best.voiceId : null;
 }
 
 /** How each format performs on a topic, as a multiplier around 1 (shrunk toward 1 with little data). */

@@ -379,6 +379,147 @@ export const FORMATS = {
       outro(l, 'So'),
     ],
   },
+
+  // ---- Third wave: formats shaped by what the events show keeps people watching ----
+  // Very short videos are rarely skipped, cards that fill in hold attention, a prediction
+  // before footage makes people wait for it, analogies make hard ideas feel owned, and a list
+  // of mistakes is the thing students screenshot.
+
+  onething: {
+    name: 'One thing', tag: '15 sec',
+    blurb: 'One idea, one visual, fifteen seconds. The palate cleanser the feed drops between heavier videos.',
+    spec: 'beats: exactly 1 (text = one memorable spoken sentence of at most 22 words, keyTerm, a teaching visual or striking footage). hook: a 3-6 word setup ("One thing about enzymes"). takeaway: a 5-8 word line. quiz required but tiny (max 50 chars, options max 16 chars). Leave items, myth, fact, cards, exam.question and chat empty.',
+    weights: { default: 2 },
+    skin: {
+      hook: { fontFamily: 'Montserrat', fontWeight: 900, fontSize: 176, uppercase: false, animIn: 'pop' },
+      term: { fontFamily: 'Montserrat', fontWeight: 900 },
+      captions: { preset: 'Karaoke', y: 430, maxWordsPerLine: 4 },
+      filter: null, transition: 'dissolve', music: ['lofi piano', 'chill'], voice: 'marin', cards: 'dark', scrim: 0.6,
+    },
+    scenes: (l) => [
+      { id: 'hook', kind: 'hook', spoken: sentence(l.hook), minDur: 2 },
+      { id: 'beat0', kind: 'beat', index: 0, spoken: sentence(l.beats[0].text), captions: true, beat: l.beats[0], kicker: 'ONE THING' },
+      ...quizScenes(l, 'Quick.'), outro(l, 'That is it'),
+    ],
+  },
+
+  cheatsheet: {
+    name: 'Cheat sheet', tag: 'Cheat sheet',
+    blurb: 'A revision card that fills in line by line as the narrator says each one. The thing students screenshot before an exam.',
+    spec: 'items: 4-6 lines of a cheat sheet for the unit (title = the term or formula, max 24 chars; text = one spoken sentence of 8-16 words saying what it is or when to use it; visual query). Ordered as they would appear on a revision card. hook: "<Unit> on one card" style. quiz required. Leave beats, myth, fact, cards, exam.question and chat empty.',
+    weights: { default: 2, math: 3, physics: 3, chemistry: 3, biology: 3, law: 3, economics: 2, 'computer-science': 3 },
+    skin: {
+      hook: { fontFamily: 'Oswald', fontWeight: 700, fontSize: 150, uppercase: true, animIn: 'slide-up' },
+      term: { fontFamily: 'Oswald', fontWeight: 700 },
+      captions: { preset: 'Clean', y: 540, maxWordsPerLine: 4 },
+      filter: 'Fade', transition: 'fade', music: ['calm piano', 'lofi piano'], voice: 'cedar', cards: 'paper', scrim: 0.7,
+    },
+    scenes: (l) => [
+      { id: 'hook', kind: 'hook', spoken: sentence(l.hook), minDur: 2.4 },
+      ...l.items.slice(0, 6).map((it, i) => ({ id: `line${i}`, kind: 'sheet', index: i, spoken: `${it.title}. ${sentence(it.text)}`, captions: true, items: l.items.slice(0, 6), item: it })),
+      ...quizScenes(l, 'Cover the card.'), outro(l, 'Screenshot this'),
+    ],
+  },
+
+  predict: {
+    name: 'Predict', tag: 'What happens?',
+    blurb: 'Footage of something about to happen, a "what happens next?" with three options, a hold, then the reveal and why. People wait for the payoff.',
+    spec: 'exam.question: "What happens next?" about a concrete physical or real-world situation in the unit (max 100 chars) with exactly 3 exam.options (max 24 chars) and exam.answerIndex. ambient: the footage of that situation (a concrete, filmable query). beats: exactly 2 explaining why (text, keyTerm, visual). exam.steps: []. exam.mistake: "". exam.tip: the principle in one line. hook: a 4-8 word setup ("Watch the glass"). Leave items, myth, fact, cards, chat and quiz empty.',
+    weights: { default: 1, physics: 4, chemistry: 4, biology: 3, earth: 4, space: 2, psychology: 2, economics: 2 },
+    skin: {
+      hook: { fontFamily: 'Archivo Black', fontWeight: 400, fontSize: 156, uppercase: false, animIn: 'zoom-blur' },
+      term: { fontFamily: 'Archivo Black', fontWeight: 400 },
+      captions: { preset: 'Dark Pill', y: 440, maxWordsPerLine: 4 },
+      filter: 'Cinematic', transition: 'zoom', music: ['suspense', 'tension'], voice: 'echo', cards: 'dark', scrim: 0.4,
+    },
+    scenes: (l) => {
+      const e = l.exam;
+      return [
+        { id: 'hook', kind: 'hook', spoken: sentence(l.hook), minDur: 2.4 },
+        { id: 'question', kind: 'question', spoken: `${question(e.question)} ${e.options.map((o, i) => `${ABC[i]}, ${o}`).join('. ')}. Make your call.`, pauseAfter: 4, minDur: 6, exam: e, label: 'What happens next?' },
+        { id: 'answer', kind: 'reveal', spoken: `${ABC[e.answerIndex]}: ${sentence(e.options[e.answerIndex])}`, minDur: 2.5, captions: false, exam: e },
+        ...l.beats.slice(0, 2).map((b, i) => ({ id: `beat${i}`, kind: 'beat', index: i, spoken: sentence(b.text), captions: true, beat: b, kicker: i === 0 ? 'BECAUSE' : 'WHICH MEANS' })),
+        { id: 'outro', kind: 'outro', spoken: sentence(e.tip || l.takeaway), minDur: 3, label: 'The principle', text: e.tip || l.takeaway },
+      ];
+    },
+  },
+
+  analogy: {
+    name: 'Analogy', tag: 'It is like…',
+    blurb: '"X is like Y": one everyday comparison carried through three beats, then where it breaks. Hard ideas feel owned.',
+    spec: 'hook: "<Concept> is like <everyday thing>" (max 70 chars). beats: exactly 3: (1) the analogy set up with the everyday thing, (2) the mapping (what in the analogy stands for what in the concept; visual = compare with title "Analogy|Real thing"), (3) where the analogy breaks and the real detail that matters. quiz required. Leave items, myth, fact, cards, exam.question and chat empty.',
+    weights: { default: 2, physics: 3, chemistry: 3, biology: 3, 'computer-science': 4, economics: 3, psychology: 2 },
+    skin: {
+      hook: { fontFamily: 'DM Serif Display', fontWeight: 400, fontSize: 156, uppercase: false, animIn: 'fade-in', animInDuration: 0.8 },
+      term: { fontFamily: 'DM Serif Display', fontWeight: 400 },
+      captions: { preset: 'Clean Subtitle', y: 460, maxWordsPerLine: 5 },
+      filter: 'Warm', transition: 'push', music: ['acoustic guitar loop', 'chill'], voice: 'fable', cards: 'paper', scrim: 0.6,
+    },
+    scenes: (l) => [
+      { id: 'hook', kind: 'hook', spoken: sentence(l.hook), minDur: 3 },
+      ...l.beats.slice(0, 3).map((b, i) => ({ id: `beat${i}`, kind: 'beat', index: i, spoken: sentence(b.text), captions: true, beat: b, kicker: ['IMAGINE', 'SO', 'BUT'][i] })),
+      ...quizScenes(l, 'Got it?'), outro(l, 'Remember it as'),
+    ],
+  },
+
+  mistakes: {
+    name: 'Mistakes', tag: 'Don\'t do this',
+    blurb: 'Three mistakes students make on this unit, each stamped ✗ then fixed. Loss aversion: nobody wants to be the one.',
+    spec: 'items: exactly 3 mistakes (title = the mistake in 2-5 words, max 28 chars; text = one spoken sentence: what goes wrong and the fix, 12-20 words; visual query). Order them from common to costly. hook: "3 mistakes that cost marks in <unit>" style. quiz: a question where one option is one of the mistakes. Leave beats, myth, fact, cards, exam.question and chat empty.',
+    weights: { default: 2, math: 4, physics: 3, chemistry: 3, 'computer-science': 3, law: 3, economics: 2, language: 3 },
+    skin: {
+      hook: { fontFamily: 'Anton', fontWeight: 400, fontSize: 170, uppercase: true, animIn: 'word-slam', outline: '#000000', outlineWidth: 6 },
+      term: { fontFamily: 'Anton', fontWeight: 400, uppercase: true },
+      captions: { preset: 'Boxed Red', y: 430, maxWordsPerLine: 3 },
+      filter: 'Moody', transition: 'glitch', music: ['tension', 'dramatic'], voice: 'ash', cards: 'dark', scrim: 0.7, stampSfx: true,
+    },
+    scenes: (l) => [
+      { id: 'hook', kind: 'hook', spoken: sentence(l.hook), minDur: 2.4 },
+      ...l.items.slice(0, 3).map((it, i) => ({ id: `mistake${i}`, kind: 'stamp', spoken: `Mistake ${i + 1}: ${it.title}. ${sentence(it.text)}`, label: `✗ ${i + 1}`, text: it.title, color: '#e5484d', minDur: 4, captions: true })),
+      ...quizScenes(l, 'Which one is the trap?'), outro(l, 'Not you'),
+    ],
+  },
+
+  history: {
+    name: 'Timeline', tag: 'Timeline',
+    blurb: 'Four or five dated moments that build a timeline card as the narrator moves along it; the last date is the twist.',
+    spec: 'items: 4-5 dated moments in time order (title = "YEAR|what happened", max 28 chars; text = one spoken sentence of 10-18 words; visual query for footage or a photo of the real thing). The last one is the surprising or most consequential. hook: "How we got from X to Y" style. quiz required. Leave beats, myth, fact, cards, exam.question and chat empty.',
+    weights: { default: 1, history: 5, space: 3, biology: 2, earth: 2, economics: 3, law: 3, 'computer-science': 2 },
+    skin: {
+      hook: { fontFamily: 'Cinzel', fontWeight: 700, fontSize: 140, uppercase: true, animIn: 'fade-in', animInDuration: 1 },
+      term: { fontFamily: 'Cinzel', fontWeight: 700, uppercase: true, letterSpacing: 6 },
+      captions: { preset: 'Clean Subtitle', y: 500, maxWordsPerLine: 6 },
+      filter: 'warm-film', transition: 'dissolve', music: ['cinematic', 'orchestral'], voice: 'sage', cards: 'dark', scrim: 0.5, letterbox: true,
+    },
+    scenes: (l) => [
+      { id: 'hook', kind: 'hook', spoken: sentence(l.hook), minDur: 3 },
+      ...l.items.slice(0, 5).map((it, i) => ({ id: `t${i}`, kind: 'beat', index: i, spoken: sentence(it.text), captions: true, chapter: i + 1,
+        beat: { text: it.text, keyTerm: it.title.split('|')[0].trim(), visual: { kind: 'timeline', title: '', items: l.items.slice(0, i + 1).map((x) => x.title), query: it.visual, value: 0, unit: '', svg: '' } } })),
+      ...quizScenes(l, 'One date.'), outro(l, 'Why it matters'),
+    ],
+  },
+
+  challenge: {
+    name: 'Challenge', tag: '10 seconds',
+    blurb: 'A problem you can do in your head, a ten-second countdown, the answer, the trick. Competitive and fast.',
+    spec: 'exam.question: a problem solvable mentally in ten seconds (max 100 chars) with exactly 3 exam.options (max 20 chars) and exam.answerIndex. exam.steps: exactly 2 short worked steps. exam.mistake: "". exam.tip: the mental trick in one line. hook: "Ten seconds. Go." style. Leave beats, items, myth, fact, cards, chat and quiz empty.',
+    weights: { default: 1, math: 5, physics: 3, chemistry: 3, 'computer-science': 3, economics: 2, language: 3 },
+    skin: {
+      hook: { fontFamily: 'Bebas Neue', fontWeight: 400, fontSize: 180, uppercase: true, animIn: 'bounce' },
+      term: { fontFamily: 'Bebas Neue', fontWeight: 400 },
+      captions: { preset: 'Hormozi', y: 460, maxWordsPerLine: 3 },
+      filter: 'punch', transition: 'flash', music: ['energetic', 'upbeat'], voice: 'onyx', cards: 'paper', scrim: 0.65, countdown: true,
+    },
+    scenes: (l) => {
+      const e = l.exam;
+      return [
+        { id: 'hook', kind: 'hook', spoken: sentence(l.hook), minDur: 2 },
+        { id: 'question', kind: 'question', spoken: `${question(e.question)} ${e.options.map((o, i) => `${ABC[i]}, ${o}`).join('. ')}. Ten seconds.`, pauseAfter: 10, minDur: 12, exam: e, label: '10 seconds' },
+        ...e.steps.slice(0, 2).map((s, i) => ({ id: `step${i}`, kind: 'steps', index: i, spoken: sentence(s), captions: true, steps: e.steps.slice(0, 2), answer: e })),
+        { id: 'outro', kind: 'outro', spoken: `The trick: ${sentence(e.tip)}`, minDur: 3, label: 'The trick', text: e.tip },
+      ];
+    },
+  },
 };
 
 export const FORMAT_IDS = Object.keys(FORMATS);

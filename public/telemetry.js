@@ -4,6 +4,8 @@
 // StudyTok server, and nothing in a batch identifies a device beyond coarse viewport, connection
 // and time-zone context.
 
+import { context as deviceContext, posture } from './sensors.js';
+
 const FLUSH_MS = 4000;
 const MAX_QUEUE = 25;
 
@@ -15,9 +17,11 @@ const sid = (() => {
   } catch { return Math.random().toString(36).slice(2, 10); }
 })();
 
+let device = {};
+deviceContext().then((d) => { device = d; }).catch(() => {});
 function context() {
   return {
-    sid,
+    sid, ...device, posture: posture(),
     vw: window.innerWidth, vh: window.innerHeight, dpr: window.devicePixelRatio || 1,
     standalone: Boolean(matchMedia('(display-mode: standalone)').matches || navigator.standalone),
     conn: navigator.connection?.effectiveType || '',
@@ -80,7 +84,7 @@ export class WatchTracker {
     }
     if (playing) {
       this.started = true;
-      if (now - this.lastBeat >= 5000) { this.lastBeat = now; track('heartbeat', { videoId: this.videoId, t: +t.toFixed(1), watched: +this.watched.toFixed(1), loops: this.loops }); }
+      if (now - this.lastBeat >= 5000) { this.lastBeat = now; track('heartbeat', { videoId: this.videoId, t: +t.toFixed(1), watched: +this.watched.toFixed(1), loops: this.loops, posture: posture() }); }
       const s = this.scenes.length ? this.scenes.findLast((x) => t >= x.start) : null;
       if (s && s.id !== this.scene) { this.scene = s.id; track('scene', { videoId: this.videoId, sceneId: s.id, kind: s.kind, t: +t.toFixed(1) }); }
     }
@@ -89,6 +93,6 @@ export class WatchTracker {
   leave(dir) {
     if (!this.started && this.watched === 0) return;
     const pct = this.duration ? Math.min(1, Math.max(this.maxT, this.watched) / this.duration) : 0;
-    track('leave', { videoId: this.videoId, t: +this.lastT.toFixed(1), watched: +this.watched.toFixed(1), maxT: +this.maxT.toFixed(1), pct: +pct.toFixed(3), loops: this.loops, dir, early: this.watched < 2 });
+    track('leave', { videoId: this.videoId, t: +this.lastT.toFixed(1), watched: +this.watched.toFixed(1), maxT: +this.maxT.toFixed(1), pct: +pct.toFixed(3), loops: this.loops, dir, early: this.watched < 2, posture: posture() });
   }
 }

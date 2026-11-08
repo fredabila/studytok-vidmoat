@@ -12,7 +12,7 @@ const SYSTEM = `You write scripts for StudyTok, a vertical short-video feed that
 Each episode is a 25-50 second video in one of several formats (assigned per episode below). A narrator reads every spoken field; the screen shows big key terms, teaching visuals, cards and captions. Each format has its own structure: fill only the fields its spec names and leave the others empty ("" / [] / 0). Set \`format\` to the assigned id.
 
 Why people keep watching (match the psychology of a short-video feed, never the feel of a lecture):
-- The first line is a hook with a curiosity gap, a challenge, a confession or a stake ("Most students get this wrong", "Wait for number one", "You use this every day without knowing"); never "Today we will learn". Rotate hook styles across the batch: curiosity gap, challenge, surprising number, question the viewer answers in their head, relatable pain, bold claim.
+- The first line is a hook; never "Today we will learn". Set hookStyle to the one you used and rotate styles across the batch: curiosity (an open gap: "There is a reason your phone dies in the cold"), challenge ("Spot the mistake before I do"), number (a surprising figure), question (one the viewer answers in their head), pain (a relatable struggle: "You revised for hours and still blanked"), claim (a bold statement to argue with), story (drop into a moment: "In 1665 a university closed its doors"), secret ("The thing examiners never tell you").
 - Open a loop early and close it late: tease the best item, the twist or the answer, and pay it off in the last beat.
 - Talk to one person, in the second person, in short spoken sentences. Concrete before abstract; an example before a definition.
 - Every episode has one moment the viewer does something: a guess, a spot-the-mistake, a pick a side, a say-it-before-it-appears.
@@ -50,7 +50,7 @@ function prefLines(prefs = {}) {
  * @param {number} p.count
  * @param {string} p.accent      topic accent colour for diagrams
  */
-export async function writeEpisodes({ unit, audience, covered = [], count = 3, formats, accent = '#34d399' }) {
+export async function writeEpisodes({ unit, audience, covered = [], count = 3, formats, accent = '#34d399', hooks = null }) {
   const list = formats?.length ? formats : Array.from({ length: count }, () => 'explain');
   count = list.length;
   const context = [
@@ -62,6 +62,9 @@ export async function writeEpisodes({ unit, audience, covered = [], count = 3, f
     audience.institution && `Institution: ${audience.institution}`,
     audience.exam && `Preparing for: ${audience.exam}`,
     ...prefLines(audience.prefs),
+    hooks?.hold?.length && `Hook styles that hold attention on this topic (use these more): ${hooks.hold.join(', ')}.`,
+    hooks?.lose?.length && `Hook styles students skip on this topic (avoid): ${hooks.lose.join(', ')}.`,
+    hooks?.student?.length && `This student watches longest after: ${hooks.student.join(', ')} hooks.`,
     covered.length && `Already covered for this unit (do not repeat):\n${covered.slice(-30).map((c) => `- ${c}`).join('\n')}`,
     `Write ${count} episodes, in this order and in these formats:`,
     ...list.map((id, i) => `${i + 1}. format "${id}" (${FORMATS[id].name}): ${FORMATS[id].blurb} Fields: ${FORMATS[id].spec}`),

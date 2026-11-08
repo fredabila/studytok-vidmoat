@@ -215,4 +215,76 @@ export const SAMPLES = {
     ],
     takeaway: 'Stretch the stop, shrink the force.', myth: '', fact: '', items: [], cards: [], exam: { question: '', options: [], answerIndex: 0, steps: [], mistake: '', tip: '' }, chat: { contact: '', messages: [] },
   },
+
+  // ---- third-wave formats ----
+  onething: {
+    format: 'onething', subtopic: 'Terminal velocity', title: 'One thing about falling', hook: 'One thing about falling', hookTerm: 'falling', hookStyle: 'curiosity',
+    ambient: 'skydiver falling',
+    beats: [{ text: 'A falling object stops speeding up once air resistance equals its weight, and that speed is terminal velocity.', keyTerm: 'Terminal velocity', visual: { kind: 'definition', title: 'Terminal velocity', items: ['The steady speed reached when air resistance balances weight.'], query: '', value: 0, unit: '', svg: '' } }],
+    quiz: { question: 'At terminal velocity, acceleration is…', options: ['Zero', '9.8 m/s²', 'Increasing'], answerIndex: 0, explanation: 'Forces balance, so no acceleration.' },
+    takeaway: 'Balanced forces, steady speed.', myth: '', fact: '', items: [], cards: [], exam: { question: '', options: [], answerIndex: 0, steps: [], mistake: '', tip: '' }, chat: { contact: '', messages: [] },
+  },
+  cheatsheet: {
+    format: 'cheatsheet', subtopic: 'Motion formulas', title: 'Motion on one card', hook: 'Motion on one card', hookTerm: 'one card', hookStyle: 'claim',
+    ambient: 'notebook formulas desk',
+    items: [
+      { title: 'v = u + at', tier: '', text: 'Final velocity from initial velocity, acceleration and time.', visual: 'car accelerating' },
+      { title: 's = ut + ½at²', tier: '', text: 'Distance covered when you know the time.', visual: 'runner track' },
+      { title: 'v² = u² + 2as', tier: '', text: 'Use this when time is not given.', visual: 'braking car' },
+      { title: 'F = ma', tier: '', text: 'Net force equals mass times acceleration.', visual: 'rocket launch' },
+      { title: 'W = mg', tier: '', text: 'Weight is mass times gravitational field strength.', visual: 'scales weighing' },
+    ],
+    quiz: { question: 'Which equation needs no time value?', options: ['v = u + at', 'v² = u² + 2as', 's = ut + ½at²'], answerIndex: 1, explanation: 'It links velocities, acceleration and distance only.' },
+    takeaway: 'Pick the equation by what you are not given.', beats: [], myth: '', fact: '', cards: [], exam: { question: '', options: [], answerIndex: 0, steps: [], mistake: '', tip: '' }, chat: { contact: '', messages: [] },
+  },
+  predict: {
+    format: 'predict', subtopic: 'Inertia tablecloth', title: 'What happens to the plates?', hook: 'Watch the tablecloth', hookTerm: 'tablecloth', hookStyle: 'question',
+    ambient: 'tablecloth pull trick',
+    exam: { question: 'The tablecloth is yanked fast. What happens to the plates?', options: ['They fly off', 'They stay put', 'They shatter'], answerIndex: 1, steps: [], mistake: '', tip: 'Objects keep doing what they were doing unless a force acts long enough.' },
+    beats: [
+      { text: 'The plates have inertia, and the quick pull gives friction almost no time to drag them along.', keyTerm: 'Inertia', visual: { kind: 'footage', query: 'tablecloth pull plates', title: '', items: [], value: 0, unit: '', svg: '' } },
+      { text: 'Pull slowly and friction acts for longer, so the plates come with the cloth.', keyTerm: 'Time matters', visual: { kind: 'compare', title: 'Fast pull|Slow pull', items: ['Tiny impulse|Large impulse', 'Plates stay|Plates move'], query: '', value: 0, unit: '', svg: '' } },
+    ],
+    takeaway: 'Short force, small effect.', myth: '', fact: '', items: [], cards: [], chat: { contact: '', messages: [] }, quiz: { question: '', options: [], answerIndex: 0, explanation: '' },
+  },
+  analogy: {
+    format: 'analogy', subtopic: 'Voltage as pressure', title: 'Voltage is like water pressure', hook: 'Voltage is like water pressure', hookTerm: 'water pressure', hookStyle: 'claim',
+    ambient: 'water pipes flowing',
+    beats: [
+      { text: 'Imagine a water tank on a roof: the higher the tank, the harder the water pushes through the pipes.', keyTerm: 'The tank', visual: { kind: 'footage', query: 'water tower pipe', title: '', items: [], value: 0, unit: '', svg: '' } },
+      { text: 'So the push is voltage, the flow is current and the narrow pipe is resistance.', keyTerm: 'The mapping', visual: { kind: 'compare', title: 'Analogy|Real thing', items: ['Pressure|Voltage', 'Flow rate|Current', 'Narrow pipe|Resistance'], query: '', value: 0, unit: '', svg: '' } },
+      { text: 'But electrons do not get used up like water: the same charge flows all the way round the circuit.', keyTerm: 'Where it breaks', visual: { kind: 'steps', title: 'The real detail', items: ['Charge is conserved', 'Energy is transferred', 'Current is the same in series'], query: '', value: 0, unit: '', svg: '' } },
+    ],
+    quiz: { question: 'In the water analogy, resistance is…', options: ['The pump', 'A narrow pipe', 'The water'], answerIndex: 1, explanation: 'A narrow pipe resists flow like resistance resists current.' },
+    takeaway: 'Push, flow, narrowness: voltage, current, resistance.', myth: '', fact: '', items: [], cards: [], exam: { question: '', options: [], answerIndex: 0, steps: [], mistake: '', tip: '' }, chat: { contact: '', messages: [] },
+  },
+  mistakes: {
+    format: 'mistakes', subtopic: 'Forces exam slips', title: '3 mistakes that cost marks in forces', hook: '3 mistakes that cost marks in forces', hookTerm: 'cost marks', hookStyle: 'pain',
+    ambient: 'student exam stress',
+    items: [
+      { title: 'Mixing mass and weight', tier: '', text: 'Weight is a force in newtons; writing kilograms loses the mark, so multiply by g.', visual: 'scales weighing' },
+      { title: 'Forgetting friction', tier: '', text: 'The net force is push minus friction; using the push alone gives the wrong acceleration.', visual: 'box pushed floor' },
+      { title: 'No diagram', tier: '', text: 'A free-body diagram earns marks on its own and stops you missing a force.', visual: 'student drawing diagram' },
+    ],
+    quiz: { question: 'Which of these is a mistake?', options: ['Weight in newtons', 'Weight in kilograms', 'Drawing the forces'], answerIndex: 1, explanation: 'Weight is a force, measured in newtons.' },
+    takeaway: 'Newtons, net force, diagram.', beats: [], myth: '', fact: '', cards: [], exam: { question: '', options: [], answerIndex: 0, steps: [], mistake: '', tip: '' }, chat: { contact: '', messages: [] },
+  },
+  history: {
+    format: 'history', subtopic: 'Gravity through time', title: 'From apples to black holes', hook: 'How we got from apples to black holes', hookTerm: 'black holes', hookStyle: 'story',
+    ambient: 'old observatory telescope',
+    items: [
+      { title: '1687|Principia', tier: '', text: 'Newton publishes universal gravitation: one law for apples and planets.', visual: 'Isaac Newton portrait' },
+      { title: '1859|Mercury’s wobble', tier: '', text: 'Astronomers find Mercury’s orbit drifting in a way Newton cannot explain.', visual: 'planet Mercury' },
+      { title: '1915|General relativity', tier: '', text: 'Einstein recasts gravity as curved spacetime and the wobble is solved.', visual: 'Albert Einstein portrait' },
+      { title: '2019|First image', tier: '', text: 'The Event Horizon Telescope photographs a black hole’s shadow.', visual: 'black hole image' },
+    ],
+    quiz: { question: 'What did Newton’s law fail to explain?', options: ['Falling apples', 'Mercury’s orbit drift', 'The Moon'], answerIndex: 1, explanation: 'Mercury’s perihelion shift needed relativity.' },
+    takeaway: 'Each theory explained the last one’s leftover puzzle.', beats: [], myth: '', fact: '', cards: [], exam: { question: '', options: [], answerIndex: 0, steps: [], mistake: '', tip: '' }, chat: { contact: '', messages: [] },
+  },
+  challenge: {
+    format: 'challenge', subtopic: 'Mental physics', title: 'Ten seconds: the braking car', hook: 'Ten seconds. Go.', hookTerm: 'Ten seconds', hookStyle: 'challenge',
+    ambient: 'stopwatch close up',
+    exam: { question: 'A car slows from 20 m/s to 0 in 4 s. Its deceleration?', options: ['4 m/s²', '5 m/s²', '80 m/s²'], answerIndex: 1, steps: ['Change in velocity is 20 m/s over 4 s.', '20 divided by 4 gives 5 m/s².'], mistake: '', tip: 'Acceleration is change in velocity over time: divide, do not multiply.' },
+    takeaway: 'Divide the change by the time.', beats: [], myth: '', fact: '', items: [], cards: [], chat: { contact: '', messages: [] }, quiz: { question: '', options: [], answerIndex: 0, explanation: '' },
+  },
 };

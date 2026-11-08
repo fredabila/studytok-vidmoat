@@ -23,9 +23,9 @@ feed request ─► algorithm picks units ─► best unseen ready video for tha
    -> commands -> POST /v1/projects (1 call) -> GET ?view=document -> Redis -> /embed/player
 ```
 
-## Eighteen video formats (25 to 50 seconds each)
+## Twenty-five video formats (15 to 50 seconds each)
 
-Every lesson is written in one of eighteen **formats** (`server/formats.js`), each with its own
+Every lesson is written in one of twenty-five **formats** (`server/formats.js`), each with its own
 structure, typography, caption preset, colour grade, transitions, music mood, narrator voice and
 card theme, so the feed feels like TikTok rather than one template on repeat:
 
@@ -44,8 +44,11 @@ The second wave adds the hooks short video runs on: **3 levels** (kid → studen
 **Spot the mistake** (a worked answer with one wrong step, held while you hunt), **Tier list**,
 **This or that**, **POV** ("you are a red blood cell"), **Hot take**, **Countdown** (3 → 1),
 **Speedrun** (the unit in 30 s), **Guess first** (the question before any teaching) and
-**Would you rather**. The writer rotates hook styles and opens a loop in every episode that it
-closes late. Full table in [docs/FORMATS.md](docs/FORMATS.md).
+**Would you rather**; and a third wave shaped by the event data: **One thing** (15 s),
+**Cheat sheet**, **Predict** (what happens next?), **Analogy**, **Mistakes**, **Timeline** and
+**Challenge** (ten seconds). The writer labels each hook's style and is told which styles hold
+attention on the topic; it rotates them and opens a loop in every episode that it closes late.
+Full table in [docs/FORMATS.md](docs/FORMATS.md).
 
 Claude writes each batch of episodes in a rotation of formats weighted by topic (maths leans on
 exam drills, history on stories) and steered away from what the unit used most recently; the
@@ -143,7 +146,10 @@ The *Why* sheet shows the parts.
 
 ## Events
 
-The app reports everything a viewer does, TikTok-style: impressions, view starts, 5-second
+The app reports everything a viewer does, plus coarse device context (with permission, a one-word
+posture from the motion sensors: held, lying flat, moving; a drop pauses the video). Per-scene
+drop-off, hook-style, voice and music performance feed back into the writer, the narrator choice
+and the ranking's context term. The app reports it TikTok-style: impressions, view starts, 5-second
 heartbeats, scene changes, pauses, loops, how far each video got and how it was left, quiz
 timing and answers, reactions, "less", sheet opens, every preference change, library and
 profile use, install prompts, sessions. `server/feed/events.js` folds them into per-video,

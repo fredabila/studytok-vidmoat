@@ -134,6 +134,19 @@ mark { background: linear-gradient(transparent 28%, var(--hl) 28%, var(--hl) 88%
 .view-page { overflow-y: auto; -webkit-overflow-scrolling: touch; background: var(--paper); color: var(--ink);
   background-image: radial-gradient(var(--line) .8px, transparent .8px); background-size: 22px 22px; }
 .page { width: min(720px, 100%); margin: 0 auto; padding: calc(16px + var(--safe-t)) 16px calc(var(--tabbar) + 24px); }
+.page-head { display: flex; align-items: center; justify-content: space-between; }
+.refresh-btn { width: 40px; height: 40px; border-radius: 50%; border: 1.5px solid var(--ink); background: #fff; color: var(--ink); display: grid; place-items: center; cursor: pointer; transition: transform .4s var(--ease); }
+.refresh-btn svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.refresh-btn.spin svg { animation: spin .8s linear infinite; }
+.refresh-btn.light { border-color: rgba(255,255,255,.5); background: rgba(0,0,0,.25); color: #fff; width: 34px; height: 34px; justify-self: end; }
+.feed-head-spacer { display: flex; justify-content: flex-end; }
+.feed-head .refresh-btn { pointer-events: auto; position: relative; z-index: 13; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.ptr { position: fixed; z-index: 45; left: 50%; top: calc(var(--safe-t) + 8px); transform: translate(-50%, -60px); width: 40px; height: 40px; border-radius: 50%; background: var(--paper); border: 1.5px solid var(--ink); box-shadow: 2px 2px 0 var(--hl); display: grid; place-items: center; transition: transform .25s var(--ease), opacity .25s; opacity: 0; }
+.ptr.pull { opacity: 1; transform: translate(-50%, var(--pull, 0px)); }
+.ptr.go { opacity: 1; transform: translate(-50%, 12px); }
+.ptr .spinner { width: 18px; height: 18px; border-width: 2px; border-color: var(--line-2); border-top-color: var(--ink); margin: 0; }
+.ptr.go .spinner { animation: spin .8s linear infinite; }
 .page-title { font-size: 36px; margin: 8px 2px 16px; font-variation-settings: 'opsz' 72; }
 
 .tabbar { position: fixed; left: 50%; bottom: calc(10px + var(--safe-b)); transform: translateX(-50%); width: min(400px, calc(100% - 24px)); height: 60px; z-index: 30;
