@@ -152,6 +152,14 @@ The full taxonomy is [docs/EVENTS.md](docs/EVENTS.md).
 * **Cron**: `/api/cron/topup` (daily on Vercel) keeps the most-watched units stocked.
 * `npm run warm -- 1 cat:hs-biology --level=high-school --exam=WASSCE` pre-generates a course.
 
+## Playback performance
+
+The live player decodes every layer in the browser, so documents are kept light: one live
+player at a time (the next preloads at the halfway point), the ambient clip is cut out under
+full-bleed footage, grades apply to one layer, footage is capped at 720p
+(`STUDYTOK_FOOTAGE_MAX`) while images stay sharp, and projects run at 24 fps (`STUDYTOK_FPS`).
+Details in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md#playback-performance).
+
 ## Costs per new video
 
 | Item | Cost |

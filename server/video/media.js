@@ -2,6 +2,7 @@
 // the account (so clip srcs are Vidmoat-hosted, browser-accessible URLs the embed player can load)
 // and caches every import by source URL so the same stock file is never imported twice.
 
+import { config } from '../core/config.js';
 import { searchStock, importMedia } from '../core/vidmoat.js';
 import { getMedia, setMedia } from '../core/db.js';
 import { kv } from '../core/kv.js';
@@ -15,18 +16,27 @@ async function search(query, type) {
 }
 
 // Pixabay serves the same video at several sizes under one id: _tiny (640), _small (960),
-// _medium (1280) and _large (1920). The stock search returns _medium or _tiny; the 1080p file
-// is one URL away. Pexels and Commons URLs carry no such variants.
-export function pixabayLarge(url) {
-  return /cdn\.pixabay\.com\/video\/.*_(tiny|small|medium)\.mp4$/.test(url) ? url.replace(/_(tiny|small|medium)\.mp4$/, '_large.mp4') : null;
+// _medium (1280) and _large (1920). The stock search returns _medium or _tiny; a sharper file is
+// one URL away. Which one we take is capped by config.generation.footageMax: the live player
+// decodes every video layer in the viewer's browser, and 1080p footage is what makes playback
+// stutter on phones. Pexels and Commons URLs carry no such variants.
+const VARIANTS = [['tiny', 640], ['small', 960], ['medium', 1280], ['large', 1920]];
+export function pixabayVariant(url, max = config.generation.footageMax) {
+  const m = /cdn\.pixabay\.com\/video\/.*_(tiny|small|medium|large)\.mp4$/.exec(url || '');
+  if (!m) return null;
+  const want = [...VARIANTS].reverse().find(([, px]) => px <= Math.max(640, max)) || VARIANTS[0];
+  return want[0] === m[1] ? null : { url: url.replace(/_(tiny|small|medium|large)\.mp4$/, `_${want[0]}.mp4`), long: want[1] };
 }
+/** @deprecated use pixabayVariant */
+export const pixabayLarge = (url) => pixabayVariant(url, 1920)?.url || null;
 /** How much a w x h source is enlarged to cover 1080x1920 (1 = native, 2.67 = landscape 720p). */
 export const upscaleFactor = (w, h) => (w && h ? Math.max(1080 / w, 1920 / h) : 2.5);
 
-/** Dimensions a candidate will have once imported (after the Pixabay upgrade). */
+/** Dimensions a candidate will have once imported (after the Pixabay variant swap). */
 export function effectiveDims(r) {
-  if (r.width && r.height && pixabayLarge(r.downloadUrl || '')) {
-    const f = 1920 / Math.max(r.width, r.height);
+  const v = r.width && r.height ? pixabayVariant(r.downloadUrl || '') : null;
+  if (v) {
+    const f = v.long / Math.max(r.width, r.height);
     return { width: Math.round(r.width * f), height: Math.round(r.height * f) };
   }
   return { width: r.width || 0, height: r.height || 0 };
@@ -37,9 +47,9 @@ async function importOnce(result) {
   if (hit) return hit;
   let media = null;
   let dims = { width: result.width ?? null, height: result.height ?? null };
-  const large = pixabayLarge(result.downloadUrl);
-  if (large) {
-    try { media = await importMedia(large); dims = effectiveDims(result); } catch { media = null; }
+  const variant = pixabayVariant(result.downloadUrl);
+  if (variant) {
+    try { media = await importMedia(variant.url); dims = effectiveDims(result); } catch { media = null; }
   }
   if (!media) media = await importMedia(result.downloadUrl);
   const entry = {
