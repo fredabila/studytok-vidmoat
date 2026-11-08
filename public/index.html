@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#000000">
+  <title>StudyTok</title>
+  <meta name="description" content="Learn something new every swipe. Short study videos generated for your interests.">
+  <link rel="icon" href="/icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <!-- Onboarding / interests picker -->
+  <section id="onboard" class="onboard" hidden>
+    <div class="onboard-inner">
+      <h1 class="brand">Study<span>Tok</span></h1>
+      <p class="tagline">Learn something new every swipe. Pick what you're curious about and we'll make videos for you as you scroll.</p>
+      <div id="topics" class="topics" role="group" aria-label="Interests"></div>
+      <button id="start" class="primary" type="button" disabled>Start learning</button>
+      <p class="hint">Pick at least one. You can change these any time.</p>
+    </div>
+  </section>
+
+  <!-- The feed -->
+  <main id="app" class="app" hidden>
+    <header class="topbar">
+      <span class="brand small">Study<span>Tok</span></span>
+      <span class="tab">For You</span>
+      <button id="edit-interests" class="icon-btn" type="button" aria-label="Edit interests" title="Edit interests">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h10" /></svg>
+      </button>
+    </header>
+    <div id="feed" class="feed" tabindex="0" aria-label="Video feed"></div>
+  </main>
+
+  <template id="slide-tpl">
+    <article class="slide">
+      <div class="stage">
+        <img class="poster" alt="" decoding="async">
+        <div class="player-host"></div>
+        <div class="cover">
+          <div class="cover-topic"></div>
+          <div class="cover-hook"></div>
+          <div class="status"><span class="spinner" aria-hidden="true"></span><span class="status-text">Generating your video…</span></div>
+        </div>
+        <button class="tap" type="button" aria-label="Play or pause"></button>
+        <div class="paused-badge" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z" /></svg>
+        </div>
+        <aside class="rail">
+          <button class="rail-btn like" type="button" aria-label="Like" aria-pressed="false">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21s-7.5-4.6-9.5-9.2C1 8.3 3.2 5 6.6 5c2 0 3.6 1.1 4.4 2.6h2C13.8 6.1 15.4 5 17.4 5 20.8 5 23 8.3 21.5 11.8 19.5 16.4 12 21 12 21z" /></svg>
+            <span class="count">0</span>
+          </button>
+          <button class="rail-btn less" type="button" aria-label="Show me less of this topic">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9" /><path d="M5.6 5.6l12.8 12.8" /></svg>
+            <span class="count">Less</span>
+          </button>
+          <button class="rail-btn replay" type="button" aria-label="Replay from the start">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12a8 8 0 1 0 2.4-5.7M4 4v4h4" /></svg>
+            <span class="count">Replay</span>
+          </button>
+        </aside>
+        <footer class="meta">
+          <span class="chip"></span>
+          <h2 class="title"></h2>
+          <p class="credits"></p>
+        </footer>
+        <div class="progress"><div class="bar"></div></div>
+      </div>
+    </article>
+  </template>
+
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  <script type="module" src="/app.js"></script>
+</body>
+</html>
