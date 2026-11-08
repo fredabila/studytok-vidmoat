@@ -126,8 +126,19 @@ export async function resolveBroll(queries, fallbackQuery) {
  * Wikimedia Commons (CC0 / public domain).
  * @returns {Promise<{ ambient: object|null, beatMedia: (object|null)[] }>}
  */
-export async function resolveLessonMedia(lesson, fallbackQuery) {
+/** A pack asset ("asset:<file>" in a visual query) as a media entry, imported once like stock. */
+async function packAsset(assets, query) {
+  const name = /^asset:(.+)$/.exec(query || '')?.[1];
+  const a = name && (assets || []).find((x) => x.file === name && x.kind !== 'audio');
+  if (!a) return null;
+  try {
+    return await importOnce({ downloadUrl: a.url, width: a.width, height: a.height, duration: a.duration, thumbnailUrl: a.kind === 'image' ? a.url : null, photographer: a.credit, sourceUrl: a.url, provider: 'pack' });
+  } catch (err) { console.warn(`[media] pack asset ${name} failed: ${err.message}`); return null; }
+}
+
+export async function resolveLessonMedia(lesson, fallbackQuery, { assets = [] } = {}) {
   const used = new Set();
+  const fromPack = async (attempts, query) => (await packAsset(assets, query)) || resolveOne(attempts, used);
   const SHARP = { maxScale: 2 }; // portrait 720p, landscape 1080p or better
   const beatJobs = lesson.beats.map((b) => {
     const v = b.visual || {};
@@ -141,8 +152,8 @@ export async function resolveLessonMedia(lesson, fallbackQuery) {
   const itemJobs = (lesson.items || []).map((it) => [[it.visual, 'video', SHARP], [it.visual, 'image'], [it.visual, 'video']]);
   const [ambient, ...rest] = await Promise.all([
     resolveOne([[lesson.ambient, 'video', SHARP], [lesson.ambient, 'image'], [fallbackQuery, 'video', SHARP], [fallbackQuery, 'image'], [lesson.ambient, 'video']], used),
-    ...beatJobs.map((attempts) => (attempts ? resolveOne([...attempts, [fallbackQuery, 'video']], used) : null)),
-    ...itemJobs.map((attempts) => resolveOne([...attempts, [fallbackQuery, 'video']], used)),
+    ...beatJobs.map((attempts, i) => (attempts ? fromPack([...attempts.filter(([q]) => !/^asset:/.test(q || '')), [fallbackQuery, 'video']], lesson.beats[i].visual?.query) : null)),
+    ...itemJobs.map((attempts, i) => fromPack([...attempts.filter(([q]) => !/^asset:/.test(q || '')), [fallbackQuery, 'video']], lesson.items[i].visual)),
   ]);
   return { ambient, beatMedia: rest.slice(0, beatJobs.length), itemMedia: rest.slice(beatJobs.length) };
 }

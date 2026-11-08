@@ -1,0 +1,18 @@
+# Community packs (content/): the format and asset rules are checked on every pull request.
+name: content
+on:
+  pull_request:
+    paths: ['content/**', 'server/curriculum/packs.js', 'scripts/content-check.mjs']
+  push:
+    branches: [main]
+    paths: ['content/**']
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - run: npm ci
+      - run: npm run content:check
+      - run: npm test

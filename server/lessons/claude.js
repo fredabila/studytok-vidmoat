@@ -50,12 +50,13 @@ function prefLines(prefs = {}) {
  * @param {number} p.count
  * @param {string} p.accent      topic accent colour for diagrams
  */
-export async function writeEpisodes({ unit, audience, covered = [], count = 3, formats, accent = '#34d399', hooks = null, quizNote = null }) {
+export async function writeEpisodes({ unit, audience, covered = [], count = 3, formats, accent = '#34d399', hooks = null, quizNote = null, extra = [] }) {
   const list = formats?.length ? formats : Array.from({ length: count }, () => 'explain');
   count = list.length;
   const context = [
     unit.open ? `Topic: ${unit.title} (open: pick any worthwhile subtopic)` : `Unit: ${unit.title}${unit.summary ? ` — ${unit.summary}` : ''}`,
     unit.programName && `Course: ${unit.programName}`,
+    ...extra,
     unit.fun && 'This is a BREATHER: the student is tired or frustrated and about to leave. Make these episodes fun, surprising and light: true, delightful facts or stories from next door to their subject. No exam framing, no "marks", no revision tone. Stay accurate. The quiz is easy and playful.',
     `Student: ${audience.audience}`,
     audience.age && `Age: ${audience.age}${audience.minor ? '. A minor: age-appropriate language and examples, nothing graphic, violent, sexual or about drugs or gambling; hot takes and dilemmas stay school-safe.' : ''}${audience.child ? ' A child under 13: short words, concrete everyday examples, a playful tone, nothing frightening.' : ''}`,

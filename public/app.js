@@ -244,7 +244,7 @@ async function buildSyllabus() {
 
 function profileBody() {
   const units = ob.programs.flatMap((p) => p.program.units.map((u) => u.id)).filter((id) => ob.selected.has(id));
-  return { profile: { ...ob.profile, level: ob.level, age: ageOf(), managedBy: ob.who === 'child' ? 'guardian' : 'self' }, guardianConsent: ob.who === 'child' && $('#ob-consent-box').checked, programKeys: ob.programs.map((p) => p.program.key), units, interests: [...ob.interests], ref: captureRef() || undefined };
+  return { profile: { ...ob.profile, level: ob.level, age: ageOf(), managedBy: ob.who === 'child' ? 'guardian' : 'self' }, guardianConsent: ob.who === 'child' && $('#ob-consent-box').checked, programKeys: ob.programs.map((p) => p.program.key), units, interests: [...ob.interests], ref: captureRef() || undefined, pack: store.get('st_pack') || undefined };
 }
 
 async function runOnboarding(prefill) {
@@ -653,7 +653,7 @@ function renderSlide(item) {
   $('.save', node).setAttribute('aria-pressed', String(!!d.saved));
   $('.save .count', node).textContent = d.saved ? 'Saved' : 'Save';
   const credits = [...new Set((d.credits || []).map((c) => c.by).filter(Boolean))];
-  $('.credits', node).textContent = credits.length ? `Stock: ${credits.slice(0, 3).join(', ')}` : '';
+  $('.credits', node).textContent = d.pack ? `From ${d.pack.by} · ${d.pack.title}` : credits.length ? `Stock: ${credits.slice(0, 3).join(', ')}` : '';
   const poster = $('.poster', node);
   if (d.poster && poster.getAttribute('src') !== d.poster) poster.src = d.poster;
   if (d.status === 'ready') { renderChapters(item); renderGaps(item); }
@@ -999,6 +999,7 @@ function openWhy(item) {
   if (w.kind === 'course' && w.progress >= 0.7) reasons.push(['📚', d.position ? `Next up in your syllabus: unit ${d.position.index} of ${d.position.total}.` : 'Next up in your syllabus.']);
   else if (w.kind === 'course') reasons.push(['📚', 'Part of your course.']);
   if (w.kind === 'interest') reasons.push(['✨', `From your interests: ${d.topic.label}.`]);
+  if (d.pack) reasons.push(['📘', `Made from the community pack "${d.pack.title}" by ${d.pack.by}${d.pack.link ? `. ${d.pack.cta || 'Find out more'}: ${d.pack.link}` : '.'}`]);
   if (w.review > 0) reasons.push(['🔁', 'Due for review. Spaced repetition brings units back after 1, 3, 7 and 21 days, and sooner when a quiz goes wrong.']);
   if (w.affinity >= 0.6) reasons.push(['❤️', "You've been finishing and liking lessons like this."]);
   const v = w.video || {};
@@ -1444,10 +1445,14 @@ async function showLibrary() {
     };
     input.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); add(); } });
     const corner = pct >= 70 ? sbadge('🏅 mastered', { hot: true, r: 6 }) : pct >= 30 ? sbadge('📈 on it', { r: 6 }) : null;
-    course.append(el('div', { class: 'course-card' }, corner ? Object.assign(corner, { className: corner.className + ' corner-badge' }) : null,
+    const pk = program?.pack;
+    course.append(el('div', { class: `course-card${pk ? ' pack-card' : ''}` }, corner ? Object.assign(corner, { className: corner.className + ' corner-badge' }) : null,
       el('div', { class: 'course-head' }, ring, el('div', {}, el('h3', {}, program?.name || (key === 'custom' ? 'My topics' : 'Your course')), el('p', {}, program?.basis || (key === 'custom' ? 'Topics you added' : `${units.length} units`)))),
       ...rows,
-      el('div', { class: 'add-row' }, input, el('button', { type: 'button', class: 'btn small', onclick: add }, 'Add'))));
+      pk ? el('div', { class: 'pack-foot' },
+        pk.link ? el('a', { class: 'btn small', href: pk.link, target: '_blank', rel: 'noopener noreferrer', onclick: () => track('pack_link', { slug: pk.slug }) }, pk.cta || 'Find out more') : null,
+        el('button', { type: 'button', class: 'btn ghost small', onclick: async () => { track('pack_remove', { slug: pk.slug }); await patchMe({ removePack: pk.slug }).catch(() => {}); showLibrary(); } }, 'Remove pack'))
+        : el('div', { class: 'add-row' }, input, el('button', { type: 'button', class: 'btn small', onclick: add }, 'Add'))));
   }
   if (!byProgram.has('custom')) {
     const input = el('input', { type: 'text', maxlength: '60', placeholder: 'Add your own topic…', 'aria-label': 'Add a topic' });
@@ -1462,6 +1467,25 @@ async function showLibrary() {
     input.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); add(); } });
     course.append(el('div', { class: 'card' }, el('h3', {}, 'My topics'), el('p', { class: 'muted' }, 'Anything you want to learn, in your own words.'),
       el('div', { class: 'add-row' }, input, el('button', { type: 'button', class: 'btn small', onclick: add }, 'Add'))));
+  }
+  // Community packs: anything people have shared in the repo (content/), one tap to add.
+  const packs = (lib.packs || []).filter((p) => !p.added);
+  if (lib.packs?.length) {
+    const list = el('div', { class: 'packs' });
+    for (const p of packs.slice(0, 12)) {
+      const topic = cfg.topics.find((t) => t.id === p.topic);
+      list.append(el('div', { class: 'pack-row' },
+        el('div', { class: 'pack-body' }, el('b', {}, p.title), el('small', {}, `${topic?.emoji || '📘'} ${p.kind} · ${p.units.length} units · by ${p.by}`), el('p', {}, p.about.length > 140 ? `${p.about.slice(0, 137)}…` : p.about)),
+        el('button', { type: 'button', class: 'btn small primary', onclick: async (e) => {
+          e.target.disabled = true;
+          track('pack_add', { slug: p.slug, by: 'library' });
+          const { added } = await patchMe({ addPack: p.slug }).catch(() => ({}));
+          if (added?.pack) { toast(`Added "${added.pack.title}". Lessons are on their way.`); showLibrary(); } else { e.target.disabled = false; toast("Couldn't add that pack."); }
+        } }, 'Add')));
+    }
+    course.append(el('div', { class: 'card packs-card' }, el('h3', {}, 'Community packs'),
+      el('p', { class: 'muted' }, packs.length ? 'Books, courses and projects people have shared. Add one and its units join your course.' : 'You have added every pack there is. Share one of your own on GitHub.'),
+      list, el('p', { class: 'fine' }, 'Anyone can add a pack: a Markdown file in the repo. ', el('a', { href: 'https://github.com/fredabila/studytok-vidmoat/blob/main/content/README.md', target: '_blank', rel: 'noopener noreferrer' }, 'How to submit one'))));
   }
   if (lib.interests?.length) {
     course.append(el('div', { class: 'card' }, el('h3', {}, 'Also following'),
@@ -1808,6 +1832,7 @@ function renderLanding(notice) {
   install.onclick = () => (installPrompt ? doInstall() : toast('On iPhone or iPad: tap Share in Safari, then "Add to Home Screen".'));
   if (!cfg.vidmoatSignIn) $$('.ld-go, .ld-signin').forEach((a) => { a.setAttribute('aria-disabled', 'true'); a.onclick = (e) => { e.preventDefault(); toast('Sign-in is not configured on this server yet.'); }; });
   const ref = captureRef();
+  capturePack();
   const invited = $('#ld-invited');
   invited.hidden = !ref;
   if (ref) invited.replaceChildren('Invited by member ', el('b', {}, `#${ref}`));
@@ -1823,6 +1848,25 @@ function renderLanding(notice) {
 // ============================================================================ invites
 // ?ref=<member number> on any visit is remembered (cookie for the server's sign-in callback,
 // localStorage for the profile save) and stripped from the URL.
+/** `?pack=<slug>` on any link: remembered until the student is set up, then added to their course. */
+function capturePack() {
+  const slug = new URLSearchParams(location.search).get('pack');
+  if (slug && /^[a-z0-9-]{3,40}$/.test(slug)) {
+    store.set('st_pack', slug);
+    const url = new URL(location.href); url.searchParams.delete('pack'); history.replaceState(null, '', url.pathname + url.search + url.hash);
+  }
+  return store.get('st_pack');
+}
+async function applyPendingPack() {
+  const slug = store.get('st_pack');
+  if (!slug || !me?.setupDone) return;
+  try { localStorage.removeItem('st_pack'); } catch { /* fine */ }
+  if (me.packs?.includes(slug)) return;
+  try {
+    const { added } = await patchMe({ addPack: slug });
+    if (added?.pack) { toast(`Added "${added.pack.title}" to your course.`); track('pack_add', { slug, by: 'link' }); await restartFeed(); }
+  } catch { /* an unknown pack: nothing to add */ }
+}
 function captureRef() {
   const ref = new URLSearchParams(location.search).get('ref');
   if (ref && /^\d{1,7}$/.test(ref)) {
@@ -1924,6 +1968,7 @@ function authNotice() {
 }
 
 async function boot() {
+  capturePack(); // a ?pack= link is remembered before anything else happens
   if ('serviceWorker' in navigator) {
     // Check for a new worker on every open; when one takes over mid-session, reload once so the
     // page runs one deploy's HTML, JS and CSS together.
@@ -1961,6 +2006,7 @@ async function boot() {
   $('#onboard').hidden = true;
   $('#app').hidden = false;
   if (notice) toast(notice);
+  await applyPendingPack();
 
   // Browsers allow sound only after a tap on the page; onboarding (or sign-in) already gave one.
   if (!onboarded && !notice) {

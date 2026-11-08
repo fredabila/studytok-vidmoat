@@ -4,7 +4,8 @@
   "outputDirectory": "public",
   "functions": {
     "api/index.js": {
-      "maxDuration": 300
+      "maxDuration": 300,
+      "includeFiles": "content/**/pack.md"
     }
   },
   "redirects": [

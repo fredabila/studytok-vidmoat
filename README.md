@@ -95,6 +95,23 @@ each key term, a clock under think pauses, a ding on the answer, and a CC0 music
 format's mood, ducked under the voice. `npm run preview -- --format=<id>` builds the sample
 lesson of any format (`server/lessons/samples.js`) into a real project and saves frames.
 
+## Community packs (`content/`)
+
+StudyTok is open source, so anyone can bring their own material: the ideas of a book they are
+reading, notes from a course, what their project or organisation does. A *pack* is one
+Markdown file, `content/<slug>/pack.md`, with a strict format (frontmatter, an About, 2-12
+units written in your own words, facts, an optional quiz bank) and an optional `assets/` folder
+of labelled images and clips under strict rules (sizes, formats, licences, a `shows`
+description for every file). `npm run content:check` validates it and runs on every pull request.
+
+Once merged, the pack is a course a student can add from Library › Community packs or by
+opening `https://studytok.vidmoat.com/?pack=<slug>`. Lessons are written from the pack's own
+units and facts, its assets can appear in the videos (`visual.query: "asset:<file>"`), and
+every lesson shows "From <author> · <title>" with the author's link and call to action in the
+*Why* sheet. Nothing is generated until a student adds the pack. The format and the rules are in
+[content/README.md](content/README.md); [content/meditations-marcus-aurelius](content/meditations-marcus-aurelius/pack.md)
+is a worked example.
+
 ## The app
 
 * **Installable (PWA)**: a manifest, maskable icons and a service worker (`public/sw.js`)

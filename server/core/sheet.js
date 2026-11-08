@@ -71,6 +71,7 @@ export async function userRow(user) {
     'Courses': (user.programKeys || []).length,
     'Units': (user.units || []).length,
     'Interests': (user.interests || []).join(', '),
+    'Packs': (user.packs || []).join(', '),
     'Lessons watched': seen,
     'Minutes watched': minutes,
     'Sessions': signals.sessions || 0,
