@@ -50,7 +50,9 @@ export async function saveProfile(userId, body) {
     // Custom units a student added inside a course: unitId -> programKey.
     unitGroups: existing?.unitGroups || {},
     vidmoat: existing?.vidmoat || null,
-    setupDone: true,
+    // A draft is saved while the student is still reading their syllabus, so the first videos
+    // can start generating before they press "Start learning".
+    setupDone: body.draft ? Boolean(existing?.setupDone) : true,
   };
   // A student needs something to watch: with nothing chosen, fall back to all interest topics.
   if (!user.units.length && !user.interests.length) user.interests = INTEREST_TOPICS.map((t) => t.id);
@@ -360,6 +362,13 @@ export async function library(userId) {
 export async function topUpLibrary({ units = 8, min = 4 } = {}) {
   const keys = await kv.zrange('popular:units', 0, units - 1, { rev: true });
   const pending = [];
+  // Backfill the starter pool from units people watch (idempotent; covers videos made before the pool existed).
+  for (const key of keys) {
+    for (const id of await db.readyIds(key, 10)) {
+      const v = await db.getVideo(id);
+      if (v?.status === 'ready') await db.markReady({ ...v, _poolOnly: true });
+    }
+  }
   for (const key of keys) {
     const ready = (await db.readyIds(key, min)).length;
     if (ready >= min) continue;
