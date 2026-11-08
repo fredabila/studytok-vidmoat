@@ -14,7 +14,8 @@
     "dev": "node --env-file-if-exists=.env --watch server/index.js",
     "test": "node --test test/*.test.js",
     "warm": "node --env-file-if-exists=.env scripts/warm.mjs",
-    "preview": "node --env-file-if-exists=.env scripts/preview.mjs"
+    "preview": "node --env-file-if-exists=.env scripts/preview.mjs",
+    "promo": "node --env-file-if-exists=.env scripts/promo.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^1.6.0",
