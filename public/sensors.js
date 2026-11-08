@@ -8,12 +8,15 @@ const WINDOW_MS = 4000;
 const samples = []; // { t, ax, ay, az, beta, gamma }
 let orientationSample = { beta: null, gamma: null };
 let running = false;
+let motionSeen = false;
+let permission = 'not-asked'; // 'granted' | 'denied' | 'not-needed' | 'error'
 let dropHandler = null;
 let lastDrop = 0;
 
 function onMotion(e) {
   const a = e.accelerationIncludingGravity || {};
   if (!Number.isFinite(a.x)) return;
+  motionSeen = true;
   const now = performance.now();
   samples.push({ t: now, ax: a.x, ay: a.y, az: a.z, beta: orientationSample.beta, gamma: orientationSample.gamma });
   while (samples.length && now - samples[0].t > WINDOW_MS) samples.shift();
@@ -30,22 +33,38 @@ function onOrientation(e) {
   if (Number.isFinite(e.beta)) orientationSample = { beta: e.beta, gamma: e.gamma };
 }
 
-/** Starts sampling (call inside a user gesture on iOS). Resolves to true when motion data is flowing. */
+/**
+ * Starts sampling. Call it inside a user gesture: iOS shows a permission prompt; Android Chrome
+ * needs none (motion sensors are allowed for HTTPS sites unless the user turned them off in site
+ * settings). Resolves to true once motion data has actually arrived (checked for 1.5 s).
+ */
 export async function start({ onDrop } = {}) {
   dropHandler = onDrop || null;
-  if (running) return true;
-  if (typeof DeviceMotionEvent === 'undefined') return false;
-  try {
-    if (typeof DeviceMotionEvent.requestPermission === 'function') {
-      const ok = await DeviceMotionEvent.requestPermission();
-      if (ok !== 'granted') return false;
+  if (running) return motionSeen;
+  if (typeof DeviceMotionEvent === 'undefined') { permission = 'unsupported'; return false; }
+  running = true;
+  if (typeof DeviceMotionEvent.requestPermission === 'function') {
+    // iOS 13+ (and some Chromium builds): ask, but attach the listeners whatever the answer; on a
+    // browser that answers oddly outside a prompt, data may still flow and that is what we test.
+    try {
+      permission = await DeviceMotionEvent.requestPermission();
       if (typeof DeviceOrientationEvent?.requestPermission === 'function') await DeviceOrientationEvent.requestPermission().catch(() => {});
-    }
-  } catch { return false; }
+    } catch { permission = 'error'; }
+  } else permission = 'not-needed';
   window.addEventListener('devicemotion', onMotion, { passive: true });
   window.addEventListener('deviceorientation', onOrientation, { passive: true });
-  running = true;
-  return true;
+  await new Promise((r) => setTimeout(r, 1500));
+  return motionSeen;
+}
+
+/** Whether sensing is on, whether data is flowing, the permission state and the current posture. */
+export const status = () => ({ running, motion: motionSeen, permission, posture: posture() });
+
+/** Stops sampling (the student turned it off). */
+export function stop() {
+  window.removeEventListener('devicemotion', onMotion);
+  window.removeEventListener('deviceorientation', onOrientation);
+  running = false; motionSeen = false; samples.length = 0;
 }
 
 /**
