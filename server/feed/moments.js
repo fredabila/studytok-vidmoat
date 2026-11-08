@@ -84,6 +84,46 @@ export const MOMENTS = [
 const str = (x, ctx) => (typeof x === 'function' ? x(ctx) : x);
 const dayOf = (t) => new Date(t).toISOString().slice(0, 10);
 
+const plural = (n, w) => `${n} ${w}${n === 1 ? '' : 's'}`;
+const STALE_MS = 12 * 3600000; // a session older than this is over: the next page opens a new visit
+
+/**
+ * The card that opens a visit, when there is something worth saying: welcome back after days
+ * away, what happened last time, or the exam countdown. At most one a day, in the first slot.
+ */
+export function openerMoment({ session = {}, signals = {}, stats = {}, exam = null, now = Date.now(), mark = {} } = {}) {
+  if (!session.lastAt || now - session.lastAt < STALE_MS) return null;
+  if (mark.openerDay === dayOf(now)) return null;
+  const away = Math.floor((now - (signals.lastSeenAt || session.lastAt)) / 86400000);
+  const goal = stats.goal || 3;
+  if (away >= 3) {
+    return { id: 'opener-welcome', type: 'welcome', theme: 'sun', emoji: '👋', mood: 'cheer', opener: true,
+      title: `Welcome back. ${plural(away, 'day')} away.`,
+      lines: ['Your streak starts again today.', `${goal} lessons and you are back in it.`, 'The first ones are on the easy side. On purpose.'],
+      cta: { label: "Let's go", action: 'feed' } };
+  }
+  if (exam && exam.days != null && exam.days >= 0 && exam.days <= 60 && (!mark.examAt || now - mark.examAt > 7 * 86400000)) {
+    const left = Math.max(0, (stats.unitsTotal || 0) - (stats.mastered || 0));
+    const perDay = exam.days > 0 && left ? Math.max(1, Math.ceil((left * 3) / exam.days)) : null;
+    return { id: 'opener-exam', type: 'exam', theme: 'rose', emoji: '📅', mood: 'think', opener: true, examMark: true,
+      title: exam.days === 0 ? `${exam.name} is today` : `${plural(exam.days, 'day')} to ${exam.name}`,
+      lines: exam.days === 0 ? ['Breathe. You have done the work.', 'A light review, then rest.'] : [
+        left ? `${plural(left, 'unit')} still to master.` : 'Every unit mastered. Keep them warm.',
+        perDay ? `${plural(perDay, 'lesson')} a day covers it with room to spare.` : 'Review sessions take over from here.',
+        'Your feed now leans towards revision.'],
+      cta: { label: 'See my course', action: 'library' } };
+  }
+  if ((session.viewed || 0) >= 1) {
+    const q = session.quizN || 0, r = session.quizRight || 0;
+    const lines = [q ? `${r} of ${q} quick checks right.` : 'No quick checks last time.',
+      stats.due ? `${plural(stats.due, 'unit')} due for review today.` : 'Your syllabus continues where you left it.',
+      stats.streak >= 2 ? `${stats.streak}-day streak. Keep it.` : `Today's goal: ${goal} lessons.`];
+    return { id: 'opener-recap', type: 'recap', theme: 'sky', emoji: '🗒️', mood: 'happy', opener: true,
+      title: `Last time: ${plural(session.viewed, 'lesson')}`, lines, cta: { label: 'Continue', action: 'feed' } };
+  }
+  return null;
+}
+
 /** The facts a moment's `when` can look at. */
 export function momentContext({ user = {}, signals = {}, saved = 0, watched = 0, invites = 0, pushEnabled = false, pushSubscribed = false } = {}) {
   const b = user.billing || {};
@@ -126,7 +166,7 @@ export function momentItem(m, ctx) {
   return {
     id: `moment:${m.id}`, kind: 'moment', status: 'ready',
     moment: { id: m.id, type: m.type, theme: m.theme, emoji: m.emoji, mood: m.mood, title: str(m.title, ctx), lines: m.lines.map((l) => str(l, ctx)), cta: m.cta },
-    topic: { id: 'moment', label: m.type === 'offer' ? 'Offer' : m.type === 'news' ? 'News' : 'Tip', emoji: m.emoji, accent: '#ffd93d' },
+    topic: { id: 'moment', label: { offer: 'Offer', news: 'News', welcome: 'Welcome back', recap: 'Last time', exam: 'Countdown' }[m.type] || 'Tip', emoji: m.emoji, accent: '#ffd93d' },
   };
 }
 
@@ -136,10 +176,14 @@ export function momentItem(m, ctx) {
  * its window, and the student's facts fit. Extras (admin-posted) come first, then the catalogue
  * in order. Returns null when no moment fits.
  */
-export async function pickMoment(userId, { session = {}, ctx, now = Date.now(), hasBreather = false } = {}) {
+export async function pickMoment(userId, { session = {}, ctx, now = Date.now(), hasBreather = false, stats = null, exam = null } = {}) {
   if (hasBreather || !ctx) return null;
   const viewed = session.viewed || 0;
   const mark = (await kv.get(`user:${userId}:moments`)) || { seen: {}, at: -GAP, day: '', today: 0 };
+  const opener = stats ? openerMoment({ session, signals: ctx.signals, stats, exam, now, mark }) : null;
+  if (opener) return opener;
+  // A stale session is over: the new visit starts counting from zero, like the events will.
+  if (session.lastAt && now - session.lastAt > STALE_MS) return null;
   if (viewed < MIN_VIEWED || viewed - (mark.at ?? -GAP) < GAP) return null;
   if (mark.day === dayOf(now) && (mark.today || 0) >= MAX_PER_DAY) return null;
   const fresh = (m) => !(mark.seen?.[m.id]) || now - mark.seen[m.id] > (m.repeatDays || 30) * 86400000;
@@ -154,7 +198,11 @@ export async function pickMoment(userId, { session = {}, ctx, now = Date.now(), 
 /** Records that a moment was served at `viewed` lessons into the session. */
 export async function noteMoment(userId, m, viewed = 0, now = Date.now()) {
   const mark = (await kv.get(`user:${userId}:moments`)) || { seen: {} };
+  if (m.opener) { // openers do not count against the day's quota or the gap
+    await kv.set(`user:${userId}:moments`, { ...mark, openerDay: dayOf(now), ...(m.examMark ? { examAt: now } : {}) });
+    return;
+  }
   const today = mark.day === dayOf(now) ? (mark.today || 0) + 1 : 1;
   const seen = { ...(mark.seen || {}), [m.id]: now };
-  await kv.set(`user:${userId}:moments`, { seen, at: viewed, day: dayOf(now), today, lastAt: now });
+  await kv.set(`user:${userId}:moments`, { ...mark, seen, at: viewed, day: dayOf(now), today, lastAt: now });
 }

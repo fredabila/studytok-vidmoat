@@ -62,6 +62,14 @@ framing, then straight back to the syllabus. Never two within six videos, never 
 mastery, and switched off for anyone who says "less" to them. See
 [docs/ALGORITHM.md](docs/ALGORITHM.md#breathers).
 
+**Recall cards.** A quick check answered wrong comes back as a card in the feed: after 30
+minutes, then two days later; right twice and it is retired, wrong and it returns sooner. The
+Library lists the questions to fix. See [docs/ALGORITHM.md](docs/ALGORITHM.md#recall-cards-your-mistakes-come-back).
+
+**Exam countdown and openers.** With an exam date, the feed shifts towards revision over the
+last 45 days and a countdown appears. The first card of a visit can be a welcome back (with a
+gentler first page after days away), the exam countdown, or what happened last time.
+
 **Moments.** Every so often (never before the fourth lesson of a session, at most one every six
 lessons and three a day) the feed shows an animated card from Noti: a tip about the app that fits
 where the student is (save a lesson, teach the feed, install it, turn on reminders), a piece of

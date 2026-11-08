@@ -83,7 +83,7 @@ export const sampleBeta = (a, b, rand = Math.random) => { const x = gamma(a, ran
  * @param recent      unit ids served most recently first
  * @returns {Array<{ unit, kind, score, parts }>}  sorted best first
  */
-export function scoreUnits(candidates, states, recent = [], { now = Date.now(), rand = Math.random, hasCourse = true } = {}) {
+export function scoreUnits(candidates, states, recent = [], { now = Date.now(), rand = Math.random, hasCourse = true, urgency = 0 } = {}) {
   // Frontier: each course's units not yet learned, in syllabus order (ranked per course, so a
   // student with several subjects starts at the beginning of every one of them).
   const frontierRank = new Map();
@@ -115,7 +115,9 @@ export function scoreUnits(candidates, states, recent = [], { now = Date.now(), 
       progress = hasCourse ? 0.15 : 0.5;
     }
 
-    const review = s.lastSeen && s.due && s.due <= now ? (s.quizWrong > s.quizRight ? 0.9 : 0.6) : 0;
+    // Due units; with an exam near, every unit the student has started is worth revisiting.
+    const review = (s.lastSeen && s.due && s.due <= now ? (s.quizWrong > s.quizRight ? 0.9 : 0.6) : s.lastSeen && urgency > 0 ? 0.3 * urgency : 0) * (1 + urgency);
+    progress *= 1 - 0.3 * urgency;
 
     const idx = recent.indexOf(c.unit.id);
     const recency = idx === -1 ? 0 : idx === 0 ? 1.6 : idx < 3 ? 0.9 : idx < 6 ? 0.3 : 0;
@@ -129,7 +131,19 @@ export function scoreUnits(candidates, states, recent = [], { now = Date.now(), 
 /**
  * Picks `count` units for the next feed page (no unit twice on a page unless it is the only one).
  */
-export function pickUnits(candidates, states, recent, count, { explore = 0.1, rand = Math.random, now = Date.now(), hasCourse = true } = {}) {
+/**
+ * How close the exam is, 0..1: nothing until 45 days out, then rising to 1 on the day. With an
+ * exam near, review outweighs new material and more lessons are retrieval practice.
+ */
+export function examUrgency(examDate, now = Date.now()) {
+  const t = Date.parse(examDate || '');
+  if (Number.isNaN(t)) return 0;
+  const days = (t - now) / 86400000;
+  if (days < -1 || days > 45) return 0;
+  return +Math.min(1, Math.max(0, 1 - Math.max(0, days) / 45)).toFixed(3);
+}
+
+export function pickUnits(candidates, states, recent, count, { explore = 0.1, rand = Math.random, now = Date.now(), hasCourse = true, urgency = 0 } = {}) {
   const picks = [];
   const seenRecent = [...recent];
   for (let i = 0; i < count && candidates.length; i++) {
@@ -140,7 +154,7 @@ export function pickUnits(candidates, states, recent, count, { explore = 0.1, ra
       if (choice) choice = { ...choice, score: null, parts: { explored: true } };
     }
     if (!choice) {
-      const ranked = scoreUnits(candidates, states, seenRecent, { now, rand, hasCourse });
+      const ranked = scoreUnits(candidates, states, seenRecent, { now, rand, hasCourse, urgency });
       choice = ranked.find((r) => !picks.some((p) => p.unit.id === r.unit.id)) || ranked[0];
     }
     picks.push(choice);
@@ -198,7 +212,7 @@ export const FORMAT_GENTLENESS = { explain: 1, eli5: 1, wow: 0.95, realworld: 0.
  * @param session  { viewed, lastFormats, lastTopics, wrongStreak, rightStreak, earlyStreak }
  * @returns {{ score, parts }}
  */
-export function scoreVideo(video, stats, signals = {}, session = {}, { rand = Math.random, now = Date.now(), review = false } = {}) {
+export function scoreVideo(video, stats, signals = {}, session = {}, { rand = Math.random, now = Date.now(), review = false, gentle: easeIn = false } = {}) {
   const format = video.format || 'explain';
   const quality = videoQuality(stats);
   const formatAffinity = affinity(signals.formats?.[format], rand);
@@ -230,7 +244,9 @@ export function scoreVideo(video, stats, signals = {}, session = {}, { rand = Ma
 
   // Review: a unit that is due again gets retrieval practice (flashcards, true/false, drills), not another explainer.
   const retrieval = review ? FORMAT_RETRIEVAL[format] ?? 1 : 1;
+  // Back after days away: the first page eases in with the gentler formats.
+  const easing = easeIn ? 0.75 + 0.5 * gentle : 1;
 
-  const score = quality * taste * diversity * fatigue * difficulty * freshness * context * retrieval;
-  return { score, parts: { quality: +quality.toFixed(3), formatAffinity: +formatAffinity.toFixed(3), topicAffinity: +topicAffinity.toFixed(3), diversity, fatigue: +fatigue.toFixed(3), difficulty: +difficulty.toFixed(3), freshness: +freshness.toFixed(3), context: +context.toFixed(3), ...(review ? { retrieval } : {}) } };
+  const score = quality * taste * diversity * fatigue * difficulty * freshness * context * retrieval * easing;
+  return { score, parts: { quality: +quality.toFixed(3), formatAffinity: +formatAffinity.toFixed(3), topicAffinity: +topicAffinity.toFixed(3), diversity, fatigue: +fatigue.toFixed(3), difficulty: +difficulty.toFixed(3), freshness: +freshness.toFixed(3), context: +context.toFixed(3), ...(review ? { retrieval } : {}), ...(easeIn ? { easing: +easing.toFixed(3) } : {}) } };
 }

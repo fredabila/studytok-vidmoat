@@ -96,6 +96,17 @@ get a burst with Noti, and the unit comes back later only for review.
 your Profile make an image card you can post anywhere. On a phone it opens the share sheet; on a
 computer the image downloads and the caption is copied.
 
+**I got a quick check wrong. What happens?**
+It comes back. The question returns as a *recall card* in your feed after a while (usually your
+next session), with the explanation if you miss it again and a button to rewatch the lesson. Get
+it right twice, a couple of days apart, and it is retired. Your Library shows how many are
+waiting under "questions to fix".
+
+**Can StudyTok plan around my exam date?**
+Yes. Add the date when you set up (or edit) your studies. From 45 days out your feed leans
+towards revision of the units you have started, more lessons become retrieval practice
+(flashcards, true or false, drills), and a countdown appears on your Library and Profile.
+
 **What are the cards from Noti between videos?**
 *Moments*: a tip about StudyTok, a piece of news or an offer, shown at most every six lessons and
 three times a day. Tap anywhere on one (or swipe) to carry on. Each appears once, then not again
