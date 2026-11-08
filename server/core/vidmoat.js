@@ -1,7 +1,18 @@
 // Minimal Vidmoat REST client (https://developer.vidmoat.com/developer/docs/api).
-// Only the documented v1 routes StudyTok needs. The API key never leaves the server.
+// Only the documented v1 routes StudyTok needs. Credentials never leave the server.
+//
+// Requests use StudyTok's own API key unless they run inside `withCredential(token, fn)`:
+// then they carry that student's OAuth access token, so a video is made on their account
+// with their credits (core/billing.js).
 
+import { AsyncLocalStorage } from 'node:async_hooks';
 import { config } from './config.js';
+
+const credential = new AsyncLocalStorage();
+/** Runs fn with every Vidmoat call inside it authenticated as `token` (an OAuth access token). */
+export const withCredential = (token, fn) => (token ? credential.run({ token }, fn) : fn());
+/** Whether the current call chain runs on a student's own account. */
+export const onOwnAccount = () => Boolean(credential.getStore()?.token);
 
 export class VidmoatError extends Error {
   constructor(status, body) {
@@ -23,7 +34,8 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
  * and a resent commands batch would add its clips twice.
  */
 export async function vidmoat(method, path, { body, query, retries = 3, timeoutMs = 120_000 } = {}) {
-  if (!config.vidmoat.apiKey) throw new Error('VIDMOAT_API_KEY is not set. Copy .env.example to .env.');
+  const token = credential.getStore()?.token || config.vidmoat.apiKey;
+  if (!token) throw new Error('VIDMOAT_API_KEY is not set. Copy .env.example to .env.');
   const url = new URL(config.vidmoat.baseUrl + path);
   for (const [k, v] of Object.entries(query || {})) if (v != null) url.searchParams.set(k, String(v));
 
@@ -31,7 +43,7 @@ export async function vidmoat(method, path, { body, query, retries = 3, timeoutM
     const res = await fetch(url, {
       method,
       headers: {
-        Authorization: `Bearer ${config.vidmoat.apiKey}`,
+        Authorization: `Bearer ${token}`,
         ...(body ? { 'Content-Type': 'application/json' } : {}),
       },
       body: body ? JSON.stringify(body) : undefined,
@@ -55,6 +67,8 @@ export async function vidmoat(method, path, { body, query, retries = 3, timeoutM
 // ---- Typed helpers -------------------------------------------------------------------------
 
 export const getMe = () => vidmoat('GET', '/v1/me');
+/** /v1/me on a student's own token (balance, plan). */
+export const getMeAs = (token) => withCredential(token, () => vidmoat('GET', '/v1/me', { retries: 1, timeoutMs: 20_000 }));
 
 /** Create a project and apply a first batch of commands in the same call. */
 export const createProject = (name, commands) =>

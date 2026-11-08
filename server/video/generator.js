@@ -20,7 +20,8 @@ import { soundKit } from './sfx.js';
 import { narrate } from './voice.js';
 import { composeLesson } from './compose.js';
 import { format as formatOf } from './formats.js';
-import { createProject, getDocument as fetchDocument, deleteProject, fileProject } from '../core/vidmoat.js';
+import { createProject, getDocument as fetchDocument, deleteProject, fileProject, withCredential } from '../core/vidmoat.js';
+import { noteProblem, problemFromError } from '../core/billing.js';
 import { saveVideo, updateVideo, setDocument, markReady } from '../core/db.js';
 
 // ---- A small promise queue so a burst of scrolling cannot fire unbounded API work
@@ -47,29 +48,37 @@ export const readyKeyFor = (unitId, audience) => `${lessonKey(unitId, audience)}
 
 /**
  * Registers a new video as "generating" and starts building it.
- * @param unit      { id, title, topic, ... }
- * @param audience  { level, levelLabel, audience, country, institution, exam }
+ * @param unit        { id, title, topic, ... }
+ * @param audience    { level, levelLabel, audience, country, institution, exam }
+ * @param credential  { mode: 'house' } or { mode: 'own', token } (core/billing.js credentialFor):
+ *                    whose Vidmoat account makes this video
  * @returns {Promise<{video: object, done: Promise<void>}>}  `done` never rejects.
  */
-export async function startVideo(unit, audience, { requestedBy } = {}) {
+export async function startVideo(unit, audience, { requestedBy, credential = { mode: 'house' } } = {}) {
   const video = {
     id: randomUUID(), unitId: unit.id, unitTitle: unit.title, topic: unit.topic, level: audience.level,
     readyKey: readyKeyFor(unit.id, audience), status: 'generating',
-    createdAt: new Date().toISOString(), requestedBy: requestedBy || null,
+    createdAt: new Date().toISOString(), requestedBy: requestedBy || null, paidBy: credential.mode,
   };
   await saveVideo(video);
-  const done = enqueue(() => buildWithRetry(video, unit, audience)).catch(async (err) => {
+  const done = enqueue(() => withCredential(credential.token, () => buildWithRetry(video, unit, audience, credential))).catch(async (err) => {
     console.error(`[generator] ${video.id} failed:`, err);
-    await updateVideo(video.id, { status: 'failed', error: String(err.message || err) }).catch(() => {});
+    await updateVideo(video.id, { status: 'failed', error: String(err.message || err), errorCode: err.billingProblem || err.code || null }).catch(() => {});
   });
   return { video, done };
 }
 
-async function buildWithRetry(video, unit, audience) {
+async function buildWithRetry(video, unit, audience, credential) {
   for (let attempt = 0; ; attempt++) {
     try {
       return await buildVideo(video, unit, audience);
     } catch (err) {
+      // On a student's own account, a credit/plan/token problem is theirs to fix, not ours to retry.
+      const problem = credential.mode === 'own' ? problemFromError(err) : null;
+      if (problem) {
+        await noteProblem(video.requestedBy, problem).catch(() => {});
+        throw Object.assign(err, { billingProblem: problem });
+      }
       if (attempt >= config.generation.retries) throw err;
       console.warn(`[generator] ${video.id} attempt ${attempt + 1} failed (${err.message}); retrying`);
       await updateVideo(video.id, { createdAt: new Date().toISOString(), lastError: String(err.message || err) });

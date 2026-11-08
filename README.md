@@ -69,6 +69,11 @@ lesson of any format (`server/lessons/samples.js`) into a real project and saves
 * **Landing page**: new visitors see what StudyTok is (sample cards of every format, how it
   works, what's inside), an *Install the app* button and *Continue with Vidmoat*, with a footer
   crediting Vidmoat, a Buzz Innovations Ltd. company, and linking to this repository.
+* **Credits**: each student's first `STUDYTOK_FREE_VIDEOS` (15) videos are made on your Vidmoat
+  key; then they connect their own Vidmoat account (*Use my Vidmoat account*: the same OAuth
+  flow with the generation scopes, tokens sealed at rest) and every video they trigger spends
+  their credits. When they run out, the app points them to credit packs or a plan upgrade on
+  Vidmoat; the shared library keeps playing meanwhile. See [docs/BILLING.md](docs/BILLING.md).
 * **Sign in with Vidmoat** (required by default): identity only. StudyTok requests just the
   read-only `account.read` scope, reads the account's name and email once and discards the
   tokens, so it can never spend a student's Vidmoat credits. The account is the student's

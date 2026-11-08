@@ -37,6 +37,14 @@ export const config = {
     publicUrl: (process.env.STUDYTOK_PUBLIC_URL || '').replace(/\/$/, ''),
   },
 
+  // Who pays for videos (server/core/billing.js): a free allowance on StudyTok's key, then the
+  // student's own Vidmoat account.
+  billing: {
+    freeVideos: num(process.env.STUDYTOK_FREE_VIDEOS, 15),
+    tokenSecret: process.env.STUDYTOK_TOKEN_SECRET || '',
+    billingUrl: process.env.STUDYTOK_VIDMOAT_BILLING_URL || 'https://www.vidmoat.com/pricing',
+  },
+
   anthropic: {
     // When unset, lessons come from the built-in offline bank (server/lessons/bank.js).
     enabled: Boolean(process.env.ANTHROPIC_API_KEY || process.env.ANTHROPIC_AUTH_TOKEN),

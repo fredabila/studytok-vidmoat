@@ -13,6 +13,7 @@ import { lessonKey } from '../lessons/index.js';
 import { startVideo, readyKeyFor } from '../video/generator.js';
 import { pickUnits, mastery, scoreVideo, exploreRate, applyEvent, emptyState } from './ranking.js';
 import { ingest, getSignals, getSession, noteServed } from './events.js';
+import { credentialFor } from '../core/billing.js';
 import { kv } from '../core/kv.js';
 import * as db from '../core/db.js';
 
@@ -158,11 +159,17 @@ async function generatingFor(userId) {
   return vids.filter((v) => v?.status === 'generating');
 }
 
+/**
+ * Starts a video for this student on whoever's Vidmoat account pays for it (core/billing.js).
+ * @returns {Promise<{ video } | { blocked: 'allowance'|'exhausted'|'plan'|'reconnect' }>}
+ */
 async function startFor(userId, unit, audience, pending) {
-  const started = await startVideo(unit, audience, { requestedBy: userId });
+  const credential = await credentialFor(userId);
+  if (credential.mode === 'exhausted') return { blocked: credential.reason };
+  const started = await startVideo(unit, audience, { requestedBy: userId, credential });
   pending.push(started.done);
   await kv.lpush(`user:${userId}:generating`, started.video.id);
-  return started.video;
+  return { video: started.video };
 }
 
 /** Any ready, unseen video for this level (then any level): an instant starter while the student's own units generate. */
@@ -194,7 +201,8 @@ export async function nextItems(userId, count = 3) {
   const picks = pickUnits(candidates, states, recent, Math.min(candidates.length, count + 4), { hasCourse, explore: exploreRate(servedSoFar) });
   const pending = [];
   const taken = new Set();
-  let generating = (await generatingFor(userId)).length;
+  const inFlight = await generatingFor(userId); // videos already being made for this student (prefetch, earlier pages)
+  let generating = inFlight.length;
 
   const ready = [];
   const unready = [];
@@ -214,19 +222,32 @@ export async function nextItems(userId, count = 3) {
   const items = ready.slice(0, count).map(({ pick, video, videoParts }) => ({ video, unit: pick.unit, why: { ...pick.parts, kind: pick.kind, video: videoParts }, pos: pick.pos || null }));
 
   // Start what is missing: the most important missing unit always, enough to fill this page,
-  // plus a few ahead (bounded per viewer).
+  // plus a few ahead (bounded per viewer). When nobody can pay for a new video (allowance used
+  // up, own account empty), the page is filled from the shared library instead and the app is
+  // told why, so it can ask the student to connect or top up their Vidmoat account.
   let started = 0;
+  let credits = null;
   for (const pick of unready) {
     const needed = items.length < count;
     if (!needed && started > 0 && generating >= config.generation.readyAhead) break;
-    started++;
-    const video = await startFor(userId, pick.unit, audience, pending);
-    generating++;
+    // A video for this unit may already be on its way (prefetch): show that rather than start another.
+    const existing = inFlight.find((v) => v.readyKey === readyKeyFor(pick.unit.id, audience) && !taken.has(v.id));
+    const result = existing ? { video: existing, existing: true } : credits ? { blocked: credits.reason } : await startFor(userId, pick.unit, audience, pending);
+    if (result.blocked) {
+      credits ||= { needed: true, reason: result.blocked, unit: pick.unit.title };
+      if (needed) {
+        const fill = await starter(userId, audience.level, taken);
+        if (fill) { taken.add(fill.id); items.push({ video: fill, unit: null, why: { starter: true, credits: result.blocked }, pos: null }); }
+      }
+      continue;
+    }
+    if (!result.existing) { started++; generating++; }
+    taken.add(result.video.id);
     if (needed) {
       // While it generates, show a starter from the library instead of a waiting slide.
       const fill = await starter(userId, audience.level, taken);
       if (fill) { taken.add(fill.id); items.push({ video: fill, unit: null, why: { starter: true }, pos: null, queuedFor: pick.unit.title }); }
-      items.push({ video, unit: pick.unit, why: { ...pick.parts, kind: pick.kind }, pos: pick.pos || null });
+      items.push({ video: result.video, unit: pick.unit, why: { ...pick.parts, kind: pick.kind }, pos: pick.pos || null });
     }
   }
   // Keep the page to `count` ready-or-generating items, generating ones last.
@@ -242,7 +263,7 @@ export async function nextItems(userId, count = 3) {
   }
   await kv.ltrim(`user:${userId}:recentUnits`, 0, 19);
   await noteServed(userId, page.map((x) => x.video));
-  return { items: page, pending };
+  return { items: page, pending, credits };
 }
 
 /** Right after setup: start generating the student's first units so the feed opens without a wait. */
@@ -257,7 +278,8 @@ export async function prefetch(userId) {
     if (generating >= config.generation.readyAhead) break;
     const have = (await db.readyIds(readyKeyFor(pick.unit.id, audience), 1)).length;
     if (have) continue;
-    await startFor(userId, pick.unit, audience, pending);
+    const result = await startFor(userId, pick.unit, audience, pending);
+    if (result.blocked) break;
     generating++;
   }
   await kv.ltrim(`user:${userId}:generating`, 0, 19);
@@ -286,7 +308,8 @@ export async function publicVideo(v, userId, { withDocument = true, why, pos, qu
   return {
     id: v.id,
     status: v.status,
-    error: v.status === 'failed' ? 'This video could not be generated.' : undefined,
+    error: v.status === 'failed' ? (v.errorCode === 'exhausted' ? 'Your Vidmoat account is out of credits.' : v.errorCode === 'plan' ? 'Your Vidmoat plan does not include this yet.' : v.errorCode === 'reconnect' ? 'Please reconnect your Vidmoat account.' : 'This video could not be generated.') : undefined,
+    errorCode: v.status === 'failed' ? v.errorCode || null : undefined,
     topic: { id: look.id, label: look.label, emoji: look.emoji, accent: look.accent },
     format: { id: v.format || 'explain', tag: formatOf(v.format).tag, name: formatOf(v.format).name },
     unit: v.unitId ? { id: v.unitId, title: v.unitTitle || null } : null,
