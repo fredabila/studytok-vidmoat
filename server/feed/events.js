@@ -50,6 +50,7 @@ export const EVENT_SPECS = {
   drop: { fields: { videoId: 's', t: 'n' } },
   sensors: { fields: { motion: 'b', permission: 's' } },
   sound_unlock: { video: true, fields: { t: 'n' } },
+  invite_share: { fields: {} },
   refresh: { fields: { where: 's' } },
   skip: { video: true, fields: {} }, // legacy: an early leave
   rewatch: { video: true, fields: {} },

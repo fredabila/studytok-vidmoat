@@ -9,7 +9,7 @@ import { LEVELS } from './curriculum/levels.js';
 import { catalogNames } from './curriculum/catalog.js';
 import { usingRedis, redisSource, redisLikeVarNames } from './core/kv.js';
 import * as db from './core/db.js';
-import { saveProfile, editProfile, prefetch, nextItems, publicVideo, library, topUpLibrary, cleanProfile, linkVidmoat } from './feed/index.js';
+import { saveProfile, editProfile, prefetch, nextItems, publicVideo, library, topUpLibrary, cleanProfile, linkVidmoat, recordReferral } from './feed/index.js';
 import { resolveProgram, getProgram } from './curriculum/index.js';
 import { queueStats } from './video/generator.js';
 import { getMe, getMeAs } from './core/vidmoat.js';
@@ -148,6 +148,16 @@ async function route(req, res, url) {
   // Anonymous aggregates: how the formats perform, event volumes per day, generation waits.
   if (key === 'GET /api/stats') return send(res, 200, await eventStats({ formats: FORMAT_IDS }), { 'Cache-Control': 'public, max-age=60' });
 
+  // Funnel steps that happen before there is a session (landing seen, sign-in tapped, install):
+  // one counter per day, nothing personal. The later steps are counted where they happen.
+  if (key === 'POST /api/funnel') {
+    const body = await readJson(req, 2048);
+    const step = ['landing', 'signin_click', 'install_prompt', 'installed'].includes(body.step) ? body.step : null;
+    if (step) await kv.hincrby(`events:day:${new Date().toISOString().slice(0, 10)}`, `funnel_${step}`, 1);
+    if (step === 'landing' && Number.isInteger(Number(body.ref)) && Number(body.ref) > 0) await kv.hincrby(`events:day:${new Date().toISOString().slice(0, 10)}`, 'funnel_landing_ref', 1);
+    return send(res, 200, { ok: Boolean(step) });
+  }
+
   if (key === 'GET /api/health') {
     try {
       const me = await getMe();
@@ -229,7 +239,13 @@ async function route(req, res, url) {
         return redirect(res, '/?auth=connected#profile', [clearCookie(req, 'st_oauth')]);
       }
       const { user, restored } = await linkVidmoat(current, result);
-      waitUntil(syncUser(user.id, { event: Date.now() - Date.parse(user.createdAt) < 60_000 ? 'joined' : restored ? 'signed in again' : null, detail: result.email || '' }));
+      const isNew = Date.now() - Date.parse(user.createdAt) < 60_000;
+      const today = new Date().toISOString().slice(0, 10);
+      waitUntil(kv.hincrby(`events:day:${today}`, isNew ? 'funnel_joined' : 'funnel_signed_in', 1));
+      // The invite the visitor arrived with (the app keeps it in a cookie across the OAuth round trip).
+      const ref = cookieValue(req, 'st_ref');
+      const inviter = isNew && ref ? await recordReferral(user, ref) : null;
+      waitUntil(syncUser(user.id, { event: isNew ? 'joined' : restored ? 'signed in again' : null, detail: [result.email || '', inviter ? `invited by #${inviter}` : ''].filter(Boolean).join(' · ') }));
       return redirect(res, `/?auth=${restored ? 'restored' : 'linked'}`, [userCookie(req, user.id), clearCookie(req, 'st_oauth')]);
     } catch (err) {
       console.error('[auth]', err.message);
@@ -250,6 +266,7 @@ async function route(req, res, url) {
     let user;
     let before;
     try { before = current ? await db.getUser(current) : null; user = await saveProfile(current, body); } catch (err) { if (err.status === 400) return send(res, 400, { error: err.message, code: err.code }); throw err; }
+    if (user.setupDone && !before?.setupDone) waitUntil(kv.hincrby(`events:day:${new Date().toISOString().slice(0, 10)}`, 'funnel_setup', 1));
     waitUntil(syncUser(user.id, { event: user.setupDone && !before?.setupDone ? 'set up' : null, detail: user.profile?.program || (user.profile?.level || ''), force: true }));
     // Start the first videos now, so the feed opens without a wait.
     waitUntil(prefetch(user.id).then((pending) => Promise.allSettled(pending)).catch((err) => console.warn('[prefetch]', err.message)));
@@ -267,7 +284,8 @@ async function route(req, res, url) {
     const [billing, stats] = await Promise.all([billingStatus(u, { fetchMe: getMeAs }), studentStats(userId, { watched: seen, progress: await getProgress(userId), masteryOf: mastery })]);
     const { vidmoatTokens, ...safe } = u; // sealed tokens never leave the server
     waitUntil(syncUser(userId)); // keeps the admin sheet's row fresh (throttled)
-    return send(res, 200, { user: { ...safe, setupDone, seen, liked, billing, stats } });
+    const invites = u.memberNo ? await db.referralCount(u.memberNo) : 0;
+    return send(res, 200, { user: { ...safe, setupDone, seen, liked, billing, stats, invites } });
   }
 
   // Credits: switch between the free allowance and the student's own account, or disconnect it.
