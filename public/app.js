@@ -523,6 +523,7 @@ function addSlide(data, { at } = {}) {
 
 function unitLabel(d) {
   const name = d.unit?.title || d.topic.label;
+  if (d.breather) return `☕ Breather · ${name}`;
   if (d.starter) return `${d.topic.emoji} ${name} · while you wait`;
   return d.position ? `Unit ${d.position.index} of ${d.position.total} · ${name}` : `${d.topic.emoji} ${name}`;
 }
@@ -730,6 +731,7 @@ function answer(item, i) {
 function openWhy(item) {
   const d = item.data, w = d.why || {};
   const reasons = [];
+  if (w.kind === 'breather') reasons.push(['☕', { 'leaving-early': 'You left the last couple of lessons early, so here is a quick fun one from next door to your subject. Your units are next.', 'tough-run': 'A few tricky questions in a row. Something light before we go back in.', 'long-session': 'You have been at it a while. A short detour, then back to your syllabus.' }[w.reason] || 'A short, fun detour next door to your subject. Your units are next.']);
   if (w.starter) reasons.push(['⏱️', `A ready lesson from the library while yours is being made${d.queuedFor ? ` (${d.queuedFor})` : ''}.`]);
   if (w.explored) reasons.push(['🧭', 'Something a little different. A small share of your feed explores, so it never gets stale.']);
   if (w.kind === 'course' && w.progress >= 0.7) reasons.push(['📚', d.position ? `Next up in your syllabus: unit ${d.position.index} of ${d.position.total}.` : 'Next up in your syllabus.']);
@@ -740,7 +742,7 @@ function openWhy(item) {
   const v = w.video || {};
   if (v.formatAffinity >= 0.6) reasons.push(['🎬', `You tend to watch ${d.format?.name || 'this kind of'} videos through, so this one is a ${d.format?.name || 'match'}.`]);
   else if (v.diversity < 1) reasons.push(['🎬', `A ${d.format?.name || 'different'} video, to change the pace from the last one.`]);
-  else if (d.format?.name) reasons.push(['🎬', `Format: ${d.format.name}. The feed rotates 25 formats so it never feels the same.`]);
+  else if (d.format?.name) reasons.push(['🎬', `Format: ${d.format.name}. The feed rotates 32 formats so it never feels the same.`]);
   if (v.quality >= 0.6) reasons.push(['⭐', 'Other students watched this one to the end.']);
   if (v.fatigue > 1.05) reasons.push(['☕', "You've watched a lot this session, so here is something lighter."]);
   if (v.difficulty < 1) reasons.push(['🧩', 'A gentler format after a couple of tricky questions.']);

@@ -21,6 +21,7 @@ import { kv } from '../core/kv.js';
 import * as db from '../core/db.js';
 import { applyEvent, emptyState, mastery } from './ranking.js';
 import { audienceFor } from './index.js';
+import { isBreatherUnit } from './breathers.js';
 
 // ---- Taxonomy ------------------------------------------------------------------------------------
 // video: the event is about a video (videoId required). fields: name -> type ('n' number 0..1e6,
@@ -121,7 +122,7 @@ export function weekKey(at) {
   return d.toISOString().slice(0, 10);
 }
 const emptyWeek = () => ({ watched: 0, completes: 0, watchSec: 0, quizN: 0, quizRight: 0, units: {}, formats: {}, days: {}, mastered: [] });
-export const emptySession = () => ({ sid: '', startedAt: 0, lastAt: 0, served: 0, viewed: 0, lastFormats: [], lastTopics: [], wrongStreak: 0, rightStreak: 0, earlyStreak: 0, posture: 'unknown', hour: null, night: false });
+export const emptySession = () => ({ sid: '', startedAt: 0, lastAt: 0, served: 0, viewed: 0, lastFormats: [], lastTopics: [], wrongStreak: 0, rightStreak: 0, earlyStreak: 0, posture: 'unknown', hour: null, night: false, lastBreatherAt: 0, breathers: 0 });
 const POSTURES = new Set(['hand', 'flat', 'moving', 'unknown']);
 /** The scene a timeline time falls in (for drop-off curves), by kind. */
 const sceneKindAt = (video, t) => { const s = (video?.scenes || []).findLast((x) => t >= x.start); return s?.kind || null; };
@@ -183,7 +184,7 @@ export async function ingest(userId, batch) {
     const format = v?.format || 'explain';
     const topic = v?.topic || 'general';
     const unitEvent = (type, extra) => {
-      if (!unitId) return;
+      if (!unitId || isBreatherUnit(unitId)) return; // breathers are a detour, not the syllabus
       const before = mastery(progress[unitId]);
       progress[unitId] = applyEvent(progress[unitId] || emptyState(), type, { ...extra, now: e.at });
       // Crossing the mastery line is a level-up: told to the app for its burst, kept in the week's recap.
@@ -244,6 +245,7 @@ export async function ingest(userId, batch) {
         bump(signals.formats, format, 'n'); bump(signals.formats, format, 'pctSum', pct);
         bump(signals.topics, topic, 'n'); bump(signals.topics, topic, 'pctSum', pct);
         signals.watch.n++; signals.watch.pctSum += pct;
+        if (isBreatherUnit(v.unitId)) { signals.breathers ||= { n: 0, pctSum: 0, less: 0 }; signals.breathers.n++; signals.breathers.pctSum += pct; writes.push(kv.hincrby(`events:day:${day(e.at)}`, 'breather_view', 1)); }
         session.lastFormats = [format, ...session.lastFormats].slice(0, 6);
         session.lastTopics = [topic, ...session.lastTopics].slice(0, 6);
         if (e.dir) writes.push(stat(v.id, `dir_${e.dir.replace(/[^a-z]/g, '').slice(0, 8)}`));
@@ -296,7 +298,7 @@ export async function ingest(userId, batch) {
         writes.push(db.removeFromSet(userId, 'saved', v.id), stat(v.id, 'saves', -1), fstat(v, 'saves', -1));
         break;
       }
-      case 'less': writes.push(stat(v.id, 'less'), fstat(v, 'less')); bump(signals.formats, format, 'less'); bump(signals.topics, topic, 'less'); unitEvent('less'); break;
+      case 'less': writes.push(stat(v.id, 'less'), fstat(v, 'less')); bump(signals.formats, format, 'less'); bump(signals.topics, topic, 'less'); if (isBreatherUnit(v.unitId)) { signals.breathers ||= { n: 0, pctSum: 0, less: 0 }; signals.breathers.less++; } unitEvent('less'); break;
       case 'why_open': writes.push(stat(v.id, 'whyOpens')); break;
       case 'quiz_shown': writes.push(stat(v.id, 'quizShown')); break;
       case 'quiz_hold': writes.push(stat(v.id, 'quizHeld')); break;
@@ -370,6 +372,15 @@ export async function studentStats(userId, { watched = 0, progress = {}, mastery
     mastered: Object.values(progress).filter((st) => masteryOf(st) >= 0.7).length,
     week: recapOf(s, thisWeek), lastWeek: recapOf(s, lastWeek),
   };
+}
+
+/** Records that a breather was just served, so the next one waits a few videos (feed/breathers.js). */
+export async function noteBreather(userId) {
+  const session = { ...emptySession(), ...((await kv.get(`user:${userId}:session`)) || {}) };
+  session.lastBreatherAt = session.viewed || 0;
+  session.breathers = (session.breathers || 0) + 1;
+  session.earlyStreak = 0; session.wrongStreak = 0; // the breather answers the signal; do not fire again on the same run
+  await kv.set(`user:${userId}:session`, session);
 }
 
 /** Marks videos as served in the viewer's session (called by the feed, not by the app). */

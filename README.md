@@ -23,9 +23,9 @@ feed request ─► algorithm picks units ─► best unseen ready video for tha
    -> commands -> POST /v1/projects (1 call) -> GET ?view=document -> Redis -> /embed/player
 ```
 
-## Twenty-five video formats (15 to 50 seconds each)
+## Thirty-two video formats (15 to 50 seconds each)
 
-Every lesson is written in one of twenty-five **formats** (`server/formats.js`), each with its own
+Every lesson is written in one of thirty-two **formats** (`server/video/formats.js`), each with its own
 structure, typography, caption preset, colour grade, transitions, music mood, narrator voice and
 card theme, so the feed feels like TikTok rather than one template on repeat:
 
@@ -46,9 +46,21 @@ The second wave adds the hooks short video runs on: **3 levels** (kid → studen
 **Speedrun** (the unit in 30 s), **Guess first** (the question before any teaching) and
 **Would you rather**; and a third wave shaped by the event data: **One thing** (15 s),
 **Cheat sheet**, **Predict** (what happens next?), **Analogy**, **Mistakes**, **Timeline** and
-**Challenge** (ten seconds). The writer labels each hook's style and is told which styles hold
-attention on the topic; it rotates them and opens a loop in every episode that it closes late.
-Full table in [docs/FORMATS.md](docs/FORMATS.md).
+**Challenge** (ten seconds). A fourth wave is for tired brains and curious ones: **Like I am
+five** (the kid version, then the real one), **Mnemonic** (a memory hook that fills a card),
+**In real life** (three places you will meet the idea), **What if** (a counterfactual chain),
+**Wait, what?** (one astonishing true fact), **Before and after** and **True or false**. The
+writer labels each hook's style and is told which styles hold attention on the topic; it rotates
+them and opens a loop in every episode that it closes late. Full table in
+[docs/FORMATS.md](docs/FORMATS.md).
+
+**Breathers.** When the events say a student is about to drop off (two early leaves in a row,
+three wrong answers, a long session with nothing light), the next slot is a *breather*: one
+short, fun, still-accurate video from next door to their subject (animal superpowers for a
+biology student, famous bugs for computer science), written in a light format with no exam
+framing, then straight back to the syllabus. Never two within six videos, never counted towards
+mastery, and switched off for anyone who says "less" to them. See
+[docs/ALGORITHM.md](docs/ALGORITHM.md#breathers).
 
 Claude writes each batch of episodes in a rotation of formats weighted by topic (maths leans on
 exam drills, history on stories) and steered away from what the unit used most recently; the

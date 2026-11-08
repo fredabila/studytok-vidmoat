@@ -12,7 +12,8 @@ import { getUnit, getProgram, interestUnit, customUnit } from '../curriculum/ind
 import { lessonKey } from '../lessons/index.js';
 import { startVideo, readyKeyFor } from '../video/generator.js';
 import { pickUnits, mastery, scoreVideo, exploreRate, applyEvent, emptyState } from './ranking.js';
-import { ingest, getSignals, getSession, noteServed } from './events.js';
+import { ingest, getSignals, getSession, noteServed, noteBreather } from './events.js';
+import { needsBreather, pickBreather, isBreatherUnit } from './breathers.js';
 import { credentialFor } from '../core/billing.js';
 import { kv } from '../core/kv.js';
 import * as db from '../core/db.js';
@@ -243,6 +244,27 @@ export async function nextItems(userId, count = 3) {
 
   const items = ready.slice(0, count).map(({ pick, video, videoParts }) => ({ video, unit: pick.unit, why: { ...pick.parts, kind: pick.kind, video: videoParts }, pos: pick.pos || null }));
 
+  // A breather: when the session says the student is about to drop off, the next slot is one
+  // short, fun video from next door to their subject (feed/breathers.js), then back to the units.
+  const breatherReason = needsBreather(session, signals);
+  if (breatherReason) {
+    const topics = [...new Set(candidates.map((c) => c.unit.topic))];
+    const unit = pickBreather({ topics, lastTopic: session.lastTopics?.[0] || null, recentUnits: recent });
+    const best = await reusable(userId, readyKeyFor(unit.id, audience), taken, { signals, session: pageSession });
+    let video = best?.video || null;
+    if (!video) {
+      const existing = inFlight.find((v) => v.readyKey === readyKeyFor(unit.id, audience) && !taken.has(v.id));
+      const result = existing ? { video: existing } : await startFor(userId, unit, audience, pending);
+      video = result.video || null;
+      if (video && !existing) generating++;
+    }
+    if (video) {
+      taken.add(video.id);
+      items.unshift({ video, unit, why: { kind: 'breather', reason: breatherReason, video: best?.parts }, pos: null });
+      await noteBreather(userId);
+    }
+  }
+
   // Start what is missing: the most important missing unit always, enough to fill this page,
   // plus a few ahead (bounded per viewer). When nobody can pay for a new video (allowance used
   // up, own account empty), the page is filled from the shared library instead and the app is
@@ -272,8 +294,8 @@ export async function nextItems(userId, count = 3) {
       items.push({ video: result.video, unit: pick.unit, why: { ...pick.parts, kind: pick.kind }, pos: pick.pos || null });
     }
   }
-  // Keep the page to `count` ready-or-generating items, generating ones last.
-  items.sort((a, b) => Number(a.video.status !== 'ready') - Number(b.video.status !== 'ready'));
+  // Keep the page to `count` ready-or-generating items, generating ones last (a ready breather first).
+  items.sort((a, b) => Number(a.video.status !== 'ready') - Number(b.video.status !== 'ready') || Number(b.why?.kind === 'breather') - Number(a.why?.kind === 'breather'));
   const page = items.slice(0, count + 1);
 
   await kv.ltrim(`user:${userId}:generating`, 0, 19);
@@ -281,7 +303,7 @@ export async function nextItems(userId, count = 3) {
   for (const x of page) {
     if (!x.unit) continue;
     await kv.lpush(`user:${userId}:recentUnits`, x.unit.id);
-    await updateProgress(userId, x.unit.id, 'served');
+    if (!isBreatherUnit(x.unit.id)) await updateProgress(userId, x.unit.id, 'served');
   }
   await kv.ltrim(`user:${userId}:recentUnits`, 0, 19);
   await noteServed(userId, page.map((x) => x.video));
@@ -356,6 +378,7 @@ export async function publicVideo(v, userId, { withDocument = true, why, pos, qu
     liked, saved,
     likes: stats.likes,
     why: why || undefined,
+    breather: why?.kind === 'breather' ? { reason: why.reason } : undefined,
     position: pos || undefined,
     starter: why?.starter ? true : undefined,
     queuedFor: queuedFor || undefined,
