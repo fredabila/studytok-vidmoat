@@ -588,6 +588,43 @@ function preferReady() {
 }
 
 // ============================================================================ feed: players
+// ---- iOS sound gate -------------------------------------------------------------------------------
+// The player's audio runs through a Web Audio context that iOS keeps suspended until a user gesture
+// happens inside the player's own (cross-origin) frame. Our gesture layer sits over the frame, so
+// until the first tap the frame would never see one. On iOS the first ready slide opens a hole in
+// the layer ("Tap here for sound"); when the tap lands in the frame (focus moves into it), the
+// document is re-sent so the audio pipeline restarts under that gesture. Once per page load.
+const IOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+let soundUnlocked = !IOS;
+let soundWatch = null;
+function soundGate(item) {
+  if (soundUnlocked || !item?.player || item.el.dataset.loaded !== 'true' || feed.items[feed.active] !== item) return;
+  if (item.el.classList.contains('sound-gate')) return;
+  $$('.slide.sound-gate').forEach((s) => { s.classList.remove('sound-gate'); $('.sound-chip', s).hidden = true; });
+  item.el.classList.add('sound-gate');
+  $('.sound-chip', item.el).hidden = false;
+  document.body.classList.add('sound-gated');
+  clearInterval(soundWatch);
+  const started = Date.now();
+  const check = () => {
+    if (soundUnlocked) { clearInterval(soundWatch); return; }
+    if (document.activeElement !== item.player?.iframe) { if (Date.now() - started > 120000) clearInterval(soundWatch); return; }
+    soundUnlocked = true;
+    clearInterval(soundWatch);
+    item.el.classList.remove('sound-gate');
+    $('.sound-chip', item.el).hidden = true;
+    document.body.classList.remove('sound-gated');
+    try { window.focus(); } catch { /* fine */ }
+    // Restart this video's audio pipeline now that the frame has had its gesture.
+    const t = Math.max(0, (item.player.time || 0) - 0.3);
+    item.player.load(item.data.document, t);
+    item.player.play();
+    track('sound_unlock', { videoId: item.data.id, t: Math.round(t) });
+  };
+  soundWatch = setInterval(check, 200);
+  window.addEventListener('blur', () => setTimeout(check, 0), { once: true });
+}
+
 function mountPlayer(item) {
   if (item.player || item.data.status !== 'ready') return;
   const duration = item.data.duration || 0;
@@ -595,6 +632,7 @@ function mountPlayer(item) {
     onLoaded: () => {
       item.el.dataset.loaded = 'true';
       if (feed.items[feed.active] === item && !feed.paused && view === 'feed') item.player.play();
+      soundGate(item);
     },
     onState: ({ time, playing }) => onState(item, time, playing, duration),
     onError: (msg) => { item.el.dataset.status = 'failed'; $('.making-hook', item.el).textContent = msg; sendEvent(item.data.id, 'player_error', { msg: String(msg).slice(0, 80) }); },
@@ -620,6 +658,7 @@ function syncPlayers() {
     if (!item.player) return;
     if (i === feed.active && !feed.paused && view === 'feed' && !item.held) item.player.play(); else item.player.pause();
   });
+  soundGate(feed.items[feed.active]);
 }
 function onState(item, time, playing, duration) {
   const isActive = feed.items[feed.active] === item;

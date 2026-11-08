@@ -280,7 +280,7 @@ export function flashCard({ id, start, duration, track, accent, theme = 'paper' 
   const isA = side === 'a';
   const h = 760;
   return html(id, start, duration, track,
-    `<div class="c fc${isA ? ' a' : ''}"><div class="top"><span>${isA ? 'Answer' : 'Question'}</span><span>${index + 1} / ${total}</span></div><div class="tx">${esc(isA ? card.a : card.q)}</div><div class="bot">${isA ? '' : 'say it out loud…'}</div></div>`,
+    `<div class="c fc${isA ? ' a' : ''}"><div class="top"><span>${isA ? 'Answer' : esc(card.label || 'Question')}</span><span>${index + 1} / ${total}</span></div><div class="tx">${esc(isA ? card.a : card.q)}</div><div class="bot">${isA ? '' : esc(card.hint ?? 'say it out loud…')}</div></div>`,
     cardCss(accent, theme, `.fc{justify-content:space-between;text-align:center;border-radius:60px}
 .fc.a{background:${accent};color:${t.onAccent};border-color:${accent}}
 .top,.bot{display:flex;justify-content:space-between;font-size:38px;font-weight:800;letter-spacing:3px;text-transform:uppercase;opacity:.75}.bot{justify-content:center;font-style:italic;text-transform:none;letter-spacing:0}

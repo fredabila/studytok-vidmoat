@@ -349,7 +349,7 @@ export const SAMPLES = {
     format: 'beforeafter', subtopic: 'Before Newton', title: 'Before and after Newton’s laws', hook: 'Before Newton, motion needed a push to continue', hookTerm: 'Before Newton', hookStyle: 'story',
     ambient: 'old library books',
     beats: [
-      { text: 'For two thousand years people believed moving things slow down naturally and need a constant push to keep going.', keyTerm: 'Before', visual: { kind: 'compare', title: 'Before|After', items: ['Motion needs a push|Motion continues by itself', 'Heavy falls faster|All fall alike in a vacuum', 'Planets need movers|Gravity does it'], query: '', value: 0, unit: '', svg: '' } },
+      { text: 'For two thousand years people believed moving things slow down naturally and need a constant push to keep going.', keyTerm: 'Aristotle’s physics', visual: { kind: 'compare', title: 'Before|After', items: ['Motion needs a push|Motion continues by itself', 'Heavy falls faster|All fall alike in a vacuum', 'Planets need movers|Gravity does it'], query: '', value: 0, unit: '', svg: '' } },
       { text: 'Newton showed that forces change motion rather than cause it, and the same rule works for apples and planets.', keyTerm: 'Forces change motion', visual: { kind: 'definition', title: 'Newton’s first law', items: ['An object keeps its velocity unless a net force acts on it.'], query: '', value: 0, unit: '', svg: '' } },
     ],
     quiz: { question: 'According to Newton, what does a force do?', options: ['Keeps motion going', 'Changes motion', 'Creates mass'], answerIndex: 1, explanation: 'A net force changes velocity; no force, no change.' },

@@ -411,7 +411,7 @@ export const FORMATS = {
     skin: {
       hook: { fontFamily: 'Oswald', fontWeight: 700, fontSize: 150, uppercase: true, animIn: 'slide-up' },
       term: { fontFamily: 'Oswald', fontWeight: 700 },
-      captions: { preset: 'Clean', y: 540, maxWordsPerLine: 4 },
+      captions: { preset: 'Clean', y: 660, maxWordsPerLine: 4 },
       filter: 'Fade', transition: 'fade', music: ['calm piano', 'lofi piano'], voice: 'cedar', cards: 'paper', scrim: 0.7,
     },
     scenes: (l) => [
@@ -553,7 +553,7 @@ export const FORMATS = {
     skin: {
       hook: { fontFamily: 'Oswald', fontWeight: 700, fontSize: 150, uppercase: true, animIn: 'slide-up' },
       term: { fontFamily: 'Oswald', fontWeight: 700 },
-      captions: { preset: 'Handwritten', y: 520, maxWordsPerLine: 4 },
+      captions: { preset: 'Handwritten', y: 660, maxWordsPerLine: 4 },
       filter: 'Fade', transition: 'fade', music: ['lofi piano', 'calm piano'], voice: 'cedar', cards: 'paper', scrim: 0.7,
     },
     scenes: (l) => {
@@ -593,7 +593,7 @@ export const FORMATS = {
     skin: {
       hook: { fontFamily: 'DM Serif Display', fontWeight: 400, fontSize: 156, uppercase: false, animIn: 'fade-in', animInDuration: 0.9 },
       term: { fontFamily: 'DM Serif Display', fontWeight: 400 },
-      captions: { preset: 'Clean Subtitle', y: 460, maxWordsPerLine: 5 },
+      captions: { preset: 'Clean Subtitle', y: 580, maxWordsPerLine: 5 },
       filter: 'Cinematic', transition: 'dissolve', music: ['suspense', 'ambient'], voice: 'fable', cards: 'dark', scrim: 0.55, letterbox: true,
     },
     scenes: (l) => [
@@ -625,12 +625,12 @@ export const FORMATS = {
   beforeafter: {
     name: 'Before and after', tag: 'Before / after',
     blurb: 'How things were before the idea, then after it. A compare card makes the change visible.',
-    spec: 'beats: exactly 2: (1) BEFORE: how things were, or how the problem looked, without the idea (keyTerm = "Before", visual = compare with title "Before|After" and 3 rows "before|after"); (2) AFTER: what the idea changed and why (keyTerm = the idea, a teaching visual or footage). hook: "Before <idea>, …" (max 70 chars). quiz required. Leave items, myth, fact, cards, exam.question and chat empty.',
+    spec: 'beats: exactly 2: (1) BEFORE: how things were, or how the problem looked, without the idea (keyTerm = the old way or the problem in 1-3 words, e.g. "Aristotle\'s physics"; visual = compare with title "Before|After" and 3 rows "before|after"); (2) AFTER: what the idea changed and why (keyTerm = the idea, a teaching visual or footage). hook: "Before <idea>, …" (max 70 chars). quiz required. Leave items, myth, fact, cards, exam.question and chat empty.',
     weights: { default: 2, history: 4, 'computer-science': 3, economics: 3, health: 3, biology: 2, physics: 2, chemistry: 2, business: 3, law: 3 },
     skin: {
       hook: { fontFamily: 'Archivo Black', fontWeight: 400, fontSize: 150, uppercase: false, animIn: 'zoom-blur' },
       term: { fontFamily: 'Archivo Black', fontWeight: 400 },
-      captions: { preset: 'Dark Pill', y: 440, maxWordsPerLine: 4 },
+      captions: { preset: 'Dark Pill', y: 600, maxWordsPerLine: 4 },
       filter: 'Teal', transition: 'whip-pan', music: ['chill beat', 'funky'], voice: 'echo', cards: 'dark', scrim: 0.6,
     },
     scenes: (l) => [
@@ -654,7 +654,7 @@ export const FORMATS = {
     scenes: (l) => [
       { id: 'hook', kind: 'hook', spoken: sentence(l.hook), minDur: 2.4 },
       ...l.cards.slice(0, 4).flatMap((c, i) => [
-        { id: `q${i}`, kind: 'flashQ', index: i, total: Math.min(4, l.cards.length), spoken: `True or false. ${sentence(c.q)}`, pauseAfter: 2.5, minDur: 3.4, card: c },
+        { id: `q${i}`, kind: 'flashQ', index: i, total: Math.min(4, l.cards.length), spoken: `True or false. ${sentence(c.q)}`, pauseAfter: 2.5, minDur: 3.4, card: { ...c, label: 'True or false?', hint: 'decide…' } },
         { id: `a${i}`, kind: 'flashA', index: i, total: Math.min(4, l.cards.length), spoken: sentence(c.a), minDur: 2.2, card: c },
       ]),
       { id: 'outro', kind: 'outro', spoken: `How many did you get? ${sentence(l.takeaway)}`, minDur: 3, label: 'Score yourself' },

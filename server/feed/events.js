@@ -49,6 +49,7 @@ export const EVENT_SPECS = {
   leave: { video: true, fields: { t: 'n', watched: 'n', maxT: 'n', pct: 'p', loops: 'i', dir: 's', early: 'b', watchedSec: 'n', posture: 's' } },
   drop: { fields: { videoId: 's', t: 'n' } },
   sensors: { fields: { motion: 'b', permission: 's' } },
+  sound_unlock: { video: true, fields: { t: 'n' } },
   refresh: { fields: { where: 's' } },
   skip: { video: true, fields: {} }, // legacy: an early leave
   rewatch: { video: true, fields: {} },

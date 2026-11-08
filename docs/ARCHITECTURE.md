@@ -72,6 +72,15 @@ The document is handed to Vidmoat's `/embed/player` over `postMessage`
 (`vidmoat.player.v1`: hello → document → loaded → state). The app mounts players only for
 the active slide ±1, holds the video at the quiz until the viewer answers, and loops.
 
+**Sound on iOS.** The player's audio runs through a Web Audio context that iOS keeps suspended
+until a user gesture happens *inside the player's own frame*. The app's gesture layer sits over
+the frame, so on iOS the first ready slide opens a hole in it ("Tap here for sound"); when the
+tap lands in the frame (focus moves into it) the document is re-sent and playback restarts under
+that gesture. Once per page load; `sound_unlock` is logged. The cleanest fix lives in the
+player itself (resume the AudioContext on any pointer event inside the frame, and on the
+`play` message when the frame already has sticky activation); the app-side gate stays as a
+safety net.
+
 ## 6. Learning from viewers (`public/telemetry.js`, `feed/events.js`)
 
 The app batches fine-grained events (impressions, heartbeats, scene changes, how a video was
