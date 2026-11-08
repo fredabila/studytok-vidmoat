@@ -22,6 +22,23 @@ connection, own credits and plan, billing problem, device (installed app or brow
 time zone, language, and when the row was last updated. New columns added to the row in
 `userRow()` appear on the right automatically.
 
+## The Dashboard tab
+
+The script builds a **Dashboard** tab the first time the app writes, and the sheet gets a
+**StudyTok** menu:
+
+- **Rebuild dashboard** redraws it (after you change the script, or if you broke a formula).
+- **Pull fresh data from the app** asks StudyTok to resend every student right now.
+- **Show / hide ID columns** reveals the technical ids in the Users tab.
+
+The dashboard shows headline numbers (students, signed in, active today and this week, joined
+this week, on their own credits, lessons and minutes watched, quiz answers, units mastered,
+likes and saves, cards shared), the latest joins and milestones, the most active students,
+breakdowns by level, country, course and credits, and two day-by-day charts. Everything is a
+live formula over the data tabs, so it is always current. The Users tab is styled too: ids
+hidden, students active today and on their own credits highlighted, heat colours on streaks,
+lessons and mastery.
+
 ## Setup (once, about three minutes)
 
 1. Create a Google Sheet (any name). Open **Extensions → Apps Script**.
