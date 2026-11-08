@@ -195,3 +195,27 @@ test('ready-first: a generating unit never blocks the page when another unit is 
   assert.equal(v.unitId, law.units[0].id);
   assert.equal(readyKeyFor(law.units[0].id, { ...aud, prefs: { voice: 'off' } }).endsWith('|novoice'), true);
 });
+
+test('a flagging session gets one breather first, which never touches progress, then the syllabus continues', async () => {
+  const { breatherUnits } = await import('../server/feed/breathers.js');
+  const user = await saveProfile(null, { profile, programKeys: ['cat:hs-biology'], units: bio.units.map((u) => u.id) });
+  const funUnits = breatherUnits('biology');
+  for (const u of funUnits) await seed(u.id, 'biology', audience, 2);
+  await kv.set(`user:${user.id}:session`, { sid: 's', startedAt: Date.now(), lastAt: Date.now(), viewed: 8, earlyStreak: 2, lastFormats: [], lastTopics: ['biology'] });
+  const page = await nextItems(user.id, 3);
+  assert.equal(page.pending.length, 0, 'the breather came from the library');
+  assert.equal(page.items[0].why.kind, 'breather');
+  assert.equal(page.items[0].why.reason, 'leaving-early');
+  const fun = funUnits.find((u) => u.id === page.items[0].unit.id);
+  assert.ok(fun, 'a biology breather');
+  const pub = await publicVideo(page.items[0].video, user.id, { why: page.items[0].why, withDocument: false });
+  assert.deepEqual(pub.breather, { reason: 'leaving-early' });
+  assert.equal((await getProgress(user.id))[fun.id], undefined, 'a breather is not syllabus progress');
+  await recordEvent(user.id, { videoId: page.items[0].video.id, type: 'view' });
+  await recordEvent(user.id, { videoId: page.items[0].video.id, type: 'leave', pct: 0.9, watched: 18 });
+  assert.equal((await getProgress(user.id))[fun.id], undefined, 'events on it do not create progress either');
+  const session = await kv.get(`user:${user.id}:session`);
+  assert.equal(session.breathers, 1); assert.equal(session.earlyStreak, 0, 'the streak that fired it is reset');
+  const next = await nextItems(user.id, 3);
+  assert.ok(next.items.every((x) => x.why.kind !== 'breather'), 'no second breather right away');
+});

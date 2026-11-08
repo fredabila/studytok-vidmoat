@@ -56,6 +56,7 @@ export async function writeEpisodes({ unit, audience, covered = [], count = 3, f
   const context = [
     unit.open ? `Topic: ${unit.title} (open: pick any worthwhile subtopic)` : `Unit: ${unit.title}${unit.summary ? ` — ${unit.summary}` : ''}`,
     unit.programName && `Course: ${unit.programName}`,
+    unit.fun && 'This is a BREATHER: the student is tired or frustrated and about to leave. Make these episodes fun, surprising and light: true, delightful facts or stories from next door to their subject. No exam framing, no "marks", no revision tone. Stay accurate. The quiz is easy and playful.',
     `Student: ${audience.audience}`,
     audience.age && `Age: ${audience.age}${audience.minor ? '. A minor: age-appropriate language and examples, nothing graphic, violent, sexual or about drugs or gambling; hot takes and dilemmas stay school-safe.' : ''}${audience.child ? ' A child under 13: short words, concrete everyday examples, a playful tone, nothing frightening.' : ''}`,
     audience.country && `Country: ${audience.country}`,

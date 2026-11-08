@@ -35,14 +35,14 @@ export const LessonSchema = z.object({
   ambient: z.string().describe('Background footage search query for the whole video, 1-3 concrete visual nouns'),
   beats: z.array(Beat).describe('explain/why/story/mythbust: the beats (see the format spec); else []'),
   myth: z.string().describe('mythbust: the common wrong belief; else ""'),
-  fact: z.string().describe('mythbust: the correct statement; else ""'),
+  fact: z.string().describe('mythbust/hottake: the correct statement or real point; wow: the astonishing true fact; mnemonic: the mnemonic phrase; else ""'),
   items: z.array(z.object({
-    title: z.string().describe('max 28 chars (thisorthat: "Left|Right")'),
+    title: z.string().describe('max 28 chars (thisorthat: "Left|Right"; mnemonic: "Word|Term"; history: "YEAR|what happened")'),
     text: z.string().describe('one spoken sentence, 8-16 words'),
     visual: z.string().describe('stock footage/photo query for this item'),
     tier: z.string().describe('tierlist: S, A, B or C; else ""'),
-  })).describe('rapid/tierlist/thisorthat/countdown/speedrun: the items (see the format spec); else []'),
-  cards: z.array(z.object({ q: z.string().describe('recall question, max 70 chars'), a: z.string().describe('answer, max 60 chars') })).describe('flashcards: exactly 4; else []'),
+  })).describe('rapid/tierlist/thisorthat/countdown/speedrun/cheatsheet/mistakes/history/mnemonic/realworld: the items (see the format spec); else []'),
+  cards: z.array(z.object({ q: z.string().describe('recall question or true/false statement, max 70 chars'), a: z.string().describe('answer, max 60 chars') })).describe('flashcards/truefalse: exactly 4; else []'),
   exam: z.object({
     question: z.string().describe('examdrill: the question, max 120 chars; else ""'),
     options: z.array(z.string()).describe('examdrill: exactly 3 options; else []'),
@@ -135,10 +135,14 @@ export function sanitizeLesson(raw, topicId, meta = {}) {
     history: items.length >= 3 && items.every((it) => it.title.includes('|')),
     predict: Boolean(exam && exam.options.length === 3) && beats.length >= 1,
     challenge: Boolean(exam && exam.options.length === 3 && exam.steps.length >= 1),
+    eli5: beats.length >= 2, whatif: beats.length >= 3, beforeafter: beats.length >= 2,
+    wow: Boolean(raw.fact) && beats.length >= 1,
+    mnemonic: Boolean(raw.fact) && items.length >= 3 && items.every((it) => it.title.includes('|')),
+    realworld: items.length >= 3, truefalse: cards.length >= 3,
   };
   if (!ok[format]) format = beats.length >= 2 ? 'explain' : items.length >= 3 ? 'rapid' : cards.length >= 3 ? 'flashcards' : examFull ? 'examdrill' : chat ? 'chat' : null;
   if (!format) throw new Error('Lesson has no usable content');
-  if (['explain', 'why', 'story', 'pov', 'levels', 'tierlist', 'thisorthat', 'countdown', 'speedrun', 'wyr', 'onething', 'analogy', 'cheatsheet', 'mistakes', 'history'].includes(format) && !quiz) throw new Error('Lesson needs a quiz');
+  if (['explain', 'why', 'story', 'pov', 'levels', 'tierlist', 'thisorthat', 'countdown', 'speedrun', 'wyr', 'onething', 'analogy', 'cheatsheet', 'mistakes', 'history', 'eli5', 'whatif', 'beforeafter', 'wow', 'mnemonic', 'realworld'].includes(format) && !quiz) throw new Error('Lesson needs a quiz');
 
   return {
     topic: topicId,

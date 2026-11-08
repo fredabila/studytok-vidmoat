@@ -287,4 +287,84 @@ export const SAMPLES = {
     exam: { question: 'A car slows from 20 m/s to 0 in 4 s. Its deceleration?', options: ['4 m/s²', '5 m/s²', '80 m/s²'], answerIndex: 1, steps: ['Change in velocity is 20 m/s over 4 s.', '20 divided by 4 gives 5 m/s².'], mistake: '', tip: 'Acceleration is change in velocity over time: divide, do not multiply.' },
     takeaway: 'Divide the change by the time.', beats: [], myth: '', fact: '', items: [], cards: [], chat: { contact: '', messages: [] }, quiz: { question: '', options: [], answerIndex: 0, explanation: '' },
   },
+  // ---- fourth-wave formats ----
+  eli5: {
+    format: 'eli5', subtopic: 'Inertia, two ways', title: 'Inertia, like you are five', hook: 'Inertia, like you are five', hookTerm: 'five', hookStyle: 'curiosity',
+    ambient: 'skateboard rolling street',
+    beats: [
+      { text: 'Push a toy car and it keeps rolling until the carpet or a wall makes it stop; it is lazy about changing.', keyTerm: 'Lazy car', visual: { kind: 'footage', query: 'toy car rolling floor', title: '', items: [], value: 0, unit: '', svg: '' } },
+      { text: 'Inertia is an object’s resistance to any change in velocity, and it grows with mass, so heavier things resist more.', keyTerm: 'Inertia', visual: { kind: 'definition', title: 'Inertia', items: ['The tendency of an object to resist a change in its state of motion; proportional to mass.'], query: '', value: 0, unit: '', svg: '' } },
+    ],
+    quiz: { question: 'Which object has the most inertia?', options: ['A tennis ball', 'A bowling ball', 'A balloon'], answerIndex: 1, explanation: 'More mass means more resistance to changing motion.' },
+    takeaway: 'Things keep doing what they are doing; mass makes them stubborn.', myth: '', fact: '', items: [], cards: [], exam: { question: '', options: [], answerIndex: 0, steps: [], mistake: '', tip: '' }, chat: { contact: '', messages: [] },
+  },
+  mnemonic: {
+    format: 'mnemonic', subtopic: 'Equations of motion', title: 'Never forget the SUVAT letters again', hook: 'Never forget SUVAT again', hookTerm: 'SUVAT', hookStyle: 'secret',
+    ambient: 'notebook pen desk',
+    fact: 'Some Unicorns Vanish At Twilight',
+    items: [
+      { title: 'Some|s, displacement', tier: '', text: 'S is displacement, how far the object ends up from where it started.', visual: 'running track distance' },
+      { title: 'Unicorns|u, initial velocity', tier: '', text: 'U is the velocity at the start of the motion you are looking at.', visual: 'sprinter start blocks' },
+      { title: 'Vanish|v, final velocity', tier: '', text: 'V is the velocity at the end of that stretch of motion.', visual: 'sprinter finish line' },
+      { title: 'At|a, acceleration', tier: '', text: 'A is how quickly the velocity changes, in metres per second squared.', visual: 'car accelerating' },
+      { title: 'Twilight|t, time', tier: '', text: 'T is the time the motion takes, in seconds.', visual: 'stopwatch' },
+    ],
+    quiz: { question: 'In SUVAT, what does the letter u stand for?', options: ['Final velocity', 'Initial velocity', 'Unit'], answerIndex: 1, explanation: 'u is the velocity at the start.' },
+    takeaway: 'Five letters, every motion question.', beats: [], myth: '', cards: [], exam: { question: '', options: [], answerIndex: 0, steps: [], mistake: '', tip: '' }, chat: { contact: '', messages: [] },
+  },
+  realworld: {
+    format: 'realworld', subtopic: 'Friction around you', title: 'Friction on the way home', hook: 'You will meet friction on the way home', hookTerm: 'way home', hookStyle: 'claim',
+    ambient: 'busy street evening',
+    items: [
+      { title: 'Your shoes', tier: '', text: 'Every step pushes back on the ground, and friction is what stops your foot sliding.', visual: 'walking shoes pavement' },
+      { title: 'Trotro brakes', tier: '', text: 'Brake pads squeeze the wheel and friction turns the bus’s motion into heat.', visual: 'bus brakes city' },
+      { title: 'Striking a match', tier: '', text: 'Rubbing the match head generates enough heat from friction to start the flame.', visual: 'striking match' },
+    ],
+    quiz: { question: 'Which everyday event relies on friction?', options: ['A satellite orbiting', 'A match lighting', 'A ball falling'], answerIndex: 1, explanation: 'The rub heats the match head.' },
+    takeaway: 'Friction is the force you use all day without noticing.', beats: [], myth: '', fact: '', cards: [], exam: { question: '', options: [], answerIndex: 0, steps: [], mistake: '', tip: '' }, chat: { contact: '', messages: [] },
+  },
+  whatif: {
+    format: 'whatif', subtopic: 'A world without friction', title: 'What if friction switched off?', hook: 'What if friction switched off tomorrow', hookTerm: 'switched off', hookStyle: 'question',
+    ambient: 'ice rink skating',
+    beats: [
+      { text: 'You could not walk: your foot would slide back as hard as you pushed, like standing on perfect ice.', keyTerm: 'No grip', visual: { kind: 'footage', query: 'person slipping on ice', title: '', items: [], value: 0, unit: '', svg: '' } },
+      { text: 'Nothing would stay put: knots, screws and brakes all depend on surfaces gripping each other.', keyTerm: 'Nothing holds', visual: { kind: 'steps', title: 'What friction holds together', items: ['Knots and laces', 'Screws and nails', 'Brakes', 'Your grip on a cup'], query: '', value: 0, unit: '', svg: '' } },
+      { text: 'Yet moving things would coast forever, which is exactly what Newton’s first law describes.', keyTerm: 'First law', visual: { kind: 'definition', title: 'Newton’s first law', items: ['An object keeps its velocity unless a net force acts on it.'], query: '', value: 0, unit: '', svg: '' } },
+    ],
+    quiz: { question: 'Without friction, a rolling ball on a flat floor would…', options: ['Stop sooner', 'Keep rolling', 'Speed up'], answerIndex: 1, explanation: 'No net force, so velocity stays the same.' },
+    takeaway: 'Friction costs energy but lets you grip, stop and build.', myth: '', fact: '', items: [], cards: [], exam: { question: '', options: [], answerIndex: 0, steps: [], mistake: '', tip: '' }, chat: { contact: '', messages: [] },
+  },
+  wow: {
+    format: 'wow', subtopic: 'Weight on other worlds', title: 'You would weigh a sixth on the Moon', hook: 'Your bathroom scale is lying to you', hookTerm: 'lying', hookStyle: 'claim',
+    ambient: 'moon surface astronaut',
+    fact: 'On the Moon you would weigh about one sixth of what you weigh on Earth',
+    beats: [
+      { text: 'Weight is the pull of gravity on your mass, and the Moon pulls about six times more weakly than Earth.', keyTerm: 'Weight = m × g', visual: { kind: 'equation', title: 'Weight depends on gravity', items: ['W = m × g', 'g(Earth) ≈ 9.8 N/kg', 'g(Moon) ≈ 1.6 N/kg'], query: '', value: 0, unit: '', svg: '' } },
+      { text: 'Your mass has not changed at all, which is why astronauts bounce but still need the same effort to push a crate.', keyTerm: 'Same mass', visual: { kind: 'photo', query: 'astronaut jumping on moon', title: '', items: [], value: 0, unit: '', svg: '' } },
+    ],
+    quiz: { question: 'What changes when you stand on the Moon?', options: ['Your mass', 'Your weight', 'Both'], answerIndex: 1, explanation: 'Gravity is weaker, so weight drops; mass stays.' },
+    takeaway: 'Weight follows gravity; mass follows you.', myth: '', items: [], cards: [], exam: { question: '', options: [], answerIndex: 0, steps: [], mistake: '', tip: '' }, chat: { contact: '', messages: [] },
+  },
+  beforeafter: {
+    format: 'beforeafter', subtopic: 'Before Newton', title: 'Before and after Newton’s laws', hook: 'Before Newton, motion needed a push to continue', hookTerm: 'Before Newton', hookStyle: 'story',
+    ambient: 'old library books',
+    beats: [
+      { text: 'For two thousand years people believed moving things slow down naturally and need a constant push to keep going.', keyTerm: 'Before', visual: { kind: 'compare', title: 'Before|After', items: ['Motion needs a push|Motion continues by itself', 'Heavy falls faster|All fall alike in a vacuum', 'Planets need movers|Gravity does it'], query: '', value: 0, unit: '', svg: '' } },
+      { text: 'Newton showed that forces change motion rather than cause it, and the same rule works for apples and planets.', keyTerm: 'Forces change motion', visual: { kind: 'definition', title: 'Newton’s first law', items: ['An object keeps its velocity unless a net force acts on it.'], query: '', value: 0, unit: '', svg: '' } },
+    ],
+    quiz: { question: 'According to Newton, what does a force do?', options: ['Keeps motion going', 'Changes motion', 'Creates mass'], answerIndex: 1, explanation: 'A net force changes velocity; no force, no change.' },
+    takeaway: 'Forces change motion; they do not keep it going.', myth: '', fact: '', items: [], cards: [], exam: { question: '', options: [], answerIndex: 0, steps: [], mistake: '', tip: '' }, chat: { contact: '', messages: [] },
+  },
+  truefalse: {
+    format: 'truefalse', subtopic: 'Forces: true or false', title: 'True or false: forces edition', hook: 'True or false: heavier things fall faster', hookTerm: 'True or false', hookStyle: 'challenge',
+    ambient: 'quiz show lights',
+    cards: [
+      { q: 'A moving object needs a force to keep moving.', a: 'False: with no net force it keeps its velocity.' },
+      { q: 'Weight is measured in newtons.', a: 'True: weight is a force.' },
+      { q: 'Action and reaction act on the same object.', a: 'False: they act on two different objects.' },
+      { q: 'Heavier things fall faster.', a: 'False: in a vacuum everything falls at the same rate.' },
+    ],
+    takeaway: 'Four myths down.', beats: [], myth: '', fact: '', items: [], exam: { question: '', options: [], answerIndex: 0, steps: [], mistake: '', tip: '' }, chat: { contact: '', messages: [] },
+    quiz: { question: '', options: [], answerIndex: 0, explanation: '' },
+  },
 };

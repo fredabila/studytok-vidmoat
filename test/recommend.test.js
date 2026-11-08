@@ -81,3 +81,30 @@ test('a brand-new student always starts at unit 1 (affinity noise cannot overrid
   const rand = seeded(13);
   for (let i = 0; i < 300; i++) assert.equal(scoreUnits(course, {}, [], { rand })[0].unit.id, 'u1');
 });
+
+const { needsBreather, pickBreather, breatherUnit, breatherUnits, isBreatherUnit, BREATHERS } = await import('../server/feed/breathers.js');
+const { BREATHER_FORMATS, FORMAT_IDS } = await import('../server/video/formats.js');
+
+test('breathers fire on early leaves, wrong runs and long sessions, not too often, and respect "less"', () => {
+  assert.equal(needsBreather({ viewed: 3, earlyStreak: 1 }), null, 'one early leave is noise');
+  assert.equal(needsBreather({ viewed: 8, earlyStreak: 2 }), 'leaving-early');
+  assert.equal(needsBreather({ viewed: 8, wrongStreak: 3 }), 'tough-run');
+  assert.equal(needsBreather({ viewed: 10, earlyStreak: 0, wrongStreak: 0 }), 'long-session');
+  assert.equal(needsBreather({ viewed: 10, earlyStreak: 2, lastBreatherAt: 6 }), null, 'not within six videos of the last one');
+  assert.equal(needsBreather({ viewed: 20, earlyStreak: 2 }, { breathers: { n: 1, pctSum: 0.1, less: 2 } }), null, 'two "less" switch them off');
+  assert.equal(needsBreather({ viewed: 20, earlyStreak: 2 }, { breathers: { n: 4, pctSum: 0.8, less: 0 } }), null, 'swiped away: off');
+  assert.equal(needsBreather({ viewed: 20, earlyStreak: 2 }, { breathers: { n: 4, pctSum: 3.2, less: 0 } }), 'leaving-early', 'watched through: on');
+});
+
+test('a breather stays next door to the subject and is a real, light unit', () => {
+  const rand = seeded(5);
+  const u = pickBreather({ topics: ['biology', 'space'], lastTopic: 'biology', recentUnits: [], rand });
+  assert.ok(isBreatherUnit(u.id) && u.fun && u.open && u.topic === 'biology');
+  assert.deepEqual(breatherUnit(u.id), u, 'ids resolve back to the unit');
+  assert.equal(breatherUnit('fun:nope:9'), null);
+  assert.equal(pickBreather({ topics: [], lastTopic: null, rand }).topic, 'general', 'no topics: general fun');
+  const recent = breatherUnits('biology').slice(0, 2).map((x) => x.id);
+  for (let i = 0; i < 20; i++) assert.equal(pickBreather({ topics: ['biology'], lastTopic: 'biology', recentUnits: recent, rand }).id, breatherUnits('biology')[2].id, 'skips recent titles');
+  for (const t of Object.keys(BREATHERS)) assert.equal(breatherUnits(t).length, 3);
+  for (const f of BREATHER_FORMATS) assert.ok(FORMAT_IDS.includes(f), `${f} is a format`);
+});

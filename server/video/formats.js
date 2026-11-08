@@ -520,6 +520,146 @@ export const FORMATS = {
       ];
     },
   },
+
+  // ---- Fourth wave: formats for tired brains and curious ones ----
+  // Explain-like-I'm-five jumps, mnemonics, "where you'll meet this", counterfactuals, one wow
+  // fact, before/after, true-or-false. Several of these double as "breathers": the light, fun,
+  // still-accurate videos the feed drops in when the events say a student is about to leave
+  // (feed/breathers.js).
+
+  eli5: {
+    name: 'Like I am five', tag: 'ELI5',
+    blurb: 'The idea explained to a five-year-old, then the real version at the student\'s level. The jump between the two is the lesson.',
+    spec: 'beats: exactly 2: (1) the five-year-old version: one everyday picture, no jargon, playful (text 12-22 words, keyTerm = the picture, visual = footage or photo of it); (2) the real version at the student\'s level with the proper terms (keyTerm = the term, a teaching visual). hook: "<Concept>, like you are five" style (max 60 chars). quiz required. Leave items, myth, fact, cards, exam.question and chat empty.',
+    weights: { default: 2, physics: 3, chemistry: 3, biology: 3, economics: 3, 'computer-science': 3, math: 2, psychology: 2 },
+    skin: {
+      hook: { fontFamily: 'Permanent Marker', fontWeight: 400, fontSize: 156, uppercase: false, animIn: 'bounce' },
+      term: { fontFamily: 'Permanent Marker', fontWeight: 400 },
+      captions: { preset: 'Comic Pop', y: 440, maxWordsPerLine: 4 },
+      filter: 'Warm', transition: 'push', music: ['playful', 'ukulele'], voice: 'coral', cards: 'paper', scrim: 0.6,
+    },
+    scenes: (l) => [
+      { id: 'hook', kind: 'hook', spoken: sentence(l.hook), minDur: 2.6 },
+      ...l.beats.slice(0, 2).map((b, i) => ({ id: `beat${i}`, kind: 'beat', index: i, spoken: sentence(b.text), captions: true, beat: b, kicker: i === 0 ? 'LIKE YOU ARE FIVE' : 'NOW FOR REAL' })),
+      ...quizScenes(l, 'Got both?'), outro(l, 'Both are true'),
+    ],
+  },
+
+  mnemonic: {
+    name: 'Mnemonic', tag: 'Remember it',
+    blurb: 'A memory hook: the words of a mnemonic fill a card one by one, each unlocking the real term. The thing students screenshot before an exam.',
+    spec: 'fact: the mnemonic phrase itself (max 70 chars, e.g. "King Philip Came Over For Good Soup"). items: 3-7 in order, title = "Word|Term" (the mnemonic word and the real term it stands for, max 28 chars together), text = one spoken sentence linking them (8-16 words), visual query. hook: "Never forget <thing> again" style. quiz required. Leave beats, myth, cards, exam.question and chat empty.',
+    weights: { default: 2, biology: 4, chemistry: 3, health: 4, history: 2, language: 3, law: 2, math: 2, earth: 2, space: 3 },
+    skin: {
+      hook: { fontFamily: 'Oswald', fontWeight: 700, fontSize: 150, uppercase: true, animIn: 'slide-up' },
+      term: { fontFamily: 'Oswald', fontWeight: 700 },
+      captions: { preset: 'Handwritten', y: 520, maxWordsPerLine: 4 },
+      filter: 'Fade', transition: 'fade', music: ['lofi piano', 'calm piano'], voice: 'cedar', cards: 'paper', scrim: 0.7,
+    },
+    scenes: (l) => {
+      const items = l.items.slice(0, 7).map((it) => ({ ...it, title: it.title.replace('|', ' → ') }));
+      return [
+        { id: 'hook', kind: 'hook', spoken: sentence(l.hook), minDur: 2.6 },
+        { id: 'phrase', kind: 'stamp', spoken: `Say it with me: ${sentence(l.fact)}`, label: 'REMEMBER', text: l.fact, color: '#ffd93d', minDur: 3.5 },
+        ...items.map((it, i) => ({ id: `line${i}`, kind: 'sheet', index: i, spoken: `${it.title.split(' → ')[0]}, for ${it.title.split(' → ')[1] || it.title}. ${sentence(it.text)}`, captions: true, items, item: it })),
+        ...quizScenes(l, 'Cover the card.'), outro(l, 'Say it back'),
+      ];
+    },
+  },
+
+  realworld: {
+    name: 'In real life', tag: 'Real life',
+    blurb: 'Three places the student will meet this idea outside the classroom, with footage of each. "Why am I learning this?", answered.',
+    spec: 'items: exactly 3 real places or moments where the unit\'s idea shows up (title = the place or moment, max 28 chars; text = one spoken sentence of 10-18 words saying what the idea does there; visual = a query for that real scene). Order from everyday to surprising. hook: "You will meet this on the way home" style. quiz: which situation the idea applies to. Leave beats, myth, fact, cards, exam.question and chat empty.',
+    weights: { default: 2, physics: 3, chemistry: 3, biology: 2, economics: 4, math: 3, 'computer-science': 3, health: 3, law: 3, business: 3, earth: 3, psychology: 3 },
+    skin: {
+      hook: { fontFamily: 'Montserrat', fontWeight: 900, fontSize: 150, uppercase: false, animIn: 'slide-up' },
+      term: { fontFamily: 'Montserrat', fontWeight: 900 },
+      captions: { preset: 'Karaoke', y: 430, maxWordsPerLine: 4 },
+      filter: 'golden-hour', transition: 'dissolve', music: ['acoustic guitar loop', 'chill'], voice: 'marin', cards: 'dark', scrim: 0.5,
+    },
+    scenes: (l) => [
+      { id: 'hook', kind: 'hook', spoken: sentence(l.hook), minDur: 2.6 },
+      ...l.items.slice(0, 3).map((it, i) => ({ id: `item${i}`, kind: 'item', index: i, total: Math.min(3, l.items.length), spoken: `${it.title}. ${sentence(it.text)}`, captions: true, item: it })),
+      ...quizScenes(l, 'Spot it?'), outro(l, 'Look for it'),
+    ],
+  },
+
+  whatif: {
+    name: 'What if', tag: 'What if…',
+    blurb: 'A counterfactual: what if this thing did not exist, or went the other way? Three consequences in a chain that teach what it really does.',
+    spec: 'hook: the "What if …?" question itself (max 70 chars). beats: exactly 3 consequences in a chain (text 10-20 words, keyTerm, visual), the last the most striking. takeaway: what the idea actually does, in one line. quiz required. Leave items, myth, fact, cards, exam.question and chat empty.',
+    weights: { default: 2, history: 4, economics: 3, physics: 3, biology: 3, earth: 3, space: 3, law: 3, psychology: 2 },
+    skin: {
+      hook: { fontFamily: 'DM Serif Display', fontWeight: 400, fontSize: 156, uppercase: false, animIn: 'fade-in', animInDuration: 0.9 },
+      term: { fontFamily: 'DM Serif Display', fontWeight: 400 },
+      captions: { preset: 'Clean Subtitle', y: 460, maxWordsPerLine: 5 },
+      filter: 'Cinematic', transition: 'dissolve', music: ['suspense', 'ambient'], voice: 'fable', cards: 'dark', scrim: 0.55, letterbox: true,
+    },
+    scenes: (l) => [
+      { id: 'hook', kind: 'hook', spoken: question(l.hook), minDur: 3 },
+      ...l.beats.slice(0, 3).map((b, i) => ({ id: `beat${i}`, kind: 'beat', index: i, spoken: sentence(b.text), captions: true, beat: b, kicker: ['THEN', 'AND THEN', 'WHICH IS WHY'][i] })),
+      ...quizScenes(l, 'Back to reality.'), outro(l, 'So, in reality'),
+    ],
+  },
+
+  wow: {
+    name: 'Wait, what?', tag: 'Wait, what?',
+    blurb: 'One astonishing, true fact next door to the unit, stamped WAIT, WHAT?, then two beats on why it is true. Pure delight, still accurate.',
+    spec: 'fact: the astonishing true fact in one line (max 80 chars; a real, well-established fact, never invented or exaggerated). hook: a 4-8 word setup ("Your bones are wetter than you think"). beats: exactly 2 explaining why it is true (text, keyTerm, visual). quiz: easy and playful (question max 60 chars, options max 20 chars). Leave items, myth, cards, exam.question and chat empty.',
+    weights: { default: 2, biology: 3, space: 4, earth: 3, physics: 3, chemistry: 3, history: 3, health: 3, psychology: 3 },
+    skin: {
+      hook: { fontFamily: 'Bungee', fontWeight: 400, fontSize: 150, uppercase: true, animIn: 'bounce', color: '#ffd93d' },
+      term: { fontFamily: 'Bungee', fontWeight: 400 },
+      captions: { preset: 'Comic Pop', y: 420, maxWordsPerLine: 3 },
+      filter: 'Vivid', transition: 'zoom', music: ['quirky', 'upbeat'], voice: 'nova', cards: 'dark', scrim: 0.55, stampSfx: true,
+    },
+    scenes: (l) => [
+      { id: 'hook', kind: 'hook', spoken: sentence(l.hook), minDur: 2.4 },
+      { id: 'fact', kind: 'stamp', spoken: `Wait, what? ${sentence(l.fact)}`, label: 'WAIT, WHAT?', text: l.fact, color: '#ffd93d', minDur: 3.5 },
+      ...l.beats.slice(0, 2).map((b, i) => ({ id: `beat${i}`, kind: 'beat', index: i, spoken: sentence(b.text), captions: true, beat: b, kicker: i === 0 ? 'HERE IS WHY' : 'AND' })),
+      ...quizScenes(l, 'Quick one.'), outro(l, 'Tell someone'),
+    ],
+  },
+
+  beforeafter: {
+    name: 'Before and after', tag: 'Before / after',
+    blurb: 'How things were before the idea, then after it. A compare card makes the change visible.',
+    spec: 'beats: exactly 2: (1) BEFORE: how things were, or how the problem looked, without the idea (keyTerm = "Before", visual = compare with title "Before|After" and 3 rows "before|after"); (2) AFTER: what the idea changed and why (keyTerm = the idea, a teaching visual or footage). hook: "Before <idea>, …" (max 70 chars). quiz required. Leave items, myth, fact, cards, exam.question and chat empty.',
+    weights: { default: 2, history: 4, 'computer-science': 3, economics: 3, health: 3, biology: 2, physics: 2, chemistry: 2, business: 3, law: 3 },
+    skin: {
+      hook: { fontFamily: 'Archivo Black', fontWeight: 400, fontSize: 150, uppercase: false, animIn: 'zoom-blur' },
+      term: { fontFamily: 'Archivo Black', fontWeight: 400 },
+      captions: { preset: 'Dark Pill', y: 440, maxWordsPerLine: 4 },
+      filter: 'Teal', transition: 'whip-pan', music: ['chill beat', 'funky'], voice: 'echo', cards: 'dark', scrim: 0.6,
+    },
+    scenes: (l) => [
+      { id: 'hook', kind: 'hook', spoken: sentence(l.hook), minDur: 2.8 },
+      ...l.beats.slice(0, 2).map((b, i) => ({ id: `beat${i}`, kind: 'beat', index: i, spoken: sentence(b.text), captions: true, beat: b, kicker: i === 0 ? 'BEFORE' : 'AFTER' })),
+      ...quizScenes(l, 'Which side?'), outro(l, 'The change'),
+    ],
+  },
+
+  truefalse: {
+    name: 'True or false', tag: 'True / false',
+    blurb: 'Four statements, each held for a beat while the viewer decides, then answered TRUE or FALSE with the reason. Fast and a little competitive.',
+    spec: 'cards: exactly 4 { q: a statement about the unit a student might believe either way (max 70 chars), a: "True: <reason>" or "False: <reason>" (max 60 chars) }; mix true and false, at least one of each, the spiciest last. hook: "True or false: <the spiciest one>" style. takeaway: one line. Leave beats, items, myth, fact, exam.question, chat and quiz empty.',
+    weights: { default: 2, biology: 3, health: 4, history: 3, psychology: 3, earth: 3, law: 3, economics: 2, chemistry: 2 },
+    skin: {
+      hook: { fontFamily: 'Anton', fontWeight: 400, fontSize: 170, uppercase: true, animIn: 'word-slam', outline: '#000000', outlineWidth: 6 },
+      term: { fontFamily: 'Anton', fontWeight: 400, uppercase: true },
+      captions: { preset: 'Boxed Red', y: 430, maxWordsPerLine: 3 },
+      filter: 'punch', transition: 'glitch', music: ['energetic', 'dramatic'], voice: 'ash', cards: 'dark', scrim: 0.65, stampSfx: true, countdown: true,
+    },
+    scenes: (l) => [
+      { id: 'hook', kind: 'hook', spoken: sentence(l.hook), minDur: 2.4 },
+      ...l.cards.slice(0, 4).flatMap((c, i) => [
+        { id: `q${i}`, kind: 'flashQ', index: i, total: Math.min(4, l.cards.length), spoken: `True or false. ${sentence(c.q)}`, pauseAfter: 2.5, minDur: 3.4, card: { ...c, q: `True or false: ${c.q}` } },
+        { id: `a${i}`, kind: 'flashA', index: i, total: Math.min(4, l.cards.length), spoken: sentence(c.a), minDur: 2.2, card: c },
+      ]),
+      { id: 'outro', kind: 'outro', spoken: `How many did you get? ${sentence(l.takeaway)}`, minDur: 3, label: 'Score yourself' },
+    ],
+  },
 };
 
 export const FORMAT_IDS = Object.keys(FORMATS);
@@ -540,6 +680,9 @@ export function pickFormats(topic, count = 3, { recent = [], rand = Math.random,
   }).sort((a, b) => b.weight - a.weight);
   return pool.slice(0, count).map((p) => p.id);
 }
+
+/** Light, fun, still-accurate formats the feed uses for a breather (feed/breathers.js). */
+export const BREATHER_FORMATS = ['wow', 'whatif', 'realworld', 'story', 'pov', 'onething', 'eli5', 'mythbust', 'levels'];
 
 /** Formats that can run without Claude (the offline bank only has explainers). */
 export const OFFLINE_FORMATS = ['explain'];

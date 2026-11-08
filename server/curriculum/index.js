@@ -12,6 +12,7 @@ import { kv } from '../core/kv.js';
 import { CATALOG, matchProgram, normalize } from './catalog.js';
 import { TOPIC_BY_ID, guessTopic } from './topics.js';
 import { researchProgram } from './research.js';
+import { breatherUnit } from '../feed/breathers.js';
 
 const STALE_RESEARCH_MS = 5 * 60 * 1000;
 
@@ -26,6 +27,7 @@ const catalogUnits = new Map(CATALOG.flatMap((p) => p.units.map((u) => [u.id, { 
 export async function getUnit(id) {
   if (catalogUnits.has(id)) return catalogUnits.get(id);
   if (id.startsWith('topic:')) return interestUnit(id.slice(6));
+  if (id.startsWith('fun:')) return breatherUnit(id);
   return kv.get(`unit:${id}`);
 }
 

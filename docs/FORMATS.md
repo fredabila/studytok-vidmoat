@@ -1,6 +1,6 @@
 # Video formats
 
-A format is a kind of video: what scenes it has, how it looks and sounds. All twenty-five live in
+A format is a kind of video: what scenes it has, how it looks and sounds. All thirty-two live in
 `server/video/formats.js`; the composer (`server/video/compose.js`) renders any of them.
 
 | id | Name | Scenes | Skin highlights |
@@ -31,6 +31,20 @@ A format is a kind of video: what scenes it has, how it looks and sounds. All tw
 | `mistakes` | Don't do this | three mistakes stamped ✗ and fixed · quiz | Anton, Boxed Red, Moody, glitch |
 | `history` | Timeline | dated moments building a timeline card, the last is the twist | Cinzel, letterbox, warm-film, orchestral |
 | `challenge` | 10 seconds | a mental problem, a ten-second hold, two steps, the trick | Bebas Neue, Hormozi captions, punch LUT |
+| `eli5` | ELI5 | LIKE YOU ARE FIVE → NOW FOR REAL: the same idea twice · quiz | Permanent Marker, Comic Pop, Warm grade, playful music, voice *coral* |
+| `mnemonic` | Remember it | the mnemonic stamped REMEMBER, then a card fills in word → term · quiz | Oswald, Handwritten captions, paper cards, Fade grade, voice *cedar* |
+| `realworld` | Real life | three places you meet the idea, footage of each · quiz | Montserrat, Karaoke, golden-hour LUT, acoustic guitar, voice *marin* |
+| `whatif` | What if… | THEN → AND THEN → WHICH IS WHY, a counterfactual chain · quiz | DM Serif Display, Clean Subtitle, Cinematic, letterbox, suspense, voice *fable* |
+| `wow` | Wait, what? | one astonishing true fact stamped WAIT, WHAT?, two beats why · easy quiz | Bungee, Comic Pop, Vivid, quirky music, voice *nova* |
+| `beforeafter` | Before / after | BEFORE (compare card) → AFTER (what changed) · quiz | Archivo Black, Dark Pill, Teal, whip-pans, voice *echo* |
+| `truefalse` | True / false | four statements held, then TRUE or FALSE with the reason · score yourself | Anton, Boxed Red, punch LUT, glitch, voice *ash* |
+
+The fourth wave (`eli5`, `mnemonic`, `realworld`, `whatif`, `wow`, `beforeafter`, `truefalse`)
+is for tired brains and curious ones. Several of them (`wow`, `whatif`, `realworld`, `eli5`,
+with `story`, `pov`, `onething`, `mythbust`, `levels`) are also the **breather formats**: the
+light, fun videos the feed drops in when a student is about to leave (`feed/breathers.js`,
+ALGORITHM.md "Breathers"). A breather unit's episodes are written only in these formats, with a
+note to the writer that the student is tired: no exam framing, an easy quiz, still accurate.
 
 The second wave is built on what keeps people watching short video: curiosity gaps, "wait for
 number one", a challenge answered before the reveal, rankings to argue with, first-person

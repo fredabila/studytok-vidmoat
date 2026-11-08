@@ -7,7 +7,7 @@ Plain answers for students, parents and the curious. For the technical side see
 
 **What is StudyTok?**
 A feed of short, narrated study videos made for *your* syllabus. You swipe like on TikTok, but
-every video teaches one thing from your course, in one of 25 formats (explainers, myth-busts,
+every video teaches one thing from your course, in one of 32 formats (explainers, myth-busts,
 exam drills, flashcards, stories, chats, tier lists…), and most end with a quick check.
 
 **Where do the videos come from?**
@@ -45,7 +45,14 @@ the answer is never read out before you have tried.
 The shape of the video: an explainer with diagrams, a myth-vs-fact with stamps, a five-things
 countdown, an exam drill with worked steps, a spot-the-mistake, a POV ("you are a red blood
 cell"), a cheat sheet that fills in, a ten-second challenge… Each has its own look, pace, music
-and narrator. The badge under each video names it. All 25 are in [FORMATS.md](FORMATS.md).
+and narrator. The badge under each video names it. All 32 are in [FORMATS.md](FORMATS.md).
+
+**I got a random fun video that was not on my course. Why?**
+That was a *breather*. If you leave a couple of lessons early, get a few quiz answers wrong in a
+row, or have been scrolling a long while, the feed drops in one short, fun video from next door
+to your subject (animal superpowers for biology, famous software bugs for computer science),
+then goes back to your units. It never counts towards your progress. Tap **Why** on it to see the
+reason, and tap **Less** if you would rather never see them.
 
 **Can I pick my own topics?**
 Yes. Tune (sliders icon on a video) → *Your own topics*: type anything ("Chess openings",

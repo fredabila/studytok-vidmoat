@@ -75,6 +75,30 @@ loses people (today: exposed on `/api/stats` for tuning).
 `pickFormats()`, so Claude writes more of the formats students on that topic actually watch
 through, and fewer of the ones they skip.
 
+## Breathers
+
+Short-video feeds keep people by changing the pace before they leave. StudyTok does the same,
+without drifting away from the course. `feed/breathers.js`:
+
+* **Trigger** (`needsBreather(session, signals)`): the student left the last two videos early
+  (`earlyStreak >= 2`), or got three quiz answers wrong in a row (`wrongStreak >= 3`), or has
+  watched ten videos this session without anything light. Never within six videos of the last
+  breather; never for a student who has said "less" to two breathers or swipes them away
+  (mean watch fraction under 35% after three).
+* **Pick** (`pickBreather`): a *breather unit* from the topic the student is in right now (70%)
+  or one of their course and interest topics: `fun:<topic>:<n>`, three hand-written titles per
+  topic ("Animals with real superpowers", "Famous bugs that broke the world", "The strangest
+  things ever used as money"). Open units, so the writer picks a fresh subtopic each time, and
+  shared like any other unit's videos.
+* **Write**: breather episodes use only the light formats (`BREATHER_FORMATS`) and the writer is
+  told the student is tired: fun, surprising, true, no exam framing, an easy quiz.
+* **Serve**: a ready breather goes first on the page; otherwise one is generated and the page is
+  filled as usual. `noteBreather()` records the slot and resets the early/wrong streaks so one
+  signal produces one breather. The *Why* sheet says why it appeared.
+* **Not the syllabus**: breather views never touch unit progress, mastery or level-ups
+  (`isBreatherUnit`), but they do feed the student's format and topic tastes and a
+  `signals.breathers` counter (watch fraction, "less") that can switch them off.
+
 ## What the algorithm does not do (yet)
 
 * No collaborative filtering across students (the library is small and per unit); format and
