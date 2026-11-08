@@ -4,29 +4,31 @@
 import { randomUUID } from 'node:crypto';
 import { config } from './config.js';
 import { TOPICS, TOPIC_BY_ID } from './topics.js';
-import { users, videos } from './store.js';
 import { startVideo } from './generator.js';
+import * as db from './db.js';
 
 const EXPLORE = 0.15;          // share of picks drawn from topics the viewer did not choose
 const MIN_W = 0.05, MAX_W = 6;
 
-export function createUser(interestIds = []) {
-  const id = randomUUID();
-  return users.set(id, { id, createdAt: new Date().toISOString(), interests: weightsFor(interestIds), seen: [], served: [], liked: [] });
-}
-
-function weightsFor(ids) {
+export function weightsFor(ids) {
   const chosen = ids.filter((t) => TOPIC_BY_ID[t]);
   return Object.fromEntries(TOPICS.map((t) => [t.id, chosen.length === 0 || chosen.includes(t.id) ? 1 : 0]));
 }
 
-export function setInterests(userId, ids) {
-  return users.update(userId, (u) => {
-    const next = weightsFor(ids);
-    // Keep what was learned for topics that stay selected.
-    for (const t of Object.keys(next)) if (next[t] && u.interests[t] > 0) next[t] = u.interests[t];
-    return { ...u, interests: next };
-  });
+export async function createUser(interestIds = []) {
+  const user = { id: randomUUID(), createdAt: new Date().toISOString(), interests: weightsFor(interestIds) };
+  await db.saveUser(user);
+  return user;
+}
+
+export async function setInterests(userId, ids) {
+  const u = await db.getUser(userId);
+  const next = weightsFor(ids);
+  // Keep what was learned for topics that stay selected.
+  for (const t of Object.keys(next)) if (next[t] && u.interests[t] > 0) next[t] = u.interests[t];
+  const user = { ...u, interests: next };
+  await db.saveUser(user);
+  return user;
 }
 
 /** Weighted random topic, with a little exploration outside the chosen set. */
@@ -40,70 +42,93 @@ export function pickTopic(user, rand = Math.random) {
   return chosen[chosen.length - 1].id;
 }
 
-/**
- * Returns `count` feed items for the viewer. Ready, unseen library videos are reused first
- * (instant and free); otherwise a new video is started and returned with status "generating".
- */
-export function nextItems(userId, count = 3) {
-  const user = users.get(userId);
-  const items = [];
-  const blocked = new Set([...user.seen, ...user.served]);
-  for (let i = 0; i < count; i++) {
-    const topicId = pickTopic(user);
-    let video = null;
-    if (config.generation.reuseLibrary) {
-      const pool = videos.all().filter((v) => v.topic === topicId && v.status === 'ready' && !blocked.has(v.id));
-      // Better-performing videos first, newest as tie-breaker.
-      pool.sort((a, b) => score(b) - score(a) || b.createdAt.localeCompare(a.createdAt));
-      video = pool[0] || null;
-    }
-    if (!video) video = startVideo(topicId, { requestedBy: userId });
-    blocked.add(video.id);
-    items.push(video);
-  }
-  users.update(userId, (u) => ({ ...u, served: [...u.served, ...items.map((v) => v.id)].slice(-500) }));
-  return items;
+const score = (s) => (s.completes * 2 + s.likes * 3 - s.skips) / Math.max(1, s.views);
+
+/** Best ready video for this topic that the viewer has not seen or been served. */
+async function reusable(userId, topicId, taken) {
+  const ids = (await db.readyIds(topicId, 60)).filter((id) => !taken.has(id));
+  if (!ids.length) return null;
+  const blocked = await db.inAnySet(userId, ['seen', 'served'], ids);
+  const candidates = ids.filter((_, i) => !blocked[i]).slice(0, 12);
+  if (!candidates.length) return null;
+  const stats = await Promise.all(candidates.map((id) => db.getStats(id)));
+  let best = 0;
+  for (let i = 1; i < candidates.length; i++) if (score(stats[i]) > score(stats[best])) best = i;
+  return db.getVideo(candidates[best]);
 }
 
-const score = (v) => (v.stats.completes * 2 + v.stats.likes * 3 - v.stats.skips) / Math.max(1, v.stats.views);
+/**
+ * Returns `count` feed items for the viewer, plus the promises of any generation it started
+ * (pass those to waitUntil on serverless). Ready, unseen library videos are reused first
+ * (instant and free); otherwise a new video is started with status "generating".
+ */
+export async function nextItems(userId, count = 3) {
+  const user = await db.getUser(userId);
+  const items = [];
+  const pending = [];
+  const taken = new Set();
+  for (let i = 0; i < count; i++) {
+    const topicId = pickTopic(user);
+    let video = config.generation.reuseLibrary ? await reusable(userId, topicId, taken) : null;
+    if (!video || video.status !== 'ready') {
+      const started = await startVideo(topicId, { requestedBy: userId });
+      video = started.video;
+      pending.push(started.done);
+    }
+    taken.add(video.id);
+    items.push(video);
+  }
+  await db.addToSet(userId, 'served', ...items.map((v) => v.id));
+  return { items, pending };
+}
 
 /** Engagement -> interest weights. Kept deliberately simple and transparent. */
 const DELTAS = { complete: 0.25, like: 0.8, unlike: -0.8, skip: -0.15, less: -1.5, quiz_correct: 0.1 };
+const STAT_FOR = { view: 'views', complete: 'completes', like: 'likes', skip: 'skips' };
 
-export function recordEvent(userId, { videoId, type, watchedSec = 0 }) {
-  const video = videos.get(videoId);
-  if (!video) return null;
-  const t = video.topic;
+export async function recordEvent(userId, { videoId, type, watchedSec = 0 }) {
+  const video = await db.getVideo(videoId);
+  if (!video) return false;
 
-  videos.update(videoId, (v) => {
-    const s = { ...v.stats };
-    if (type === 'view') s.views++;
-    if (type === 'complete') s.completes++;
-    if (type === 'like') s.likes++;
-    if (type === 'unlike') s.likes = Math.max(0, s.likes - 1);
-    if (type === 'skip') s.skips++;
-    if (watchedSec > 0 && type === 'leave') s.watchSec += Math.min(watchedSec, 600);
-    return { ...v, stats: s };
-  });
+  if (type === 'view') {
+    // Count a view once per viewer.
+    if (await db.inSet(userId, 'seen', videoId)) return true;
+    await db.addToSet(userId, 'seen', videoId);
+  }
+  if (type === 'like') {
+    if (await db.inSet(userId, 'liked', videoId)) return true;
+    await db.addToSet(userId, 'liked', videoId);
+  }
+  if (type === 'unlike') {
+    if (!(await db.inSet(userId, 'liked', videoId))) return true;
+    await db.removeFromSet(userId, 'liked', videoId);
+    await db.incrStat(videoId, 'likes', -1);
+  }
+  if (STAT_FOR[type]) await db.incrStat(videoId, STAT_FOR[type], 1);
+  if (type === 'leave' && watchedSec > 0) await db.incrStat(videoId, 'watchSec', Math.min(Math.round(watchedSec), 600));
 
   const delta = DELTAS[type] || 0;
-  return users.update(userId, (u) => {
+  if (delta) {
+    const u = await db.getUser(userId);
     const interests = { ...u.interests };
-    if (delta) {
-      // An explored topic the viewer engages with joins their interests.
-      const base = interests[t] > 0 ? interests[t] : delta > 0 ? 0.3 : 0;
-      interests[t] = base > 0 ? Math.min(MAX_W, Math.max(MIN_W, base + delta)) : 0;
-    }
-    const seen = type === 'view' && !u.seen.includes(videoId) ? [...u.seen, videoId].slice(-2000) : u.seen;
-    const liked = type === 'like' ? [...new Set([...u.liked, videoId])] : type === 'unlike' ? u.liked.filter((x) => x !== videoId) : u.liked;
-    return { ...u, interests, seen, liked };
-  });
+    const t = video.topic;
+    // An explored topic the viewer engages with joins their interests.
+    const base = interests[t] > 0 ? interests[t] : delta > 0 ? 0.3 : 0;
+    interests[t] = base > 0 ? Math.min(MAX_W, Math.max(MIN_W, base + delta)) : 0;
+    await db.saveUser({ ...u, interests });
+  }
+  return true;
 }
 
 /** What the browser gets. The Vidmoat document is included only once the video is ready. */
-export function publicVideo(v, userId) {
+export async function publicVideo(v, userId, { withDocument = true } = {}) {
   const look = TOPIC_BY_ID[v.topic];
-  const u = userId ? users.get(userId) : null;
+  const ready = v.status === 'ready';
+  const [stats, liked, document] = await Promise.all([
+    db.getStats(v.id),
+    userId ? db.inSet(userId, 'liked', v.id) : false,
+    ready && withDocument ? db.getDocument(v.id) : undefined,
+  ]);
   return {
     id: v.id,
     status: v.status,
@@ -115,8 +140,8 @@ export function publicVideo(v, userId) {
     duration: v.duration || null,
     poster: v.poster || null,
     credits: v.credits || [],
-    liked: u ? u.liked.includes(v.id) : false,
-    likes: v.stats?.likes || 0,
-    document: v.status === 'ready' ? v.document : undefined,
+    liked,
+    likes: stats.likes,
+    document: document || undefined,
   };
 }

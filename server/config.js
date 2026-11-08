@@ -7,7 +7,9 @@ const num = (v, d) => (Number.isFinite(Number(v)) && v !== '' && v != null ? Num
 export const config = {
   port: num(process.env.PORT, 3000),
   host: process.env.HOST || '127.0.0.1',
-  dataDir: process.env.STUDYTOK_DATA_DIR || new URL('../data/', import.meta.url).pathname,
+  // Local file storage (used only when Upstash Redis is not configured). Vercel's filesystem is
+  // read-only apart from /tmp, and /tmp is not shared or kept: connect Upstash in production.
+  dataDir: process.env.STUDYTOK_DATA_DIR || (process.env.VERCEL ? '/tmp/studytok/' : new URL('../data/', import.meta.url).pathname),
 
   vidmoat: {
     apiKey: process.env.VIDMOAT_API_KEY || '',

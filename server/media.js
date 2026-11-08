@@ -3,9 +3,9 @@
 // and caches every import by source URL so the same stock file is never imported twice.
 
 import { searchStock, importMedia } from './vidmoat.js';
-import { mediaCache } from './store.js';
+import { getMedia, setMedia } from './db.js';
 
-const searchCache = new Map(); // `${type}:${query}` -> results (in-memory, per process)
+const searchCache = new Map(); // `${type}:${query}` -> results (in-memory, per instance)
 
 async function search(query, type) {
   const key = `${type}:${query.toLowerCase()}`;
@@ -14,7 +14,7 @@ async function search(query, type) {
 }
 
 async function importOnce(result) {
-  const hit = mediaCache.get(result.downloadUrl);
+  const hit = await getMedia(result.downloadUrl);
   if (hit) return hit;
   const media = await importMedia(result.downloadUrl);
   const entry = {
@@ -29,7 +29,7 @@ async function importOnce(result) {
     provider: result.provider ?? 'freesound',
     importedAt: new Date().toISOString(),
   };
-  mediaCache.set(result.downloadUrl, entry);
+  await setMedia(result.downloadUrl, entry);
   return entry;
 }
 

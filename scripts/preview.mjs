@@ -11,14 +11,14 @@ import { topic as topicOf } from '../server/topics.js';
 import { composeLesson } from '../server/compose.js';
 import { resolveBroll, resolveMusic } from '../server/media.js';
 import { createProject, previewFrame } from '../server/vidmoat.js';
-import { flushAll } from '../server/store.js';
+import { flushKv } from '../server/kv.js';
 
 const [topicId = 'biology', idx = '0', ...rest] = process.argv.slice(2);
 const look = topicOf(topicId);
 const lesson = sanitizeLesson(BANK[look.id][Number(idx)], look.id);
 const queries = [lesson.beats[0].visual, ...lesson.beats.map((b) => b.visual)];
 const [broll, music] = await Promise.all([resolveBroll(queries, look.fallbackVisual), resolveMusic()]);
-flushAll();
+flushKv();
 const { commands, segments, duration } = composeLesson({ ...lesson, topicLabel: look.label }, { broll, music });
 const res = await createProject(`StudyTok preview · ${lesson.title}`, commands);
 const failed = res.results.filter((r) => !r.ok);

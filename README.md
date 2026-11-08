@@ -35,7 +35,7 @@ What each video costs on Vidmoat:
 No AI generation credits are spent. Stock imports count towards your Vidmoat storage, and each
 import is cached so the same stock file is never imported twice.
 
-## Run it
+## Run it locally
 
 Requires Node.js 22.10+.
 
@@ -44,12 +44,14 @@ npm install
 ```
 
 ```bash
-cp .env.example .env   # then set VIDMOAT_API_KEY
+cp .env.example .env   # then set VIDMOAT_API_KEY (and optionally ANTHROPIC_API_KEY)
 ```
 
 ```bash
 npm start              # http://127.0.0.1:3000
 ```
+
+Locally, data lives in `data/kv.json`. Set the Upstash variables in `.env` to use Redis instead.
 
 Optional, so the first viewers don't wait for generation:
 
@@ -63,6 +65,47 @@ real project and saves exact frames to `data/frames/` (10 frames a minute per ke
 ```bash
 npm test
 ```
+
+## Deploy to Vercel
+
+The repo is ready for Vercel as is: `public/` is served as static files, and `api/index.js` is
+one Vercel Function that handles every `/api/*` route (see `vercel.json`). Video generation
+continues after the response with `waitUntil()` (from `@vercel/functions`), and all state lives
+in Upstash Redis.
+
+1. **Import the repo** at vercel.com/new. Framework preset: **Other**. Leave the build and
+   output settings alone; `vercel.json` sets them.
+2. **Add storage:** Project → **Storage** → **Upstash for Redis** (Marketplace) → create a
+   database and connect it to the project. This adds `KV_REST_API_URL` and `KV_REST_API_TOKEN`
+   for you.
+3. **Add keys:** Project → **Settings → Environment Variables**:
+   * `VIDMOAT_API_KEY`: required.
+   * `ANTHROPIC_API_KEY`: optional, so Claude writes every lesson.
+   * Optional tuning from `.env.example`, e.g. `VIDMOAT_DELETE_PROJECTS=true`.
+4. **Deploy** (or redeploy after adding variables), then open `https://<your-app>/api/health`.
+   It should show `"ok": true` and `"storage": "redis"`.
+5. **Warm the library** from your machine so the first visitors get instant videos:
+
+   ```bash
+   npx vercel link
+   ```
+
+   ```bash
+   npx vercel env pull .env
+   ```
+
+   ```bash
+   npm run warm -- 2
+   ```
+
+Notes:
+
+* The function's `maxDuration` is 300 s. A video takes 10 to 30 s to build, and a feed request
+  starts at most 5.
+* Each function instance generates at most `STUDYTOK_GEN_CONCURRENCY` (default 2) videos at
+  once. Vidmoat's per-key rate limit (600 requests a minute on Studio) is the real ceiling.
+* A video whose function was cut off shows as failed after 6 minutes, and the feed moves on.
+* Vercel serves over HTTPS, which the Vidmoat player requires (`parentOrigin` must be https).
 
 ### Keys
 
@@ -85,6 +128,8 @@ npm test
 | `server/generator.js` | The pipeline above, behind a concurrency-limited queue. Checks each document is playable (absolute media URLs, under the player's 8 MB limit). |
 | `server/feed.js` | Topic choice by interest weights with 15% exploration; library reuse; engagement → weights (complete +0.25, like +0.8, skip −0.15, "less" −1.5). |
 | `server/lessons/` | Claude generator (structured outputs), offline bank, schema and sanitizer. |
+| `server/kv.js`, `server/db.js` | Storage: Upstash Redis when configured, else a local file with the same commands. Counters use HINCRBY and memberships use sets, so concurrent serverless instances do not clobber each other. |
+| `server/app.js`, `api/index.js` | The JSON API, shared by the local server and the Vercel Function. |
 | `server/vidmoat.js` | REST client. Retries only 429/503 (and 502 on reads); never resends a POST, since the API has no idempotency key. |
 | `public/player.js` | The `/embed/player` postMessage protocol: hello/ready handshake, document revisions, play/pause/seek, origin- and source-checked messages. |
 | `public/app.js` | The feed: snap scrolling, live players only for the active slide ±1, polling generating videos, looping, events, keyboard (↑/↓/space). |
@@ -100,8 +145,6 @@ npm test
 
 * **Embedding origin.** The player requires `parentOrigin` to be https (http only on
   localhost), so deploy StudyTok behind HTTPS.
-* **Storage.** `data/*.json` is a single-process JSON store. Move to a real database before
-  running several instances.
 * **Vidmoat projects.** Each generated video is a real project on your Vidmoat account, so you
   can open it in the editor or render it later. Set `VIDMOAT_DELETE_PROJECTS=true` to delete
   them once the document is cached, or `VIDMOAT_WORKSPACE_ID` to file them in a workspace.

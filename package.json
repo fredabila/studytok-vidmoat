@@ -16,6 +16,8 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^1.6.0",
+    "@upstash/redis": "^1.41.0",
+    "@vercel/functions": "^3.11.0",
     "zod": "^4.6.7"
   }
 }
