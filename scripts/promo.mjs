@@ -72,7 +72,8 @@ const [scrolling, campus, students, music, sfx] = await Promise.all([
 ]);
 const shots = {};
 for (const [k, name, w, h] of [['feed', 'app-feed.png', 780, 1328], ['quiz', 'app-quiz.png', 780, 1328], ['profile', 'app-profile.png', 780, 1328]]) shots[k] = await image(name, w, h);
-const FRAMES = ['fmt-wow.jpg', 'fmt-mnemonic.jpg', 'fmt-beforeafter.jpg', 'fmt-eli5.jpg', 'fmt-realworld.jpg', 'fmt-whatif.jpg', 'fmt-truefalse.jpg'];
+// Five frames over ~3.5 s of narration: 0.7 s cuts read as a montage; 0.5 s reads as flicker.
+const FRAMES = ['fmt-wow.jpg', 'fmt-mnemonic.jpg', 'fmt-beforeafter.jpg', 'fmt-realworld.jpg', 'fmt-truefalse.jpg'];
 const frames = [];
 for (const f of FRAMES) frames.push(await image(f, 1080, 1920));
 flushKv();
@@ -150,9 +151,10 @@ for (const [id, track] of [['pinImg', T.image], ['pinScrim', T.scrim], ['pinCard
 // formats: a fast montage of real frames.
 {
   const [s, d] = span('formats');
-  const each = d / frames.length;
-  frames.forEach((f, i) => { picture(f, s + i * each, each + 0.05, { scale: coverScale(1080, 1920), zoom: 1.04 }); whoosh(s + i * each - 0.08, 0.3); });
-  dim(s, d, 0.25);
+  // Back to back with no overlap (an overlap bumps the next frame onto another layer, and a dim
+  // layer in between would then light every other frame differently), and no dim: the frames are dark already.
+  const each = r2(d / frames.length);
+  frames.forEach((f, i) => { picture(f, s + i * each, i === frames.length - 1 ? d - i * each : each, { scale: coverScale(1080, 1920), zoom: 1.03 }); whoosh(s + i * each - 0.08, 0.3); });
   cmds.push({ op: 'addShapeClip', clipId: uid('cap'), kind: 'capsule', start: r2(s + 0.2), duration: r2(d - 0.2), trackIndex: T.chrome, style: { fill: HL, width: 820, height: 140 }, patch: { y: -835 } });
   label('32 FORMATS', s + 0.2, d - 0.2, { fontFamily: 'Bungee', fontWeight: 400, fontSize: 92, color: INK, shadow: false, animIn: 'bounce', animInDuration: 0.5 }, -835, T.chrome + 1);
   // no captions here: the frames carry their own and the capsule says it
