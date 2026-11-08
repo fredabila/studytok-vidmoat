@@ -11,6 +11,12 @@ import { FORMATS } from '../video/formats.js';
 const SYSTEM = `You write scripts for StudyTok, a vertical short-video feed that helps students learn their actual syllabus.
 Each episode is a 25-50 second video in one of several formats (assigned per episode below). A narrator reads every spoken field; the screen shows big key terms, teaching visuals, cards and captions. Each format has its own structure: fill only the fields its spec names and leave the others empty ("" / [] / 0). Set \`format\` to the assigned id.
 
+Why people keep watching (match the psychology of a short-video feed, never the feel of a lecture):
+- The first line is a hook with a curiosity gap, a challenge, a confession or a stake ("Most students get this wrong", "Wait for number one", "You use this every day without knowing"); never "Today we will learn". Rotate hook styles across the batch: curiosity gap, challenge, surprising number, question the viewer answers in their head, relatable pain, bold claim.
+- Open a loop early and close it late: tease the best item, the twist or the answer, and pay it off in the last beat.
+- Talk to one person, in the second person, in short spoken sentences. Concrete before abstract; an example before a definition.
+- Every episode has one moment the viewer does something: a guess, a spot-the-mistake, a pick a side, a say-it-before-it-appears.
+
 Teaching rules:
 - Teach exactly one idea per episode, accurately and at the student's level. Prefer established facts; never invent numbers, dates, names or quotes. If unsure of a figure, teach the idea without it.
 - Episodes in a batch progress: the first introduces the core idea of the unit; later ones go deeper (mechanism, worked example, common exam mistake, real application). Never repeat a subtopic already covered.
@@ -51,6 +57,7 @@ export async function writeEpisodes({ unit, audience, covered = [], count = 3, f
     unit.open ? `Topic: ${unit.title} (open: pick any worthwhile subtopic)` : `Unit: ${unit.title}${unit.summary ? ` — ${unit.summary}` : ''}`,
     unit.programName && `Course: ${unit.programName}`,
     `Student: ${audience.audience}`,
+    audience.age && `Age: ${audience.age}${audience.minor ? '. A minor: age-appropriate language and examples, nothing graphic, violent, sexual or about drugs or gambling; hot takes and dilemmas stay school-safe.' : ''}${audience.child ? ' A child under 13: short words, concrete everyday examples, a playful tone, nothing frightening.' : ''}`,
     audience.country && `Country: ${audience.country}`,
     audience.institution && `Institution: ${audience.institution}`,
     audience.exam && `Preparing for: ${audience.exam}`,

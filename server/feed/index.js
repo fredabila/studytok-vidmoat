@@ -21,13 +21,29 @@ const clean = (s, n = 120) => String(s ?? '').replace(/\s+/g, ' ').trim().slice(
 
 // ---------------------------------------------------------------- profiles
 export function cleanProfile(p = {}) {
+  const age = Number.isInteger(Number(p.age)) && Number(p.age) >= 5 && Number(p.age) <= 120 ? Number(p.age) : null;
   return {
     level: LEVEL_BY_ID[p.level] ? p.level : 'lifelong',
     country: clean(p.country, 60),
     institution: clean(p.institution, 120),
     program: clean(p.program, 120),
     exam: clean(p.exam, 60),
+    // Age and who manages the profile. Vidmoat accounts are for adults, so anyone under 18 is set
+    // up by a parent or guardian on the adult's account ('guardian'), with their consent recorded.
+    age,
+    managedBy: p.managedBy === 'guardian' ? 'guardian' : 'self',
   };
+}
+
+/** Throws (status 400) when a profile breaks the age rules. */
+export function checkAgeRules(profile, { guardianConsent = false, existing = null } = {}) {
+  if (profile.age == null) return;
+  if (profile.age < 18 && profile.managedBy !== 'guardian') {
+    throw Object.assign(new Error('Vidmoat accounts are for adults (18+). A parent or guardian signs in and sets StudyTok up for anyone under 18.'), { status: 400, code: 'minor' });
+  }
+  if (profile.managedBy === 'guardian' && !guardianConsent && !existing?.guardianConsentAt) {
+    throw Object.assign(new Error('Please confirm you are the parent or guardian.'), { status: 400, code: 'consent' });
+  }
 }
 
 export const DEFAULT_PREFS = { voice: 'on', length: 'standard', visuals: 'mixed', difficulty: 'standard' };
@@ -41,10 +57,13 @@ export function cleanPrefs(p = {}, base = DEFAULT_PREFS) {
 /** body: { profile, programKeys?, units?: string[], interests?: string[], prefs? } */
 export async function saveProfile(userId, body) {
   const existing = userId ? await db.getUser(userId) : null;
+  const profile = cleanProfile(body.profile || existing?.profile);
+  checkAgeRules(profile, { guardianConsent: body.guardianConsent === true, existing });
   const user = {
     id: existing?.id || randomUUID(),
     createdAt: existing?.createdAt || new Date().toISOString(),
-    profile: cleanProfile(body.profile || existing?.profile),
+    profile,
+    guardianConsentAt: profile.managedBy === 'guardian' ? existing?.guardianConsentAt || new Date().toISOString() : null,
     // One or more courses (e.g. several high-school subjects).
     programKeys: Array.isArray(body.programKeys) ? body.programKeys.map((k) => String(k).slice(0, 40)).slice(0, 8)
       : typeof body.programKey === 'string' ? [body.programKey.slice(0, 40)] : existing?.programKeys || [],
@@ -70,7 +89,9 @@ export function audienceFor(user) {
   const prefs = cleanPrefs(user.prefs || {});
   // Only non-default lesson preferences change the lesson key, so defaults stay shared.
   const lessonStyle = ['length', 'visuals', 'difficulty'].filter((k) => prefs[k] !== DEFAULT_PREFS[k]).map((k) => `|${k[0]}:${prefs[k]}`).join('');
-  return { level: lvl.id, levelLabel: lvl.label, audience: lvl.audience, country: p.country, institution: p.institution, exam: p.exam, prefs, lessonStyle };
+  // Young children get their own lessons (simpler language, gentler formats): part of the lesson key.
+  const child = p.age != null && p.age < 13;
+  return { level: lvl.id, levelLabel: lvl.label, audience: lvl.audience, country: p.country, institution: p.institution, exam: p.exam, prefs, lessonStyle: lessonStyle + (child ? '|age:child' : ''), age: p.age ?? null, minor: p.age != null && p.age < 18, child };
 }
 
 /**
@@ -319,7 +340,8 @@ export async function publicVideo(v, userId, { withDocument = true, why, pos, qu
     duration: v.duration || null,
     poster: v.poster || null,
     narrated: Boolean(v.narrated),
-    quiz: ready ? v.quiz || null : null,
+    // Videos made before the hold existed: their think pause started 3 s before the reveal.
+    quiz: ready && v.quiz ? { ...v.quiz, hold: v.quiz.hold ?? (v.quiz.reveal != null ? Math.max(v.quiz.from ?? 0, +(v.quiz.reveal - 3).toFixed(2)) : null) } : null,
     scenes: ready ? v.scenes || [] : [],
     credits: v.credits || [],
     liked, saved,

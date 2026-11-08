@@ -21,7 +21,7 @@ accepted and how it is aggregated) and anyone analysing the data.
 
 | Event | Fields | When |
 | --- | --- | --- |
-| `session_start` | `source` app/browser, `entry` feed/link/library/profile | page load |
+| `session_start` | `source` app/browser, `entry` feed/link/library/profile, `ageBand` under13/13-17/18+ | page load |
 | `app_hidden` / `app_visible` | | tab or app goes to / returns from the background |
 | `install` | `outcome` accepted/dismissed | after the install prompt |
 | `signin_click` | `where` | a sign-in button |

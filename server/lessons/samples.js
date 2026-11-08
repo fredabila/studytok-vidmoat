@@ -101,4 +101,118 @@ export const SAMPLES = {
     quiz: { question: 'What stays the same when you travel to the Moon?', options: ['Your weight', 'Your mass', 'Both change'], answerIndex: 1, explanation: 'Mass does not depend on gravity.' },
     takeaway: 'Mass is constant; weight depends on gravity.', beats: [], myth: '', fact: '', items: [], cards: [], exam: { question: '', options: [], answerIndex: 0, steps: [], mistake: '', tip: '' },
   },
+
+  // ---- second-wave formats ----
+  levels: {
+    format: 'levels', subtopic: 'Momentum at 3 levels', title: 'Momentum for a kid, a student, a professor', hook: 'Momentum, explained three ways', hookTerm: 'three ways',
+    ambient: 'bowling ball rolling',
+    beats: [
+      { text: 'A big truck is harder to stop than a bike going the same speed, and that hardness to stop is momentum.', keyTerm: 'Hard to stop', visual: { kind: 'footage', query: 'truck driving highway', title: '', items: [], value: 0, unit: '', svg: '' } },
+      { text: 'Momentum is mass times velocity, and in a collision the total momentum before equals the total after.', keyTerm: 'p = m × v', visual: { kind: 'equation', title: 'Conserved in collisions', items: ['p = m × v', 'Σp before = Σp after'], query: '', value: 0, unit: '', svg: '' } },
+      { text: 'Conservation follows from Newton’s third law: the two forces are equal and opposite, so the impulses cancel.', keyTerm: 'Impulse', visual: { kind: 'steps', title: 'Why it is conserved', items: ['Equal, opposite forces', 'Same contact time', 'Equal, opposite impulses', 'Total momentum unchanged'], query: '', value: 0, unit: '', svg: '' } },
+    ],
+    quiz: { question: 'A 2 kg ball at 3 m/s has what momentum?', options: ['1.5 kg·m/s', '6 kg·m/s', '9 kg·m/s'], answerIndex: 1, explanation: 'p = m × v = 2 × 3 = 6 kg·m/s.' },
+    takeaway: 'Mass times velocity, and the total never changes.', myth: '', fact: '', items: [], cards: [], exam: { question: '', options: [], answerIndex: 0, steps: [], mistake: '', tip: '' }, chat: { contact: '', messages: [] },
+  },
+  spotmistake: {
+    format: 'spotmistake', subtopic: 'Kinetic energy slip', title: 'Spot the mistake: kinetic energy', hook: 'One step is wrong. Can you find it?', hookTerm: 'wrong',
+    ambient: 'student checking homework',
+    exam: {
+      question: 'A 4 kg cart moves at 3 m/s. Find its kinetic energy.', options: [], answerIndex: 1,
+      steps: ['Write the formula: KE = ½ m v².', 'Substitute: KE = ½ × 4 × 3 = 6 J.', 'So the kinetic energy is 6 joules.'],
+      mistake: 'The velocity was not squared: 3² is 9, not 3.', tip: 'KE = ½ × 4 × 3² = ½ × 4 × 9 = 18 J.',
+    },
+    takeaway: 'Square the speed before you multiply.', beats: [], myth: '', fact: '', items: [], cards: [], chat: { contact: '', messages: [] }, quiz: { question: '', options: [], answerIndex: 0, explanation: '' },
+  },
+  tierlist: {
+    format: 'tierlist', subtopic: 'Forces ranked', title: 'Ranking the forces by exam weight', hook: 'Ranking every force by how often it is examined', hookTerm: 'Ranking',
+    ambient: 'physics classroom chalkboard',
+    items: [
+      { title: 'Tension', tier: 'C', text: 'Tension shows up in pulley questions and almost nowhere else.', visual: 'rope pulley' },
+      { title: 'Air resistance', tier: 'B', text: 'Air resistance is the twist examiners add to falling-object questions.', visual: 'skydiver' },
+      { title: 'Normal force', tier: 'A', text: 'The normal force hides inside every inclined plane problem.', visual: 'ramp slope' },
+      { title: 'Friction', tier: 'A', text: 'Friction appears in half of all net-force calculations.', visual: 'tyre skid' },
+      { title: 'Gravity', tier: 'S', text: 'Gravity is in every single mechanics question, full stop.', visual: 'apple falling' },
+    ],
+    quiz: { question: 'Which force is in every mechanics question?', options: ['Tension', 'Gravity', 'Air resistance'], answerIndex: 1, explanation: 'Weight is always acting, so gravity is always there.' },
+    takeaway: 'Learn gravity and friction first.', beats: [], myth: '', fact: '', cards: [], exam: { question: '', options: [], answerIndex: 0, steps: [], mistake: '', tip: '' }, chat: { contact: '', messages: [] },
+  },
+  thisorthat: {
+    format: 'thisorthat', subtopic: 'Mixed-up pairs', title: 'Mass or weight? Speed or velocity?', hook: 'Four pairs students mix up every year', hookTerm: 'mix up',
+    ambient: 'two doors choice',
+    items: [
+      { title: 'Mass|Weight', tier: '', text: 'Mass is how much stuff, weight is the pull of gravity on it.', visual: 'scales weighing' },
+      { title: 'Speed|Velocity', tier: '', text: 'Velocity has a direction, speed does not.', visual: 'car speedometer' },
+      { title: 'Distance|Displacement', tier: '', text: 'Displacement is the straight line from start to finish, distance is the path.', visual: 'hiking trail map' },
+      { title: 'Elastic|Inelastic', tier: '', text: 'Elastic collisions keep kinetic energy, inelastic ones lose some.', visual: 'billiard balls' },
+    ],
+    quiz: { question: 'Which quantity has a direction?', options: ['Speed', 'Velocity', 'Mass'], answerIndex: 1, explanation: 'Velocity is a vector; speed is its size.' },
+    takeaway: 'Vectors have direction; scalars do not.', beats: [], myth: '', fact: '', cards: [], exam: { question: '', options: [], answerIndex: 0, steps: [], mistake: '', tip: '' }, chat: { contact: '', messages: [] },
+  },
+  pov: {
+    format: 'pov', subtopic: 'POV: a photon', title: 'POV: you are a photon leaving the Sun', hook: 'POV: you are a photon leaving the Sun', hookTerm: 'photon',
+    ambient: 'sun surface flare',
+    beats: [
+      { text: 'You are born in the core and spend thousands of years bouncing your way to the surface.', keyTerm: 'The core', visual: { kind: 'footage', query: 'sun surface plasma', title: '', items: [], value: 0, unit: '', svg: '' } },
+      { text: 'You finally escape and cross 150 million kilometres of space in eight minutes.', keyTerm: '8 minutes', visual: { kind: 'stat', title: 'Minutes from Sun to Earth', items: [], value: 8, unit: '', query: '', svg: '' } },
+      { text: 'You hit a leaf, a chlorophyll molecule catches you, and your energy becomes sugar.', keyTerm: 'Photosynthesis', visual: { kind: 'footage', query: 'sunlight through leaves', title: '', items: [], value: 0, unit: '', svg: '' } },
+    ],
+    quiz: { question: 'How long does light take from the Sun to Earth?', options: ['8 seconds', '8 minutes', '8 hours'], answerIndex: 1, explanation: '150 million km at 300,000 km/s is about 500 s.' },
+    takeaway: 'Sunlight is eight minutes old when it reaches you.', myth: '', fact: '', items: [], cards: [], exam: { question: '', options: [], answerIndex: 0, steps: [], mistake: '', tip: '' }, chat: { contact: '', messages: [] },
+  },
+  hottake: {
+    format: 'hottake', subtopic: 'Friction defended', title: 'Hot take: friction is the most useful force', hook: 'Friction is not your enemy', hookTerm: 'enemy',
+    ambient: 'shoes walking pavement', myth: 'Friction is the most useful force in physics', fact: 'Without friction you could not walk, drive or hold a pen',
+    beats: [
+      { text: 'Every step you take pushes back on the ground, and friction is what pushes you forward.', keyTerm: 'Walking', visual: { kind: 'footage', query: 'walking shoes close up', title: '', items: [], value: 0, unit: '', svg: '' } },
+      { text: 'Car tyres grip the road only because of friction, which is why ice is dangerous.', keyTerm: 'Grip', visual: { kind: 'compare', title: 'Dry road|Ice', items: ['High friction|Almost none', 'Short stop|Long slide'], query: '', value: 0, unit: '', svg: '' } },
+    ],
+    quiz: { question: 'What force lets a tyre push a car forward?', options: ['Gravity', 'Friction', 'Tension'], answerIndex: 1, explanation: 'The road’s friction on the tyre is the forward force.' },
+    takeaway: 'Friction resists sliding, and that is exactly what makes motion possible.', items: [], cards: [], exam: { question: '', options: [], answerIndex: 0, steps: [], mistake: '', tip: '' }, chat: { contact: '', messages: [] },
+  },
+  countdown: {
+    format: 'countdown', subtopic: 'Exam top 3', title: 'The 3 forces questions on every exam', hook: 'The 3 questions that will be on your exam', hookTerm: 'exam',
+    ambient: 'exam paper pen',
+    items: [
+      { title: 'Resultant force', tier: '', text: 'Add the forces as vectors and you will be asked for the resultant every time.', visual: 'tug of war' },
+      { title: 'F = ma', tier: '', text: 'Newton’s second law appears in a calculation on every paper.', visual: 'rocket launch' },
+      { title: 'Free-body diagrams', tier: '', text: 'Draw the forces on one object and half the marks are already yours.', visual: 'student drawing diagram' },
+    ],
+    quiz: { question: 'What earns marks before any calculation?', options: ['A free-body diagram', 'A calculator', 'A ruler'], answerIndex: 0, explanation: 'Examiners award marks for a correct diagram.' },
+    takeaway: 'Diagram first, then F = ma.', beats: [], myth: '', fact: '', cards: [], exam: { question: '', options: [], answerIndex: 0, steps: [], mistake: '', tip: '' }, chat: { contact: '', messages: [] },
+  },
+  speedrun: {
+    format: 'speedrun', subtopic: 'Forces in 30 s', title: 'Forces and motion in 30 seconds', hook: 'Forces and motion in 30 seconds. Go.', hookTerm: '30 seconds',
+    ambient: 'stopwatch timer',
+    items: [
+      { title: 'Newton 1', tier: '', text: 'No net force, no change in motion.', visual: 'ice skater gliding' },
+      { title: 'Newton 2', tier: '', text: 'Force equals mass times acceleration.', visual: 'rocket launch' },
+      { title: 'Newton 3', tier: '', text: 'Every force has an equal, opposite partner.', visual: 'swimmer pushing wall' },
+      { title: 'Weight', tier: '', text: 'Weight is mass times g.', visual: 'scales' },
+      { title: 'Friction', tier: '', text: 'Friction opposes sliding between surfaces.', visual: 'brake disc' },
+      { title: 'Momentum', tier: '', text: 'Momentum is conserved in collisions.', visual: 'billiard balls' },
+    ],
+    quiz: { question: 'Which law pairs every force with an opposite one?', options: ['First', 'Second', 'Third'], answerIndex: 2, explanation: 'Newton’s third law: action and reaction.' },
+    takeaway: 'Three laws, weight, friction, momentum.', beats: [], myth: '', fact: '', cards: [], exam: { question: '', options: [], answerIndex: 0, steps: [], mistake: '', tip: '' }, chat: { contact: '', messages: [] },
+  },
+  guess: {
+    format: 'guess', subtopic: 'Feather vs hammer', title: 'Guess first: which lands first on the Moon?', hook: 'Most students get this wrong', hookTerm: 'wrong',
+    ambient: 'moon surface',
+    exam: { question: 'On the Moon, a hammer and a feather are dropped together. Which lands first?', options: ['The hammer', 'The feather', 'Both together'], answerIndex: 2, steps: [], mistake: '', tip: 'Without air, everything falls at the same rate.' },
+    beats: [
+      { text: 'Gravity accelerates every object equally; mass cancels out of the equation.', keyTerm: 'a = g', visual: { kind: 'equation', title: 'Mass cancels', items: ['F = m g', 'a = F ÷ m = g'], query: '', value: 0, unit: '', svg: '' } },
+      { text: 'On Earth the feather falls slower only because air pushes back on it far more than on the hammer.', keyTerm: 'Air resistance', visual: { kind: 'footage', query: 'feather falling slow motion', title: '', items: [], value: 0, unit: '', svg: '' } },
+    ],
+    takeaway: 'No air, no difference.', myth: '', fact: '', items: [], cards: [], chat: { contact: '', messages: [] }, quiz: { question: '', options: [], answerIndex: 0, explanation: '' },
+  },
+  wyr: {
+    format: 'wyr', subtopic: 'Seatbelt dilemma', title: 'Would you rather stop in 0.1 s or 1 s?', hook: 'Would you rather stop in a tenth of a second, or a full second?', hookTerm: 'full second',
+    ambient: 'car braking',
+    quiz: { question: 'Would you rather stop in 0.1 s or 1 s at the same speed?', options: ['0.1 seconds', '1 second', 'Depends on the case'], answerIndex: 1, explanation: 'Same momentum change over more time means less force on you.' },
+    beats: [
+      { text: 'Your change in momentum is fixed by your speed, so the only thing you control is the time it takes.', keyTerm: 'Impulse', visual: { kind: 'equation', title: 'More time, less force', items: ['F × t = Δp', 'F = Δp ÷ t'], query: '', value: 0, unit: '', svg: '' } },
+      { text: 'Crumple zones, airbags and helmets all work by stretching the stop over more time.', keyTerm: 'Crumple zones', visual: { kind: 'footage', query: 'car crash test', title: '', items: [], value: 0, unit: '', svg: '' } },
+    ],
+    takeaway: 'Stretch the stop, shrink the force.', myth: '', fact: '', items: [], cards: [], exam: { question: '', options: [], answerIndex: 0, steps: [], mistake: '', tip: '' }, chat: { contact: '', messages: [] },
+  },
 };
