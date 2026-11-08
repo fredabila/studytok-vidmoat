@@ -104,7 +104,7 @@ const WATCH_BUCKET = (pct) => `wf${Math.min(4, Math.floor(pct * 5))}`; // wf0: <
 const hourOf = (at, tz) => { try { return Number(new Intl.DateTimeFormat('en-GB', { hour: 'numeric', hour12: false, timeZone: tz || 'UTC' }).format(new Date(at))) % 24; } catch { return new Date(at).getUTCHours(); } };
 const day = (at) => new Date(at).toISOString().slice(0, 10);
 
-export const emptySignals = () => ({ formats: {}, topics: {}, watch: { n: 0, pctSum: 0, completes: 0, early: 0 }, quiz: { n: 0, right: 0, msSum: 0, skips: 0 }, hours: Array(24).fill(0), sessions: 0, lastSeenAt: 0, prefs: {} });
+export const emptySignals = () => ({ formats: {}, topics: {}, watch: { n: 0, pctSum: 0, completes: 0, early: 0 }, quiz: { n: 0, right: 0, msSum: 0, skips: 0 }, hours: Array(24).fill(0), sessions: 0, lastSeenAt: 0, prefs: {}, days: {} });
 export const emptySession = () => ({ sid: '', startedAt: 0, lastAt: 0, served: 0, viewed: 0, lastFormats: [], lastTopics: [], wrongStreak: 0, rightStreak: 0, earlyStreak: 0 });
 const SESSION_GAP_MS = 30 * 60 * 1000;
 
@@ -144,6 +144,12 @@ export async function ingest(userId, batch) {
     session.lastAt = Math.max(session.lastAt, e.at);
     signals.lastSeenAt = Math.max(signals.lastSeenAt, e.at);
     signals.hours[hourOf(e.at, ctx.tz)]++;
+    if (['view', 'complete', 'quiz_answer', 'heartbeat'].includes(e.type)) {
+      signals.days ||= {};
+      signals.days[day(e.at)] = 1;
+      const keys = Object.keys(signals.days).sort();
+      for (const k of keys.slice(0, Math.max(0, keys.length - 90))) delete signals.days[k];
+    }
 
     const v = e.videoId ? await videoOf(e.videoId) : null;
     if (e.videoId && !v) continue;
@@ -261,6 +267,26 @@ export async function ingest(userId, batch) {
   );
   await Promise.all(writes.flat());
   return { accepted };
+}
+
+/** Consecutive active days ending today or yesterday (UTC days). */
+export function streakOf(signals, now = Date.now()) {
+  const days = signals?.days || {};
+  let streak = 0;
+  let t = now;
+  if (!days[day(t)]) t -= 86400000; // a streak survives until the end of the next day
+  while (days[day(t)]) { streak++; t -= 86400000; }
+  return streak;
+}
+
+/** Headline numbers for the Profile and Library (stickers, tiles, the buddy's line). */
+export async function studentStats(userId, { watched = 0, progress = {}, masteryOf = () => 0 } = {}) {
+  const s = await getSignals(userId);
+  return {
+    watched, streak: streakOf(s), sessions: s.sessions || 0,
+    quizN: s.quiz?.n || 0, quizRight: s.quiz?.right || 0,
+    mastered: Object.values(progress).filter((st) => masteryOf(st) >= 0.7).length,
+  };
 }
 
 /** Marks videos as served in the viewer's session (called by the feed, not by the app). */

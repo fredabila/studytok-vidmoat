@@ -139,7 +139,16 @@
     <!-- Feed -->
     <section class="view view-feed" data-view="feed" aria-label="For You">
       <header class="feed-head">
-        <span class="wordmark">StudyTok</span>
+        <svg class="wordmark" viewBox="0 0 132 30" width="132" height="30" role="img" aria-label="StudyTok">
+          <defs>
+            <linearGradient id="wm-trace" gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="132" y2="0">
+              <stop offset="0" stop-color="#ffd93d" stop-opacity="0"/><stop offset=".45" stop-color="#ffd93d"/><stop offset=".55" stop-color="#fff7c2"/><stop offset="1" stop-color="#ffd93d" stop-opacity="0"/>
+            </linearGradient>
+          </defs>
+          <text class="wm-fill" x="0" y="23">StudyTok</text>
+          <text class="wm-trace" x="0" y="23">StudyTok</text>
+          <text class="wm-trace wm-trace-2" x="0" y="23">StudyTok</text>
+        </svg>
         <span class="feed-title">For You</span>
         <span class="feed-head-spacer"></span>
       </header>
@@ -173,6 +182,7 @@
       <div class="page">
         <h1 class="page-title">Profile</h1>
         <div id="profile-card" class="card profile-card"></div>
+        <div id="profile-tiles"></div>
         <div id="credits-card" class="card"></div>
         <div id="account-card" class="card"></div>
         <div id="install-card" class="card" hidden></div>
@@ -192,6 +202,7 @@
 
     <!-- Bottom navigation -->
     <nav class="tabbar" aria-label="Main">
+      <span class="tab-blob" aria-hidden="true"></span>
       <button type="button" class="tabbtn" data-tab="feed" aria-current="page">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 11l8-7 8 7v8a1 1 0 0 1-1 1h-4v-6H9v6H5a1 1 0 0 1-1-1z"/></svg><span>For You</span>
       </button>
