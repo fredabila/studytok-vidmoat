@@ -1,6 +1,6 @@
 # Video formats
 
-A format is a kind of video: what scenes it has, how it looks and sounds. All eighteen live in
+A format is a kind of video: what scenes it has, how it looks and sounds. All twenty-five live in
 `server/video/formats.js`; the composer (`server/video/compose.js`) renders any of them.
 
 | id | Name | Scenes | Skin highlights |
@@ -23,6 +23,14 @@ A format is a kind of video: what scenes it has, how it looks and sounds. All ei
 | `speedrun` | Speedrun | six facts at full pace · silent recap · quiz | Bungee, Comic Pop, Vivid, whip-pans, energetic music, voice *nova* |
 | `guess` | Guess first | the question before any teaching (held) · the answer on the card · two beats why | Montserrat, Karaoke, Cinematic, suspense music, voice *sage* |
 | `wyr` | Would you rather | a dilemma as the quiz (held) · two beats on what decides it | DM Serif Display, Clean Subtitle, Matte, push cuts, voice *fable* |
+
+| `onething` | 15 sec | one idea, one visual, fifteen seconds | Montserrat, Karaoke, lo-fi |
+| `cheatsheet` | Cheat sheet | a revision card that fills in line by line · quiz | Oswald, paper cards, Fade grade |
+| `predict` | What happens? | footage, "what happens next?" held, the reveal, two beats why | Archivo Black, Cinematic, suspense |
+| `analogy` | It is like… | IMAGINE → SO → BUT (where the analogy breaks) · quiz | DM Serif Display, paper, Warm grade |
+| `mistakes` | Don't do this | three mistakes stamped ✗ and fixed · quiz | Anton, Boxed Red, Moody, glitch |
+| `history` | Timeline | dated moments building a timeline card, the last is the twist | Cinzel, letterbox, warm-film, orchestral |
+| `challenge` | 10 seconds | a mental problem, a ten-second hold, two steps, the trick | Bebas Neue, Hormozi captions, punch LUT |
 
 The second wave is built on what keeps people watching short video: curiosity gaps, "wait for
 number one", a challenge answered before the reveal, rankings to argue with, first-person

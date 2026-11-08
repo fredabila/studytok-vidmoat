@@ -12,7 +12,7 @@ import { BANK } from './bank.js';
 import { sanitizeLesson } from './schema.js';
 import { writeEpisodes } from './claude.js';
 import { pickFormats, FORMAT_IDS } from '../video/formats.js';
-import { formatPerformance } from '../feed/events.js';
+import { formatPerformance, hookGuidance } from '../feed/events.js';
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -40,8 +40,9 @@ async function writeBatch(unit, audience, key, covered) {
   // Children under 13 do not get the opinion-led formats.
   const allowed = audience.child ? FORMAT_IDS.filter((f) => !['hottake', 'wyr'].includes(f)) : FORMAT_IDS;
   const formats = pickFormats(unit.topic, config.anthropic.episodesPerCall, { recent, performance, allowed });
+  const hooks = await hookGuidance(unit.topic).catch(() => null);
   const raws = await writeEpisodes({
-    unit, audience, covered, formats, count: formats.length, accent: topicOf(unit.topic).accent,
+    unit, audience, covered, formats, count: formats.length, accent: topicOf(unit.topic).accent, hooks,
   });
   const lessons = [];
   for (const raw of raws) {

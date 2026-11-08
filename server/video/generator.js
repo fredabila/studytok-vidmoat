@@ -140,6 +140,7 @@ async function buildVideo(video, unit, audience) {
     format: lesson.format,
     narrated: Boolean(voice),
     voice: voice ? { mode: voice.mode, credits: voice.credits, voiceId: voice.voiceId } : null,
+    musicMood: music?.query || null,
     quiz: lesson.quiz && quiz ? { ...lesson.quiz, ...quiz } : null,
     // Scene boundaries, so the app can report which scene a viewer left on (drop-off curves).
     scenes: segments.map((s) => ({ id: s.id, kind: s.kind, start: s.start, duration: s.duration })),

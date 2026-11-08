@@ -55,11 +55,20 @@ score = quality × taste × diversity × fatigue × difficulty × freshness
 * **difficulty**: two wrong answers in a row favour gentle formats (explainer, why, chat);
   three right in a row favour exam drills and flash drills.
 * **freshness**: up to +8% for videos made in the last two weeks.
+* **context**: from the session's device posture and hour (see EVENTS.md, *Device sensors*).
+  On the move, formats the narration carries (story, POV, chat) gain up to +25% and dense cards
+  (spot the mistake, exam drill) lose up to 25%; lying flat late at night, gentle formats win and
+  the loud ones drop.
 
 Every part is returned in `why.video` so the *Why* sheet can say, for example, "you tend to
 watch Exam drills through" or "something lighter after a long session".
 
 ## Closing the loop on production
+
+Three more loops run from the aggregates in EVENTS.md: hook styles that hold attention on a
+topic are fed to the writer (`hookGuidance`), narrator voices that hold attention better take
+over a format (`bestVoiceFor`), and per-scene drop-off curves (`leaveAt`) show where each format
+loses people (today: exposed on `/api/stats` for tuning).
 
 `events.js formatPerformance(topic)` turns the format counters for a topic into a multiplier
 (0.6–1.4, shrunk toward 1 with little data) that `lessons/index.js` passes to

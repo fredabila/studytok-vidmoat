@@ -8,6 +8,7 @@
 
 import { VidmoatPlayer } from './player.js';
 import { track, flush, WatchTracker } from './telemetry.js';
+import * as sensors from './sensors.js';
 
 const $ = (s, el = document) => el.querySelector(s);
 const $$ = (s, el = document) => [...el.querySelectorAll(s)];
@@ -342,6 +343,63 @@ function noteCredits(credits) {
   if (creditsNoted !== reason) { creditsNoted = reason; toast(copy[0]); }
 }
 
+// ============================================================================ refresh
+/** Reloads what is on screen: the feed (fresh page from the algorithm), the Library or the Profile. */
+async function refreshView(which = view) {
+  const btn = $(`.refresh-btn[data-refresh="${which}"]`);
+  btn?.classList.add('spin');
+  track('refresh', { where: which });
+  try {
+    flush();
+    if (which === 'feed') await restartFeed();
+    else {
+      me = (await api('GET', '/api/me')).user;
+      if (which === 'library') await showLibrary(); else renderProfile();
+    }
+  } catch { toast("Couldn't refresh. Check your connection."); }
+  finally { setTimeout(() => btn?.classList.remove('spin'), 500); }
+}
+/** Pull down from the top of a page (or the first slide) to refresh. */
+function wirePullToRefresh() {
+  const ptr = $('#ptr');
+  for (const page of $$('.view-page')) {
+    let startY = null, pulling = false;
+    page.addEventListener('touchstart', (e) => { startY = page.scrollTop <= 0 ? e.touches[0].clientY : null; pulling = false; }, { passive: true });
+    page.addEventListener('touchmove', (e) => {
+      if (startY == null) return;
+      const dy = e.touches[0].clientY - startY;
+      if (dy > 10 && page.scrollTop <= 0) { pulling = true; ptr.style.setProperty('--pull', `${Math.min(70, dy * 0.5)}px`); ptr.classList.add('pull'); }
+    }, { passive: true });
+    page.addEventListener('touchend', async (e) => {
+      if (!pulling) { ptr.classList.remove('pull'); return; }
+      const dy = e.changedTouches[0].clientY - startY;
+      pulling = false; startY = null;
+      if (dy > 110) { ptr.classList.replace('pull', 'go'); await refreshView(page.dataset.view); }
+      ptr.classList.remove('pull', 'go');
+    }, { passive: true });
+  }
+}
+let lastActiveAt = Date.now();
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) { lastActiveAt = Date.now(); return; }
+  // Back after a long break: fresh stats and, on the feed, a fresh page.
+  if (Date.now() - lastActiveAt > 10 * 60 * 1000 && view !== 'feed') refreshView(view);
+});
+
+// ============================================================================ sensors
+// Motion data flows only after a user gesture (iOS asks). A drop pauses the video.
+let sensorsStarted = false;
+async function startSensors() {
+  if (sensorsStarted) return;
+  sensorsStarted = true;
+  const ok = await sensors.start({ onDrop: () => {
+    const item = feed.items[feed.active];
+    track('drop', { videoId: item?.data?.id, t: +(item?.watch?.lastT || 0).toFixed(1) });
+    if (item?.player && !feed.paused) { feed.paused = true; item.player.pause(); item.el.dataset.paused = 'true'; toast('Paused. Tap to continue.'); }
+  } });
+  track('sensors', { motion: ok });
+}
+
 // ============================================================================ feed: navigation
 function go(delta) { goTo(feed.active + delta); }
 function goTo(index, { animate = true } = {}) {
@@ -403,10 +461,11 @@ function wireGestures() {
     const v = (e.clientY - first.y) / Math.max(16, now - first.t);
     const flick = Math.abs(s.dy) > 24 && Math.abs(v) > 0.35;
     if (s.dy < -h * 0.18 || (flick && v < 0)) go(1);
+    else if (feed.active <= 0 && s.dy > h * 0.12) { setOffset(0, true); $('#ptr').classList.add('go'); refreshView('feed').finally(() => $('#ptr').classList.remove('go')); }
     else if (s.dy > h * 0.18 || (flick && v > 0)) go(-1);
     else setOffset(0, true);
   };
-  f.addEventListener('pointerup', end);
+  f.addEventListener('pointerup', (e) => { startSensors(); end(e); });
   f.addEventListener('pointercancel', (e) => { if (start && e.pointerId === start.id) { start = null; setOffset(0, true); } });
 
   // Wheel / trackpad: exactly one slide per gesture; the gesture's trailing momentum is swallowed.
@@ -679,7 +738,7 @@ function openWhy(item) {
   const v = w.video || {};
   if (v.formatAffinity >= 0.6) reasons.push(['🎬', `You tend to watch ${d.format?.name || 'this kind of'} videos through, so this one is a ${d.format?.name || 'match'}.`]);
   else if (v.diversity < 1) reasons.push(['🎬', `A ${d.format?.name || 'different'} video, to change the pace from the last one.`]);
-  else if (d.format?.name) reasons.push(['🎬', `Format: ${d.format.name}. The feed rotates formats so it never feels the same.`]);
+  else if (d.format?.name) reasons.push(['🎬', `Format: ${d.format.name}. The feed rotates 25 formats so it never feels the same.`]);
   if (v.quality >= 0.6) reasons.push(['⭐', 'Other students watched this one to the end.']);
   if (v.fatigue > 1.05) reasons.push(['☕', "You've watched a lot this session, so here is something lighter."]);
   if (v.difficulty < 1) reasons.push(['🧩', 'A gentler format after a couple of tricky questions.']);
@@ -1205,6 +1264,8 @@ function wireChrome() {
     };
   });
   $('#edit-studies').onclick = editStudies;
+  $$('.refresh-btn').forEach((b) => { b.onclick = () => refreshView(b.dataset.refresh); });
+  wirePullToRefresh();
   $('#open-tune').onclick = openTune;
   $$('#sheet [data-close]').forEach((b) => { b.onclick = closeSheet; });
   document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !$('#sheet').hidden) closeSheet(); });
@@ -1237,6 +1298,13 @@ const SAMPLE_HOOKS = {
   speedrun: { topic: 'Geography', accent: '#60a5fa', hook: 'Plate tectonics in <em>30 seconds</em>', card: ['06 / 06', 'Subduction'] },
   guess: { topic: 'Space', accent: '#8fc1ff', hook: 'Most students get this <em>wrong</em>', card: ['Guess first', 'Why is the sky dark at night?'] },
   wyr: { topic: 'Law', accent: '#f472b6', hook: 'Would you rather sue in <em>tort</em> or contract?', card: ['Would you rather', 'Tort · Contract · Depends'] },
+  onething: { topic: 'Physics', accent: '#8fc1ff', hook: 'One thing about <em>falling</em>', card: ['15 seconds', 'Terminal velocity'] },
+  cheatsheet: { topic: 'Maths', accent: '#f472b6', hook: 'Quadratics on <em>one card</em>', card: ['Cheat sheet', 'x = (−b ± √(b² − 4ac)) / 2a'] },
+  predict: { topic: 'Chemistry', accent: '#a78bfa', hook: 'What happens when the <em>sodium</em> hits water?', card: ['What happens next?', 'A · B · C'] },
+  analogy: { topic: 'Computer science', accent: '#2dd4bf', hook: 'A hash map is like a <em>coat check</em>', card: ['Analogy | Real thing', 'Ticket | Key'] },
+  mistakes: { topic: 'Economics', accent: '#f5b971', hook: '3 mistakes that cost <em>marks</em> in elasticity', stamp: '✗ 1', card: ["Don't do this", 'Mixing up % and absolute'] },
+  history: { topic: 'History', accent: '#fbbf24', hook: 'From <em>apples</em> to black holes', card: ['1915', 'General relativity'] },
+  challenge: { topic: 'Maths', accent: '#34d399', hook: 'Ten seconds. <em>Go.</em>', card: ['10 seconds', '17 × 6 = ?'] },
 };
 function renderLanding(notice) {
   const wrap = $('#ld-samples');
@@ -1327,6 +1395,7 @@ async function boot() {
   ensureEndSlide();
   track('session_start', { source: matchMedia('(display-mode: standalone)').matches || navigator.standalone ? 'app' : 'browser', entry: linked ? 'link' : hash ? hash.slice(1, 12) : 'feed', ageBand: ageBand(me?.profile?.age) });
   if (hash === '#library' || hash === '#profile') showView(hash.slice(1)); else showView('feed');
+  $('#sound-go')?.addEventListener('click', startSensors, { once: true });
   if (linked) await openVideo(linked);
   await loadMore(3);
   if (feed.active < 0 && feed.items.length) goTo(0, { animate: false });

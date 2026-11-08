@@ -232,6 +232,21 @@ export function answerSteps({ id, start, duration, track, accent, theme = 'paper
     { y: -80, h, motion: index === 0 && mode === 'walk' ? 'slide-up' : mode === 'all' ? 'slide-up' : undefined });
 }
 
+/** Cheat sheet: a revision card whose lines fill in one by one; the newest line is highlighted. */
+export function sheetCard({ id, start, duration, track, accent, theme = 'paper' }, { items, upTo }) {
+  const t = themeOf(theme, accent);
+  const list = items.slice(0, 6);
+  const h = 900;
+  return html(id, start, duration, track,
+    `<div class="c sh"><div class="h">Cheat sheet</div>${list.map((it, i) =>
+      `<div class="r${i < upTo ? ' done' : i === upTo ? ' on' : ''}"><b>${esc(it.title)}</b><span>${esc(it.text)}</span></div>`).join('')}</div>`,
+    cardCss(accent, theme, `.sh{gap:16px;justify-content:flex-start}
+.r{display:grid;grid-template-columns:300px 1fr;gap:18px;align-items:start;padding:14px 16px;border-radius:18px;background:${t.cell};opacity:.18}
+.r.done{opacity:.85}.r.on{opacity:1;outline:3px solid ${accent};background:${accent}22}
+.r b{font-size:38px;font-weight:900;line-height:1.1;color:${accent}}.r span{font-size:32px;font-weight:600;line-height:1.25}`, { h }),
+    { y: -80, h, motion: upTo === 0 ? 'slide-up' : undefined });
+}
+
 /** Tier list: rows S / A / B / C filling up as items are ranked; the newest item is highlighted. */
 export function tierCard({ id, start, duration, track, accent, theme = 'dark' }, { items, latest }) {
   const t = themeOf(theme, accent);

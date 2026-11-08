@@ -183,6 +183,8 @@ export function affinity(sig, rand = Math.random) {
 
 // How heavy each format feels, for session fatigue (1 = light and short, 0 = long and dense).
 export const FORMAT_LIGHTNESS = { rapid: 1, flashcards: 0.9, mythbust: 0.8, chat: 0.7, why: 0.5, explain: 0.4, story: 0.3, examdrill: 0.1 };
+// How much a format needs eyes on the screen (1 = dense cards to read, 0 = narration carries it).
+export const FORMAT_VISUAL_DENSITY = { spotmistake: 1, examdrill: 0.95, tierlist: 0.8, flashcards: 0.8, thisorthat: 0.7, speedrun: 0.7, rapid: 0.6, countdown: 0.6, levels: 0.5, guess: 0.5, explain: 0.5, why: 0.45, chat: 0.4, mythbust: 0.4, hottake: 0.35, wyr: 0.35, story: 0.25, pov: 0.25 };
 // How gentle each format is, for difficulty adaptation (1 = gentlest).
 export const FORMAT_GENTLENESS = { explain: 1, why: 0.9, chat: 0.9, story: 0.8, mythbust: 0.6, rapid: 0.6, flashcards: 0.4, examdrill: 0 };
 
@@ -217,6 +219,13 @@ export function scoreVideo(video, stats, signals = {}, session = {}, { rand = Ma
   const ageDays = video.createdAt ? Math.max(0, (now - Date.parse(video.createdAt)) / 86400000) : 30;
   const freshness = 1 + 0.08 * Math.exp(-ageDays / 14);
 
-  const score = quality * taste * diversity * fatigue * difficulty * freshness;
-  return { score, parts: { quality: +quality.toFixed(3), formatAffinity: +formatAffinity.toFixed(3), topicAffinity: +topicAffinity.toFixed(3), diversity, fatigue: +fatigue.toFixed(3), difficulty: +difficulty.toFixed(3), freshness: +freshness.toFixed(3) } };
+  // Context: on the move, formats the narration carries win over dense cards; lying down late at
+  // night, calmer and gentler ones do.
+  const density = FORMAT_VISUAL_DENSITY[format] ?? 0.5;
+  let context = 1;
+  if (session.posture === 'moving') context *= 1.25 - 0.5 * density;
+  if (session.night && session.posture === 'flat') context *= 0.85 + 0.3 * gentle - 0.15 * ((FORMAT_LIGHTNESS[format] ?? 0.5) > 0.8 ? 1 : 0);
+
+  const score = quality * taste * diversity * fatigue * difficulty * freshness * context;
+  return { score, parts: { quality: +quality.toFixed(3), formatAffinity: +formatAffinity.toFixed(3), topicAffinity: +topicAffinity.toFixed(3), diversity, fatigue: +fatigue.toFixed(3), difficulty: +difficulty.toFixed(3), freshness: +freshness.toFixed(3), context: +context.toFixed(3) } };
 }

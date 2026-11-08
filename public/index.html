@@ -51,7 +51,7 @@
 
       <ul class="ld-pills" aria-label="What you get">
         <li>🧭 Follows your real syllabus</li>
-        <li>🎬 18 video formats</li>
+        <li>🎬 25 video formats</li>
         <li>🔁 Quick checks &amp; spaced review</li>
         <li>📱 Installs like an app</li>
       </ul>
@@ -150,7 +150,7 @@
           <text class="wm-trace wm-trace-2" x="0" y="23">StudyTok</text>
         </svg>
         <span class="feed-title">For You</span>
-        <span class="feed-head-spacer"></span>
+        <span class="feed-head-spacer"><button type="button" class="refresh-btn light" data-refresh="feed" aria-label="Refresh feed"><svg viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.3-5.7M20 4v5h-5"/></svg></button></span>
       </header>
       <div id="feed" class="feed" tabindex="0" aria-roledescription="carousel" aria-label="Video feed">
         <div id="track" class="track"></div>
@@ -165,7 +165,7 @@
     <!-- Library -->
     <section class="view view-page" data-view="library" hidden aria-label="Library">
       <div class="page">
-        <h1 class="page-title">Library</h1>
+        <div class="page-head"><h1 class="page-title">Library</h1><button type="button" class="refresh-btn" data-refresh="library" aria-label="Refresh"><svg viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.3-5.7M20 4v5h-5"/></svg></button></div>
         <div class="segmented" role="tablist" aria-label="Library sections">
           <button role="tab" aria-selected="true" data-seg="course">Course</button>
           <button role="tab" aria-selected="false" data-seg="saved">Saved</button>
@@ -180,7 +180,7 @@
     <!-- Profile -->
     <section class="view view-page" data-view="profile" hidden aria-label="Profile">
       <div class="page">
-        <h1 class="page-title">Profile</h1>
+        <div class="page-head"><h1 class="page-title">Profile</h1><button type="button" class="refresh-btn" data-refresh="profile" aria-label="Refresh"><svg viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.3-5.7M20 4v5h-5"/></svg></button></div>
         <div id="profile-card" class="card profile-card"></div>
         <div id="profile-tiles"></div>
         <div id="credits-card" class="card"></div>
@@ -301,6 +301,7 @@
 
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
   <div id="burst" class="burst" hidden aria-live="polite"></div>
+  <div id="ptr" class="ptr" aria-hidden="true"><span class="spinner"></span></div>
   <script type="module" src="/app.js"></script>
 </body>
 </html>

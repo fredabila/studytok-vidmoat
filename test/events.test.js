@@ -12,7 +12,7 @@ for (const k of Object.keys(process.env)) if (/REST_API_URL|REDIS_REST_URL/.test
 
 const { kv } = await import('../server/core/kv.js');
 const db = await import('../server/core/db.js');
-const { ingest, cleanEvent, getSignals, getSession, stats, formatPerformance, EVENT_SPECS, weekKey, recapOf, studentStats, streakOf } = await import('../server/feed/events.js');
+const { ingest, cleanEvent, getSignals, getSession, stats, formatPerformance, EVENT_SPECS, weekKey, recapOf, studentStats, streakOf, hookGuidance, bestVoiceFor } = await import('../server/feed/events.js');
 const { scoreVideo, affinity, exploreRate, videoQuality, applyEvent, emptyState } = await import('../server/feed/ranking.js');
 const { saveProfile, getProgress } = await import('../server/feed/index.js');
 
@@ -156,4 +156,49 @@ test('weekly recap and level-ups: a unit crossing mastery is reported once and k
   const later = await studentStats(user.id, { watched: 3, progress: {}, now: at + 8 * 86400000 });
   assert.equal(later.week, null); assert.equal(later.lastWeek.watched, 3);
   assert.equal(streakOf(s, at + 3600000), 1);
+});
+
+test('leaving mid-video records the scene kind per format, the hook style, the voice and the posture', async () => {
+  const user = await saveProfile(null, { profile: { level: 'high-school' }, units: ['hs-biology-1'] });
+  const v = { id: crypto.randomUUID(), unitId: 'hs-biology-1', unitTitle: 'Cells', topic: 'biology', level: 'high-school', readyKey: 'k', status: 'ready', format: 'story', createdAt: new Date().toISOString(), duration: 40,
+    scenes: [{ id: 'hook', kind: 'hook', start: 0 }, { id: 'beat0', kind: 'beat', start: 3 }, { id: 'quizQ', kind: 'quiz', start: 25 }], voice: { voiceId: 'sage' }, musicMood: 'cinematic', lesson: { hookStyle: 'story' } };
+  await db.saveVideo(v);
+  await ingest(user.id, { ctx: { sid: 'p', posture: 'moving' }, events: [
+    { type: 'view', videoId: v.id }, { type: 'heartbeat', videoId: v.id, t: 5, posture: 'moving' },
+    { type: 'leave', videoId: v.id, t: 12, maxT: 12, pct: 0.3, watched: 12, dir: 'next', posture: 'moving' },
+  ] });
+  assert.deepEqual(await kv.hgetall('stats:format:story:leaveAt'), { beat: 1 });
+  assert.equal(Number((await kv.hgetall('stats:voice:sage')).pctSum), 30);
+  assert.equal(Number((await kv.hgetall('stats:music:cinematic')).n), 1);
+  assert.equal(Number((await kv.hgetall('stats:hook:story:biology')).n), 1);
+  const session = await getSession(user.id);
+  assert.equal(session.posture, 'moving');
+  const sig = await getSignals(user.id);
+  assert.equal(sig.postures.moving.n, 1); assert.equal(sig.hooks.story.n, 1);
+  const s = await stats({ formats: ['story'] });
+  assert.deepEqual(s.leaveAt.story, { beat: 1 }); assert.equal(s.hooks.story.n, 1); assert.equal(s.voices.sage.meanWatch, 0.3);
+});
+
+test('hook guidance and voice learning need evidence before they speak', async () => {
+  assert.deepEqual(await hookGuidance('chemistry'), { hold: [], lose: [], student: [] });
+  for (let i = 0; i < 20; i++) { await kv.hincrby('stats:hook:number:chemistry', 'n', 1); await kv.hincrby('stats:hook:number:chemistry', 'pctSum', 80); }
+  for (let i = 0; i < 20; i++) { await kv.hincrby('stats:hook:claim:chemistry', 'n', 1); await kv.hincrby('stats:hook:claim:chemistry', 'pctSum', 20); await kv.hincrby('stats:hook:claim:chemistry', 'early', 1); }
+  const g = await hookGuidance('chemistry', { hooks: { question: { n: 5, pctSum: 4.5 }, pain: { n: 6, pctSum: 2 }, secret: { n: 1, pctSum: 1 } } });
+  assert.deepEqual(g.hold, ['number']); assert.deepEqual(g.lose, ['claim']); assert.deepEqual(g.student, ['question', 'pain']);
+  assert.equal(await bestVoiceFor(['marin', 'nova']), null, 'no data: keep the format voice');
+  for (let i = 0; i < 50; i++) { await kv.hincrby('stats:voice:marin', 'n', 1); await kv.hincrby('stats:voice:marin', 'pctSum', 50); await kv.hincrby('stats:voice:nova', 'n', 1); await kv.hincrby('stats:voice:nova', 'pctSum', 70); }
+  assert.equal(await bestVoiceFor(['marin', 'nova']), 'nova', 'a clearly better voice with enough views wins');
+  assert.equal(await bestVoiceFor(['nova', 'marin']), null, 'the default stays when it is already the best');
+});
+
+test('context: on the move narration-led formats win; late at night lying down, gentle ones do', () => {
+  const rand = seeded(8);
+  const good = { views: 20, completes: 15, likes: 4, saves: 2, skips: 1, quizRight: 8, quizWrong: 2, leaves: 18, pctSum: 1500 };
+  const dense = scoreVideo({ format: 'spotmistake', topic: 'math' }, good, {}, { posture: 'moving' }, { rand });
+  const spoken = scoreVideo({ format: 'story', topic: 'math' }, good, {}, { posture: 'moving' }, { rand });
+  assert.ok(dense.parts.context < 1 && spoken.parts.context > 1, JSON.stringify([dense.parts.context, spoken.parts.context]));
+  const nightDrill = scoreVideo({ format: 'examdrill', topic: 'math' }, good, {}, { posture: 'flat', night: true }, { rand });
+  const nightExplain = scoreVideo({ format: 'explain', topic: 'math' }, good, {}, { posture: 'flat', night: true }, { rand });
+  assert.ok(nightDrill.parts.context < nightExplain.parts.context);
+  assert.equal(scoreVideo({ format: 'explain', topic: 'math' }, good, {}, {}, { rand }).parts.context, 1);
 });

@@ -31,6 +31,7 @@ export const LessonSchema = z.object({
   title: z.string().describe('Feed title, max 60 characters'),
   hook: z.string().describe('Opening line, spoken and shown big, max 80 characters'),
   hookTerm: z.string().describe('1-3 words copied exactly from the hook to highlight'),
+  hookStyle: z.enum(['curiosity', 'challenge', 'number', 'question', 'pain', 'claim', 'story', 'secret']).describe('The kind of hook used (see the hook rules)'),
   ambient: z.string().describe('Background footage search query for the whole video, 1-3 concrete visual nouns'),
   beats: z.array(Beat).describe('explain/why/story/mythbust: the beats (see the format spec); else []'),
   myth: z.string().describe('mythbust: the common wrong belief; else ""'),
@@ -130,10 +131,14 @@ export function sanitizeLesson(raw, topicId, meta = {}) {
     spotmistake: Boolean(exam && exam.steps.length >= 2 && exam.answerIndex < exam.steps.length),
     guess: Boolean(exam && exam.options.length === 3) && beats.length >= 1,
     wyr: Boolean(quiz) && beats.length >= 2,
+    onething: beats.length >= 1, analogy: beats.length >= 3, cheatsheet: items.length >= 3, mistakes: items.length >= 3,
+    history: items.length >= 3 && items.every((it) => it.title.includes('|')),
+    predict: Boolean(exam && exam.options.length === 3) && beats.length >= 1,
+    challenge: Boolean(exam && exam.options.length === 3 && exam.steps.length >= 1),
   };
   if (!ok[format]) format = beats.length >= 2 ? 'explain' : items.length >= 3 ? 'rapid' : cards.length >= 3 ? 'flashcards' : examFull ? 'examdrill' : chat ? 'chat' : null;
   if (!format) throw new Error('Lesson has no usable content');
-  if (['explain', 'why', 'story', 'pov', 'levels', 'tierlist', 'thisorthat', 'countdown', 'speedrun', 'wyr'].includes(format) && !quiz) throw new Error('Lesson needs a quiz');
+  if (['explain', 'why', 'story', 'pov', 'levels', 'tierlist', 'thisorthat', 'countdown', 'speedrun', 'wyr', 'onething', 'analogy', 'cheatsheet', 'mistakes', 'history'].includes(format) && !quiz) throw new Error('Lesson needs a quiz');
 
   return {
     topic: topicId,
@@ -143,10 +148,11 @@ export function sanitizeLesson(raw, topicId, meta = {}) {
     title: clip(raw.title, 60),
     hook: clip(raw.hook, 90),
     hookTerm: clip(raw.hookTerm, 30),
+    hookStyle: ['curiosity', 'challenge', 'number', 'question', 'pain', 'claim', 'story', 'secret'].includes(raw.hookStyle) ? raw.hookStyle : 'curiosity',
     ambient: clip(raw.ambient || beats.find((b) => b.visual.query)?.visual.query || items[0]?.visual || '', 50),
     beats, items, cards, exam, chat,
     myth: clip(raw.myth, 80), fact: clip(raw.fact, 90),
-    quiz: format === 'examdrill' || format === 'guess' ? { question: exam.question, options: exam.options, answerIndex: exam.answerIndex, explanation: exam.tip }
+    quiz: ['examdrill', 'guess', 'predict', 'challenge'].includes(format) ? { question: exam.question, options: exam.options, answerIndex: exam.answerIndex, explanation: exam.tip }
       : format === 'spotmistake' ? { question: 'Which step is wrong?', options: exam.steps.slice(0, 3).map((_, i) => `Step ${i + 1}`), answerIndex: Math.min(2, exam.answerIndex), explanation: exam.mistake }
       : format === 'flashcards' ? null : quiz,
     takeaway: clip(raw.takeaway, 80),

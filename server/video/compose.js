@@ -14,7 +14,7 @@
 import { config } from '../core/config.js';
 import { topic as topicOf } from '../curriculum/topics.js';
 import { format as formatOf, scenesFor } from './formats.js';
-import { teachingVisual, stampCard, numberCard, recapCard, questionCard, answerSteps, calloutCard, flashCard, chatThread, tierCard } from './visuals.js';
+import { teachingVisual, stampCard, numberCard, recapCard, questionCard, answerSteps, calloutCard, flashCard, chatThread, tierCard, sheetCard } from './visuals.js';
 import { isTeachingVisual } from '../lessons/schema.js';
 
 export const W = 1080;
@@ -311,6 +311,12 @@ export function composeLesson(lesson, media = {}) {
       }
       cmds.push(...numberCard(card(`num${i}`, start, d), { index: seg.number != null ? seg.number - 1 : i, total: seg.total, title: seg.item.title }));
       cmds.push(...sfxClip(uid('pop'), sfx.pop, start + 0.05, 0.5));
+    }
+
+    if (kind === 'sheet') {
+      cmds.push(dim(uid('sheetDim'), start, d, T.quizDim, look.bg, 0.5));
+      cmds.push(...sheetCard(card(`sheet${seg.index}`, start, d + 0.05), { items: seg.items, upTo: seg.index }));
+      cmds.push(...sfxClip(uid('pop'), sfx.pop, start + 0.1, 0.4));
     }
 
     if (kind === 'tier') {
