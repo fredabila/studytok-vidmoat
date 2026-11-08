@@ -7,6 +7,14 @@
       "maxDuration": 300
     }
   },
+  "redirects": [
+    {
+      "source": "/:path((?!api/).*)",
+      "has": [{ "type": "host", "value": "studytok-vidmoat.vercel.app" }],
+      "destination": "https://studytok.vidmoat.com/:path",
+      "permanent": true
+    }
+  ],
   "rewrites": [
     {
       "source": "/api/:path*",

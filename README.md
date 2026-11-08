@@ -1,5 +1,7 @@
 # StudyTok
 
+**Live at [studytok.vidmoat.com](https://studytok.vidmoat.com)**, a Vidmoat product, open source under the MIT licence.
+
 A TikTok-style vertical feed of short study videos that follows **your actual syllabus**.
 Students pick their level (middle school to postgraduate, professional, or just curious), their
 country, school and course or subjects, and the exam they are preparing for. StudyTok matches the
