@@ -119,8 +119,8 @@ export async function syncUser(userId, { event = null, detail = '', force = fals
 /** One line per day in the Daily tab: students, activity and generation for `date` (YYYY-MM-DD). */
 export async function dailyRow(date, { now = Date.now() } = {}) {
   const dayStart = Date.parse(`${date}T00:00:00Z`), dayEnd = dayStart + 86400000;
-  const [h, members, joined, active] = await Promise.all([
-    kv.hgetall(`events:day:${date}`), kv.hgetall('members'),
+  const [h, total, joined, active] = await Promise.all([
+    kv.hgetall(`events:day:${date}`), kv.zcard('users'),
     kv.zcount('users', dayStart, dayEnd - 1), kv.zcount('users:active', dayStart, dayEnd - 1),
   ]);
   const n = (k) => Number(h?.[k]) || 0;
@@ -128,7 +128,7 @@ export async function dailyRow(date, { now = Date.now() } = {}) {
   return {
     'Date': date,
     'New students': joined,
-    'Total students': Number(members?.count) || 0,
+    'Total students': total || 0,
     'Active students': active,
     'Lessons watched': n('view'),
     'Completed': n('complete'),

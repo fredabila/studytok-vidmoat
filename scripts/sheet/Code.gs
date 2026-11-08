@@ -78,11 +78,14 @@ function applyOp_(ss, op) {
   // upsert: match on the key column, update in place or append.
   var keyCol = header.indexOf(String(op.key || header[0]));
   if (keyCol === -1) keyCol = 0;
+  // Keys are compared as text: the key column is formatted as plain text so Sheets never turns a
+  // date like 2026-11-07 or a long id into a Date or a number.
+  sheet.getRange(1, keyCol + 1, sheet.getMaxRows(), 1).setNumberFormat('@');
   var lastRow = sheet.getLastRow();
-  var keys = lastRow > 1 ? sheet.getRange(2, keyCol + 1, lastRow - 1, 1).getValues().map(function (r) { return String(r[0]); }) : [];
+  var keys = lastRow > 1 ? sheet.getRange(2, keyCol + 1, lastRow - 1, 1).getDisplayValues().map(function (r) { return String(r[0]).trim(); }) : [];
   var updated = 0, appended = [];
   rows.forEach(function (row) {
-    var k = String(row[header[keyCol]]);
+    var k = String(row[header[keyCol]]).trim();
     var i = keys.indexOf(k);
     if (i === -1) { appended.push(toValues_(header, row)); keys.push(k); }
     else { sheet.getRange(i + 2, 1, 1, header.length).setValues([toValues_(header, row)]); updated++; }

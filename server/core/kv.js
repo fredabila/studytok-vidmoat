@@ -100,6 +100,7 @@ class LocalKV {
     const re = new RegExp('^' + String(opts.match || '*').replace(/[.+^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*').replace(/\?/g, '.') + '$');
     return ['0', [...this.data.keys()].filter((k) => re.test(k))];
   }
+  async zcard(k) { return this.data.get(k)?.size || 0; }
   async zcount(k, min, max) { let n = 0; for (const s of (this.data.get(k) || new Map()).values()) if (s >= min && s <= max) n++; return n; }
   async zrange(k, start, stop, opts = {}) {
     const z = this.data.get(k);
