@@ -27,7 +27,7 @@ import { audienceFor } from './index.js';
 // 'p' 0..1, 'b' boolean, 's' short string, 'i' small integer).
 export const EVENT_SPECS = {
   // session & app
-  session_start: { fields: { source: 's', entry: 's' } },
+  session_start: { fields: { source: 's', entry: 's', ageBand: 's' } },
   app_hidden: { fields: {} },
   app_visible: { fields: {} },
   install: { fields: { outcome: 's' } },

@@ -51,7 +51,7 @@
 
       <ul class="ld-pills" aria-label="What you get">
         <li>🧭 Follows your real syllabus</li>
-        <li>🎬 8 video formats</li>
+        <li>🎬 18 video formats</li>
         <li>🔁 Quick checks &amp; spaced review</li>
         <li>📱 Installs like an app</li>
       </ul>
@@ -87,6 +87,17 @@
           <h1>Learn your syllabus,<br><mark>one swipe at a time.</mark></h1>
           <p class="lead">Short, narrated lessons made for your course, level and exam. First, what are you studying at?</p>
         </div>
+        <div class="ob-who">
+          <span class="field-label">Who is StudyTok for?</span>
+          <div class="segmented" role="radiogroup" aria-label="Who is this for" id="ob-who">
+            <button type="button" role="radio" aria-checked="true" data-who="self">Me</button>
+            <button type="button" role="radio" aria-checked="false" data-who="child">My child</button>
+          </div>
+          <label class="field ob-age"><span id="ob-age-label">Your age</span><input name="age" id="ob-age" type="number" inputmode="numeric" min="5" max="120" placeholder="e.g. 16" autocomplete="off"></label>
+          <label class="consent" id="ob-consent" hidden><input type="checkbox" id="ob-consent-box"><span>I am the parent or guardian. Vidmoat accounts are for adults (18+), so I am setting StudyTok up for my child with my own account and will supervise how they use it.</span></label>
+          <p class="ob-note" id="ob-minor-note" hidden>Under 18? Ask a parent or guardian to sign in with their Vidmoat account and choose "My child" to set StudyTok up for you.</p>
+        </div>
+        <span class="field-label">Studying at</span>
         <div id="levels" class="level-grid" role="radiogroup" aria-label="Study level"></div>
         <p class="ob-foot" id="ob-signin-hint" hidden>Already set up on another device? <button type="button" class="link" data-signin>Sign in with Vidmoat</button></p>
       </div>

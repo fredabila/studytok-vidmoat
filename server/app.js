@@ -236,7 +236,8 @@ async function route(req, res, url) {
     if (key === 'POST /api/session' && !body.profile) body.profile = { level: 'lifelong' };
     const current = await cookieUser(req);
     if (signInRequired() && !(await signedIn(current))) return send(res, 401, { error: 'Sign in with Vidmoat to start', signin: true });
-    const user = await saveProfile(current, body);
+    let user;
+    try { user = await saveProfile(current, body); } catch (err) { if (err.status === 400) return send(res, 400, { error: err.message, code: err.code }); throw err; }
     // Start the first videos now, so the feed opens without a wait.
     waitUntil(prefetch(user.id).then((pending) => Promise.allSettled(pending)).catch((err) => console.warn('[prefetch]', err.message)));
     return send(res, 200, { user }, { 'Set-Cookie': userCookie(req, user.id) });

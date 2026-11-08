@@ -179,6 +179,206 @@ export const FORMATS = {
       ...quizScenes(l, 'Quick check.'), outro(l, 'In one line'),
     ],
   },
+
+  // ---- Second wave: formats built on the hooks short video uses to keep people watching ----
+  // (curiosity gaps, "wait for the last one", challenges you answer before the reveal, rankings
+  // you want to argue with, first-person immersion, hot takes). The learning is the same; the
+  // packaging is what keeps a tired student on the next swipe.
+
+  levels: {
+    name: '3 levels', tag: 'Kid → expert',
+    blurb: 'The same idea explained three times: to a kid, to a student, to an expert. Viewers stay to see how far they can follow.',
+    spec: 'beats: exactly 3, in order: LEVEL 1 (a kid: one everyday analogy, no jargon), LEVEL 2 (a student at their level: the proper terms), LEVEL 3 (an expert: the mechanism, edge case or formula). keyTerm = the idea at that level. hook: "Explain X to a 5-year-old, a student and a professor" style. quiz required. Leave items, myth, fact, cards, exam.question and chat empty.',
+    weights: { default: 2, physics: 3, chemistry: 3, biology: 3, 'computer-science': 3, economics: 2, math: 2 },
+    skin: {
+      hook: { fontFamily: 'Montserrat', fontWeight: 900, fontSize: 150, uppercase: false, animIn: 'slide-up' },
+      term: { fontFamily: 'Montserrat', fontWeight: 900 },
+      captions: { preset: 'Karaoke', y: 430, maxWordsPerLine: 4 },
+      filter: 'Warm', transition: 'push', music: ['lofi piano', 'chill beat'], voice: 'marin', cards: 'dark', scrim: 0.62,
+    },
+    scenes: (l) => [
+      { id: 'hook', kind: 'hook', spoken: sentence(l.hook), minDur: 3 },
+      ...l.beats.slice(0, 3).map((b, i) => ({ id: `beat${i}`, kind: 'beat', index: i, spoken: sentence(b.text), captions: true, beat: b, kicker: ['LEVEL 1 · KID', 'LEVEL 2 · STUDENT', 'LEVEL 3 · EXPERT'][i] })),
+      ...quizScenes(l, 'Which level are you?'), outro(l, 'All three'),
+    ],
+  },
+
+  spotmistake: {
+    name: 'Spot the mistake', tag: 'Spot it',
+    blurb: 'A worked answer with one deliberate error. The video holds while the viewer hunts for it, then the wrong step turns red and gets fixed.',
+    spec: 'exam.question: the problem (max 120 chars). exam.steps: 3-4 worked steps, exactly one of them wrong in a way students really make (a sign error, a skipped unit conversion, a wrong formula); exam.answerIndex = the 0-based index of the wrong step. exam.mistake: why that step is wrong (max 90 chars). exam.tip: the corrected step (max 90 chars). exam.options: leave []. hook: "Can you spot the mistake?" style. Leave beats, items, myth, fact, cards, chat and quiz empty.',
+    weights: { default: 1, math: 4, physics: 3, chemistry: 3, economics: 2, 'computer-science': 3, law: 1 },
+    skin: {
+      hook: { fontFamily: 'Oswald', fontWeight: 700, fontSize: 150, uppercase: true, animIn: 'shake' },
+      term: { fontFamily: 'Oswald', fontWeight: 700 },
+      captions: { preset: 'Clean', y: 540, maxWordsPerLine: 4 },
+      filter: 'cool-clean', transition: 'fade', music: ['tension', 'calm piano'], voice: 'cedar', cards: 'paper', scrim: 0.75,
+    },
+    scenes: (l) => {
+      const e = l.exam;
+      return [
+        { id: 'hook', kind: 'hook', spoken: sentence(l.hook), minDur: 2.6 },
+        { id: 'question', kind: 'stepsAll', spoken: `Here is a worked answer to: ${sentence(e.question)} One step is wrong. Which one?`, pauseAfter: 5, minDur: 7, exam: e, steps: e.steps },
+        { id: 'reveal', kind: 'stepsWrong', spoken: `Step ${e.answerIndex + 1}. ${sentence(e.mistake)}`, minDur: 3.5, exam: e, steps: e.steps, wrong: e.answerIndex, captions: false },
+        { id: 'fix', kind: 'callout', spoken: `The fix: ${sentence(e.tip)}`, label: 'THE FIX', text: e.tip, color: '#2bbf6a', captions: false, minDur: 3 },
+        outro(l, 'Watch for it'),
+      ];
+    },
+  },
+
+  tierlist: {
+    name: 'Tier list', tag: 'Tier list',
+    blurb: 'Four or five things ranked S to C with one line of reasoning each. Rankings invite disagreement, and disagreement keeps people watching.',
+    spec: 'items: 4-5 things from the unit to rank (title max 28 chars, tier one of S, A, B, C, text = one spoken sentence justifying the rank, visual query). Rank them by a criterion stated in the hook (most exam-relevant, most misunderstood, most important…). Put the S-tier item LAST so the video builds to it. quiz required. Leave beats, myth, fact, cards, exam.question and chat empty.',
+    weights: { default: 2, history: 3, biology: 2, economics: 3, business: 3, law: 2, health: 2, space: 2, psychology: 3 },
+    skin: {
+      hook: { fontFamily: 'Bungee', fontWeight: 400, fontSize: 140, uppercase: true, animIn: 'bounce', color: '#ffd93d' },
+      term: { fontFamily: 'Bungee', fontWeight: 400 },
+      captions: { preset: 'Comic Pop', y: 480, maxWordsPerLine: 3 },
+      filter: 'Vivid', transition: 'slide', music: ['upbeat', 'funky'], voice: 'nova', cards: 'dark', scrim: 0.65,
+    },
+    scenes: (l) => [
+      { id: 'hook', kind: 'hook', spoken: sentence(l.hook), minDur: 2.6 },
+      ...l.items.map((it, i) => ({ id: `tier${i}`, kind: 'tier', index: i, spoken: `${it.tier || 'B'} tier: ${it.title}. ${sentence(it.text)}`, captions: true, items: l.items.slice(0, i + 1), item: it })),
+      ...quizScenes(l, 'Agree?'), outro(l, 'The list'),
+    ],
+  },
+
+  thisorthat: {
+    name: 'This or that', tag: 'This or that',
+    blurb: 'Four quick pairs that students mix up, each a "which one?" the viewer answers in their head before the answer lands.',
+    spec: 'items: exactly 4 pairs, title = "Left|Right" (two things students confuse, max 28 chars total), text = one spoken sentence that says which is which and the one difference that matters (8-18 words), visual query. hook: "Do you know the difference?" style. quiz: one more pair as the check. Leave beats, myth, fact, cards, exam.question and chat empty.',
+    weights: { default: 2, biology: 3, chemistry: 3, language: 4, law: 3, health: 3, 'computer-science': 2, economics: 2 },
+    skin: {
+      hook: { fontFamily: 'Archivo Black', fontWeight: 400, fontSize: 150, uppercase: false, animIn: 'zoom-blur' },
+      term: { fontFamily: 'Archivo Black', fontWeight: 400 },
+      captions: { preset: 'Dark Pill', y: 440, maxWordsPerLine: 4 },
+      filter: 'Teal', transition: 'whip-pan', music: ['funky', 'chill beat'], voice: 'echo', cards: 'dark', scrim: 0.6,
+    },
+    scenes: (l) => [
+      { id: 'hook', kind: 'hook', spoken: sentence(l.hook), minDur: 2.6 },
+      ...l.items.map((it, i) => ({ id: `pair${i}`, kind: 'beat', index: i, spoken: sentence(it.text), captions: true, kicker: 'THIS OR THAT',
+        beat: { text: it.text, keyTerm: it.title.replace('|', ' vs '), visual: { kind: 'compare', title: it.title, items: [], query: it.visual, value: 0, unit: '', svg: '' } } })),
+      ...quizScenes(l, 'Last one.'), outro(l, 'The difference'),
+    ],
+  },
+
+  pov: {
+    name: 'POV', tag: 'POV',
+    blurb: 'First person: you are the electron, the red blood cell, the bill going through parliament. Immersion makes the process stick.',
+    spec: 'hook: "POV: you are a …" (max 70 chars). beats: 3-4 steps of the process told in second person, present tense ("You squeeze through the capillary wall…"), keyTerm = where you are / what is happening (1-3 words), visual = footage or a diagram of that stage. quiz required. Leave items, myth, fact, cards, exam.question and chat empty.',
+    weights: { default: 2, biology: 4, chemistry: 3, physics: 3, earth: 3, health: 3, 'computer-science': 2, law: 2, economics: 2 },
+    skin: {
+      hook: { fontFamily: 'Permanent Marker', fontWeight: 400, fontSize: 150, uppercase: false, animIn: 'write-on' },
+      term: { fontFamily: 'Permanent Marker', fontWeight: 400 },
+      captions: { preset: 'Handwritten', y: 440, maxWordsPerLine: 4 },
+      filter: 'golden-hour', transition: 'zoom', music: ['ambient', 'cinematic'], voice: 'coral', cards: 'dark', scrim: 0.55,
+    },
+    scenes: (l) => [
+      { id: 'hook', kind: 'hook', spoken: sentence(l.hook), minDur: 3 },
+      ...l.beats.map((b, i) => ({ id: `beat${i}`, kind: 'beat', index: i, spoken: sentence(b.text), captions: true, beat: b, kicker: i === 0 ? 'YOU ARE HERE' : `STEP ${i + 1}` })),
+      ...quizScenes(l, 'Still with me?'), outro(l, 'And that is'),
+    ],
+  },
+
+  hottake: {
+    name: 'Hot take', tag: 'Hot take',
+    blurb: 'An opinion about the topic that sounds wrong, two reasons it is defensible, and a check. People watch to argue.',
+    spec: 'myth: the hot take itself, phrased as an opinion that makes students stop ("Mitosis is the most overrated topic in biology"; max 70 chars). fact: the real point behind it (max 80 chars). beats: exactly 2 reasons that teach the actual content (text, keyTerm, visual). quiz: a question on the content, not the opinion. Leave items, cards, exam.question and chat empty.',
+    weights: { default: 1, history: 3, economics: 3, psychology: 3, business: 3, law: 2, language: 2 },
+    skin: {
+      hook: { fontFamily: 'Anton', fontWeight: 400, fontSize: 170, uppercase: true, animIn: 'word-slam', outline: '#000000', outlineWidth: 6 },
+      term: { fontFamily: 'Anton', fontWeight: 400, uppercase: true },
+      captions: { preset: 'Boxed Red', y: 430, maxWordsPerLine: 3 },
+      filter: 'punch', transition: 'glitch', music: ['dramatic', 'energetic'], voice: 'ash', cards: 'dark', scrim: 0.7, stampSfx: true,
+    },
+    scenes: (l) => [
+      { id: 'hook', kind: 'hook', spoken: sentence(l.hook), minDur: 2.4 },
+      { id: 'take', kind: 'stamp', spoken: `Hot take: ${sentence(l.myth)}`, label: 'HOT TAKE', text: l.myth, color: '#ff6b2c', minDur: 3.5 },
+      ...l.beats.slice(0, 2).map((b, i) => ({ id: `beat${i}`, kind: 'beat', index: i, spoken: sentence(b.text), captions: true, beat: b, kicker: i === 0 ? 'HEAR ME OUT' : 'AND' })),
+      { id: 'point', kind: 'stamp', spoken: `The real point: ${sentence(l.fact)}`, label: 'THE POINT', text: l.fact, color: '#2bbf6a', minDur: 3.5 },
+      ...quizScenes(l, 'Now the check.'), outro(l, 'Agree or not'),
+    ],
+  },
+
+  countdown: {
+    name: 'Countdown', tag: 'Top 3',
+    blurb: 'Counts down to number one with "wait for it" energy: the thing most likely on the exam, the most common mistake, the fact nobody expects.',
+    spec: 'items: exactly 3 ranked things, listed from number 3 down to number 1 (the best, most surprising or most examined one LAST). title max 28 chars, text = one spoken sentence of 10-18 words with a reason, visual query. hook: "The 3 things that will be on your exam" style. quiz required. Leave beats, myth, fact, cards, exam.question and chat empty.',
+    weights: { default: 2, math: 3, physics: 2, chemistry: 2, biology: 2, history: 3, economics: 2, health: 3, space: 3 },
+    skin: {
+      hook: { fontFamily: 'Bebas Neue', fontWeight: 400, fontSize: 176, uppercase: true, animIn: 'slide-up' },
+      term: { fontFamily: 'Bebas Neue', fontWeight: 400 },
+      captions: { preset: 'Hormozi', y: 440, maxWordsPerLine: 3 },
+      filter: 'Blockbuster', transition: 'zoom-blur', music: ['epic', 'energetic'], voice: 'onyx', cards: 'dark', scrim: 0.6, countdown: true,
+    },
+    scenes: (l) => [
+      { id: 'hook', kind: 'hook', spoken: sentence(l.hook), minDur: 2.6 },
+      ...l.items.slice(0, 3).map((it, i) => ({ id: `item${i}`, kind: 'item', index: i, total: 3, number: 3 - i, spoken: `Number ${3 - i}: ${it.title}. ${sentence(it.text)}`, captions: true, item: it })),
+      ...quizScenes(l, 'Did you get it?'), outro(l, 'Number one'),
+    ],
+  },
+
+  speedrun: {
+    name: 'Speedrun', tag: 'Speedrun',
+    blurb: 'The whole unit in 30 seconds: six facts at full pace with a running timer. For revision night.',
+    spec: 'items: exactly 6 facts that together cover the unit, in a logical order (title max 24 chars, text = one spoken sentence of at most 12 words, visual query). hook: "<Unit> in 30 seconds. Go." style. quiz required. Leave beats, myth, fact, cards, exam.question and chat empty.',
+    weights: { default: 2, biology: 3, chemistry: 3, history: 3, law: 3, health: 2, language: 2 },
+    skin: {
+      hook: { fontFamily: 'Bungee', fontWeight: 400, fontSize: 150, uppercase: true, animIn: 'bounce', color: '#ffd93d' },
+      term: { fontFamily: 'Bungee', fontWeight: 400 },
+      captions: { preset: 'Comic Pop', y: 420, maxWordsPerLine: 3 },
+      filter: 'Vivid', transition: 'whip-pan', music: ['energetic', 'upbeat'], voice: 'nova', cards: 'dark', scrim: 0.55, countdown: true,
+    },
+    scenes: (l) => [
+      { id: 'hook', kind: 'hook', spoken: sentence(l.hook), minDur: 2.2 },
+      ...l.items.slice(0, 6).map((it, i) => ({ id: `item${i}`, kind: 'item', index: i, total: Math.min(6, l.items.length), spoken: sentence(it.text), captions: true, item: it, minDur: 2.4 })),
+      { id: 'recap', kind: 'recap', spoken: '', items: l.items.slice(0, 6).map((it) => it.title), minDur: 3.2, title: 'Done. 30 seconds.' },
+      ...quizScenes(l, 'Prove it.'), outro(l, 'Speedrun'),
+    ],
+  },
+
+  guess: {
+    name: 'Guess first', tag: 'Guess first',
+    blurb: 'The question comes first, before any teaching. The viewer commits to an answer, then the explanation lands on a mind that wants to know.',
+    spec: 'exam.question: a surprising, concrete question about the unit with exactly 3 exam.options (max 28 chars) and exam.answerIndex; the wrong options must be what most people guess. beats: exactly 2 that explain the answer (text, keyTerm, visual). exam.steps: []. exam.mistake: "". exam.tip: the one-line takeaway. hook: a one-line setup ("Most students get this wrong"). Leave items, myth, fact, cards, chat and quiz empty.',
+    weights: { default: 3, physics: 3, biology: 3, earth: 3, space: 3, health: 3, psychology: 3, history: 2, economics: 3 },
+    skin: {
+      hook: { fontFamily: 'Montserrat', fontWeight: 900, fontSize: 156, uppercase: false, animIn: 'pop' },
+      term: { fontFamily: 'Montserrat', fontWeight: 900 },
+      captions: { preset: 'Karaoke', y: 430, maxWordsPerLine: 4 },
+      filter: 'Cinematic', transition: 'dissolve', music: ['suspense', 'ambient'], voice: 'sage', cards: 'dark', scrim: 0.62,
+    },
+    scenes: (l) => {
+      const e = l.exam;
+      return [
+        { id: 'hook', kind: 'hook', spoken: sentence(l.hook), minDur: 2.4 },
+        { id: 'question', kind: 'question', spoken: `${question(e.question)} ${e.options.map((o, i) => `${ABC[i]}, ${o}`).join('. ')}. Lock in your answer.`, pauseAfter: 4, minDur: 6, exam: e, label: 'Guess first' },
+        { id: 'answer', kind: 'reveal', spoken: `It's ${ABC[e.answerIndex]}: ${sentence(e.options[e.answerIndex])}`, minDur: 2.5, captions: false, exam: e },
+        ...l.beats.slice(0, 2).map((b, i) => ({ id: `beat${i}`, kind: 'beat', index: i, spoken: sentence(b.text), captions: true, beat: b, kicker: i === 0 ? 'BECAUSE' : 'AND' })),
+        { id: 'outro', kind: 'outro', spoken: sentence(e.tip || l.takeaway), minDur: 3, label: 'Remember', text: e.tip || l.takeaway },
+      ];
+    },
+  },
+
+  wyr: {
+    name: 'Would you rather', tag: 'Would you rather',
+    blurb: 'A dilemma from the unit with two defensible sides; the viewer picks, then learns what actually decides it.',
+    spec: 'quiz.question: a "Would you rather…" dilemma grounded in the unit (max 70 chars) with quiz.options = exactly 3 (the two sides, max 28 chars each, plus "Depends on the case"); quiz.answerIndex = the option the content supports; quiz.explanation = the deciding factor. beats: exactly 2 that teach what decides it (text, keyTerm, visual). hook: the dilemma in one line. Leave items, myth, fact, cards, exam.question and chat empty.',
+    weights: { default: 2, economics: 4, business: 4, health: 3, law: 4, psychology: 3, earth: 2, 'computer-science': 2 },
+    skin: {
+      hook: { fontFamily: 'DM Serif Display', fontWeight: 400, fontSize: 156, uppercase: false, animIn: 'fade-in', animInDuration: 0.8 },
+      term: { fontFamily: 'DM Serif Display', fontWeight: 400 },
+      captions: { preset: 'Clean Subtitle', y: 460, maxWordsPerLine: 5 },
+      filter: 'Matte', transition: 'push', music: ['chill', 'lofi'], voice: 'fable', cards: 'paper', scrim: 0.6,
+    },
+    scenes: (l) => [
+      { id: 'hook', kind: 'hook', spoken: sentence(l.hook), minDur: 3 },
+      ...quizScenes(l, 'Would you rather?'),
+      ...l.beats.slice(0, 2).map((b, i) => ({ id: `beat${i}`, kind: 'beat', index: i, spoken: sentence(b.text), captions: true, beat: b, kicker: i === 0 ? 'WHAT DECIDES IT' : 'AND' })),
+      outro(l, 'So'),
+    ],
+  },
 };
 
 export const FORMAT_IDS = Object.keys(FORMATS);

@@ -1,6 +1,6 @@
 # Video formats
 
-A format is a kind of video: what scenes it has, how it looks and sounds. All eight live in
+A format is a kind of video: what scenes it has, how it looks and sounds. All eighteen live in
 `server/video/formats.js`; the composer (`server/video/compose.js`) renders any of them.
 
 | id | Name | Scenes | Skin highlights |
@@ -13,6 +13,22 @@ A format is a kind of video: what scenes it has, how it looks and sounds. All ei
 | `flashcards` | Flash drill | hook · (question 2.5 s pause → answer) × 4 · score yourself | Permanent Marker, Handwritten captions, Fade grade, paper cards that flip to the accent, lo-fi beat, voice *marin* |
 | `why` | Why? | hook (the question) · BECAUSE · WHICH MEANS · WHICH MEANS · quiz · SO | Archivo Black, Dark Pill captions, Teal grade, zoom cuts, ambient music, voice *echo* |
 | `chat` | DM thread | hook · message bubbles (one per scene) · quiz · in one line | Inter, Minimal captions, Matte grade, push cuts, lo-fi, voice *coral* |
+| `levels` | 3 levels | the same idea for a kid, a student, an expert · quiz | Montserrat, Warm grade, push cuts, voice *marin* |
+| `spotmistake` | Spot it | a worked answer with one wrong step, held while the viewer hunts · the step turns red · the fix | Oswald with a shake, paper cards, cool-clean LUT, tension music, voice *cedar* |
+| `tierlist` | Tier list | 4-5 things ranked C → S, the S-tier last · quiz | Bungee, Comic Pop, Vivid, slide cuts, funky music, voice *nova* |
+| `thisorthat` | This or that | 4 confusable pairs as compare cards · one more as the quiz | Archivo Black, Dark Pill, Teal grade, whip-pans, voice *echo* |
+| `pov` | POV | "you are the…" told in second person, step by step · quiz | Permanent Marker, Handwritten captions, golden-hour LUT, voice *coral* |
+| `hottake` | Hot take | HOT TAKE stamp · two reasons · THE POINT stamp · quiz | Anton, Boxed Red, punch LUT, glitch cuts, dramatic music, voice *ash* |
+| `countdown` | Top 3 | number 3 → 1, the best last · quiz | Bebas Neue, Hormozi captions, Blockbuster grade, epic music, voice *onyx* |
+| `speedrun` | Speedrun | six facts at full pace · silent recap · quiz | Bungee, Comic Pop, Vivid, whip-pans, energetic music, voice *nova* |
+| `guess` | Guess first | the question before any teaching (held) · the answer on the card · two beats why | Montserrat, Karaoke, Cinematic, suspense music, voice *sage* |
+| `wyr` | Would you rather | a dilemma as the quiz (held) · two beats on what decides it | DM Serif Display, Clean Subtitle, Matte, push cuts, voice *fable* |
+
+The second wave is built on what keeps people watching short video: curiosity gaps, "wait for
+number one", a challenge answered before the reveal, rankings to argue with, first-person
+immersion, hot takes. `lessons/claude.js` also rotates hook styles (curiosity gap, challenge,
+surprising number, a question answered in the viewer's head, relatable pain, bold claim) and
+asks for one open loop per episode, closed late.
 
 ## The scene model
 

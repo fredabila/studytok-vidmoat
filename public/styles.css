@@ -79,6 +79,13 @@ mark { background: linear-gradient(transparent 28%, var(--hl) 28%, var(--hl) 88%
 .ob-actions { padding: 12px 20px calc(14px + var(--safe-b)); display: flex; justify-content: center; border-top: 1px solid var(--line); background: var(--paper); }
 .ob-actions .btn { width: min(560px, 100%); }
 
+.field-label { display: block; font-size: 12.5px; font-weight: 600; color: var(--ink-2); letter-spacing: .02em; text-transform: uppercase; margin: 0 0 8px; }
+.ob-who { margin: 0 0 18px; }
+.ob-who .segmented { margin: 8px 0 10px; }
+.ob-age { max-width: 180px; }
+.consent { display: flex; gap: 10px; align-items: flex-start; font-size: 13.5px; line-height: 1.45; color: var(--ink-2); padding: 12px; border-radius: 10px; background: #fff; border: 1.5px solid var(--line-2); margin-top: 8px; }
+.consent input { margin-top: 3px; width: 18px; height: 18px; flex: none; }
+.ob-note { font-size: 13.5px; line-height: 1.45; color: var(--bad); margin: 8px 0 0; }
 .level-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; counter-reset: lvl; }
 .level-card { counter-increment: lvl; position: relative; display: grid; gap: 6px; text-align: left; padding: 16px 14px 14px; border-radius: var(--r); background: #fff;
   border: 1.5px solid var(--line-2); cursor: pointer; transition: border-color .15s, box-shadow .15s, transform .1s; min-height: 118px; align-content: start; }
@@ -284,6 +291,7 @@ body[data-view="feed"] .tabbtn[aria-current="page"] span { color: var(--ink); }
 .sheet { position: fixed; inset: 0; z-index: 50; }
 .sheet-scrim { position: absolute; inset: 0; background: rgba(13, 13, 14, .55); animation: fade .2s; }
 .sheet-panel { position: absolute; left: 0; right: 0; bottom: 0; margin: 0 auto; width: min(560px, 100%); padding: 10px 20px calc(20px + var(--safe-b));
+  max-height: calc(100dvh - 24px); overflow-y: auto; -webkit-overflow-scrolling: touch; overscroll-behavior: contain;
   border-radius: 18px 18px 0 0; background: var(--paper); color: var(--ink); border-top: 3px solid var(--hl); animation: up .3s var(--ease); }
 .sheet-grip { width: 40px; height: 4px; border-radius: 99px; background: var(--line-2); margin: 0 auto 14px; }
 .sheet-panel h3 { margin: 0 0 12px; font-size: 24px; }

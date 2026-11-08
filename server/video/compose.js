@@ -14,7 +14,7 @@
 import { config } from '../core/config.js';
 import { topic as topicOf } from '../curriculum/topics.js';
 import { format as formatOf, scenesFor } from './formats.js';
-import { teachingVisual, stampCard, numberCard, recapCard, questionCard, answerSteps, calloutCard, flashCard, chatThread } from './visuals.js';
+import { teachingVisual, stampCard, numberCard, recapCard, questionCard, answerSteps, calloutCard, flashCard, chatThread, tierCard } from './visuals.js';
 import { isTeachingVisual } from '../lessons/schema.js';
 
 export const W = 1080;
@@ -309,19 +309,37 @@ export function composeLesson(lesson, media = {}) {
         cmds.push(...mediaClip(`item${i}`, m, start, d + 0.3, T.media, { zoom: 1.04 }));
         cmds.push({ op: 'setTransition', clipId: `item${i}`, type: skin.transition || 'whip-pan', duration: 0.35 });
       }
-      cmds.push(...numberCard(card(`num${i}`, start, d), { index: i, total: seg.total, title: seg.item.title }));
+      cmds.push(...numberCard(card(`num${i}`, start, d), { index: seg.number != null ? seg.number - 1 : i, total: seg.total, title: seg.item.title }));
       cmds.push(...sfxClip(uid('pop'), sfx.pop, start + 0.05, 0.5));
+    }
+
+    if (kind === 'tier') {
+      cmds.push(dim(uid('tierDim'), start, d, T.quizDim, look.bg, 0.5));
+      cmds.push(...tierCard(card(`tier${seg.index}`, start, d + 0.05), { items: seg.items, latest: seg.item }));
+      cmds.push(...sfxClip(uid('pop'), sfx.pop, start + 0.1, 0.5));
+    }
+
+    if (kind === 'stepsAll' || kind === 'stepsWrong') {
+      cmds.push(dim(uid('stepDim'), start, d, T.quizDim, look.bg, 0.5));
+      cmds.push(...answerSteps(card(`${kind}${seg.id}`, start, d + 0.05), { steps: seg.steps, exam: seg.exam, mode: kind === 'stepsAll' ? 'all' : 'wrong', wrong: seg.wrong ?? -1 }));
+      if (kind === 'stepsAll') {
+        // Invisible markers for tap-to-answer: options from `opt0`, reveal at `optOk`.
+        cmds.push({ op: 'addShapeClip', clipId: 'opt0', kind: 'rectangle', start: round(start + 0.4), duration: round(d - 0.4), trackIndex: T.quizBox, style: { fill: '#000000', fillOpacity: 0, width: 10, height: 10 }, patch: { y: 900 } });
+        cmds.push({ op: 'addShapeClip', clipId: 'optOk', kind: 'rectangle', start: round(start + d), duration: 1, trackIndex: T.quizBox, style: { fill: '#000000', fillOpacity: 0, width: 10, height: 10 }, patch: { y: 900 } });
+        const pause = seg.pauseAfter || 4;
+        cmds.push(...sfxClip('tick', sfx.tick, start + d - pause + 0.2, 0.3, { duration: pause - 0.3, loop: true }));
+      } else cmds.push(...sfxClip('ding', sfx.ding, start, 0.55));
     }
 
     if (kind === 'recap') {
       cmds.push(dim(uid('recapDim'), start, d, T.quizDim, look.bg, 0.55));
-      cmds.push(...recapCard(card('recap', start, d), { items: seg.items }));
+      cmds.push(...recapCard(card('recap', start, d), { items: seg.items, title: seg.title || 'Recap' }));
       seg.items.forEach((_, k) => cmds.push(...sfxClip(uid('tickItem'), sfx.pop, start + 0.35 + (d * 0.75 * k) / seg.items.length, 0.3)));
     }
 
     if (kind === 'question') {
       cmds.push(dim('qDim', start, d, T.quizDim, look.bg, 0.5));
-      cmds.push(...questionCard(card('exam', start, d), { exam: seg.exam }));
+      cmds.push(...questionCard(card('exam', start, d), { exam: seg.exam, label: seg.label || 'Exam question' }));
       // Invisible markers the app reads for tap-to-answer timing: options from `opt0`, reveal at `optOk`.
       const stepsStart = segments.find((s) => s.kind === 'steps')?.start ?? start + d;
       cmds.push({ op: 'addShapeClip', clipId: 'opt0', kind: 'rectangle', start: round(start + 0.4), duration: round(stepsStart - start - 0.4), trackIndex: T.quizBox, style: { fill: '#000000', fillOpacity: 0, width: 10, height: 10 }, patch: { y: 900 } });
@@ -384,7 +402,12 @@ export function composeLesson(lesson, media = {}) {
       cmds.push(...sfxClip('tick', sfx.tick, quizEnd - pause + 0.2, 0.3, { duration: pause - 0.3, loop: true }));
     }
 
-    if (kind === 'reveal' && lesson.quiz) {
+    if (kind === 'reveal' && seg.exam) {
+      // Guess-first: the answer lands on the question card.
+      cmds.push(dim(uid('revealDim'), start, d, T.quizDim, look.bg, 0.5));
+      cmds.push(...questionCard(card('examOk', start, d), { exam: seg.exam, revealed: true, label: 'The answer' }));
+      cmds.push(...sfxClip('ding', sfx.ding, start, 0.55));
+    } else if (kind === 'reveal' && lesson.quiz) {
       cmds.push(...sfxClip('ding', sfx.ding, start, 0.55));
       if (lesson.quiz.explanation) {
         cmds.push({ op: 'addTextClip', clipId: 'explain', text: lesson.quiz.explanation, start: round(start + 0.2), duration: round(d - 0.2), trackIndex: T.quizText,
@@ -416,7 +439,7 @@ export function composeLesson(lesson, media = {}) {
 
   // When the viewer can answer: options appear at `from`, the video is held at `hold` (the end
   // of the question) until they answer, and the answer shows at `reveal`.
-  const holdSeg = segments.find((s) => s.kind === 'quiz' || s.kind === 'question');
+  const holdSeg = segments.find((s) => s.kind === 'quiz' || s.kind === 'question' || s.kind === 'stepsAll');
   const quiz = holdSeg ? {
     from: round(holdSeg.start + 0.4),
     hold: round(holdSeg.start + holdSeg.duration - (voice ? holdSeg.pauseAfter || 3 : holdSeg.pauseAfter || 3) + 0.1),

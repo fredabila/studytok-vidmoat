@@ -94,6 +94,24 @@ test('events update stats, progress and the library', async () => {
   assert.equal(await recordEvent(user.id, { videoId: 'nope', type: 'view' }), false);
 });
 
+test('under-18s must be set up by a parent or guardian, with consent; children get their own lesson key', async () => {
+  const { checkAgeRules, cleanProfile } = await import('../server/feed/index.js');
+  assert.equal(cleanProfile({ age: '16', managedBy: 'guardian' }).age, 16);
+  assert.equal(cleanProfile({ age: 3 }).age, null, 'out-of-range ages are dropped');
+  assert.throws(() => checkAgeRules(cleanProfile({ age: 15 })), /parent or guardian/);
+  assert.throws(() => checkAgeRules(cleanProfile({ age: 15, managedBy: 'guardian' })), /confirm/);
+  checkAgeRules(cleanProfile({ age: 15, managedBy: 'guardian' }), { guardianConsent: true });
+  checkAgeRules(cleanProfile({ age: 30 }));
+  await assert.rejects(saveProfile(null, { profile: { level: 'high-school', age: 12 } }), /parent or guardian/);
+  const kid = await saveProfile(null, { profile: { level: 'middle-school', age: 11, managedBy: 'guardian' }, guardianConsent: true });
+  assert.ok(kid.guardianConsentAt);
+  const a = audienceFor(kid);
+  assert.ok(a.child && a.minor && a.lessonStyle.includes('age:child'), 'children get separate lessons');
+  assert.ok(!audienceFor(await saveProfile(null, { profile: { level: 'university', age: 19 } })).minor);
+  const again = await saveProfile(kid.id, { profile: { ...kid.profile }, units: [] });
+  assert.ok(again.guardianConsentAt, 'consent is kept on later edits without re-asking');
+});
+
 test('a profile with nothing chosen falls back to every interest topic', async () => {
   const user = await saveProfile(null, { profile: { level: 'lifelong' } });
   assert.ok(user.interests.length >= 10);
@@ -114,6 +132,11 @@ test('publicVideo includes the document and quiz only when ready', async () => {
   const p2 = await publicVideo(gen, user.id);
   assert.equal(p2.document, undefined);
   assert.equal(p2.quiz, null);
+  // Videos made before the quiz hold existed get a hold point 3 s before the reveal (their think pause).
+  assert.equal(pub.quiz.hold, 20, 'legacy quiz {from: 20, reveal: 23} holds at reveal - 3, never before from');
+  const held = { ...gen, id: crypto.randomUUID(), status: 'ready', quiz: { question: 'q', options: ['a', 'b', 'c'], answerIndex: 0, from: 10, hold: 14.5, reveal: 18 } };
+  await db.saveVideo(held);
+  assert.equal((await publicVideo(held, user.id, { withDocument: false })).quiz.hold, 14.5, 'a stored hold is kept');
 });
 
 test('a generation stuck for minutes reads as failed', async () => {

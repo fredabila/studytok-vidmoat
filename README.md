@@ -23,9 +23,9 @@ feed request ─► algorithm picks units ─► best unseen ready video for tha
    -> commands -> POST /v1/projects (1 call) -> GET ?view=document -> Redis -> /embed/player
 ```
 
-## Eight video formats (25 to 50 seconds each)
+## Eighteen video formats (25 to 50 seconds each)
 
-Every lesson is written in one of eight **formats** (`server/formats.js`), each with its own
+Every lesson is written in one of eighteen **formats** (`server/formats.js`), each with its own
 structure, typography, caption preset, colour grade, transitions, music mood, narrator voice and
 card theme, so the feed feels like TikTok rather than one template on repeat:
 
@@ -39,6 +39,13 @@ card theme, so the feed feels like TikTok rather than one template on repeat:
 | **Flash drill** | Four question/answer cards with a beat to answer each; paper cards that flip to the accent colour. Handwritten captions, lo-fi beat. |
 | **Why?** | One big why, answered as BECAUSE → WHICH MEANS → SO. Archivo Black, teal grade, zoom cuts. |
 | **DM thread** | A student texts a tutor; the answer unfolds bubble by bubble. Inter, matte grade, push cuts. |
+
+The second wave adds the hooks short video runs on: **3 levels** (kid → student → expert),
+**Spot the mistake** (a worked answer with one wrong step, held while you hunt), **Tier list**,
+**This or that**, **POV** ("you are a red blood cell"), **Hot take**, **Countdown** (3 → 1),
+**Speedrun** (the unit in 30 s), **Guess first** (the question before any teaching) and
+**Would you rather**. The writer rotates hook styles and opens a loop in every episode that it
+closes late. Full table in [docs/FORMATS.md](docs/FORMATS.md).
 
 Claude writes each batch of episodes in a rotation of formats weighted by topic (maths leans on
 exam drills, history on stories) and steered away from what the unit used most recently; the
@@ -69,6 +76,10 @@ lesson of any format (`server/lessons/samples.js`) into a real project and saves
 * **Landing page**: new visitors see what StudyTok is (sample cards of every format, how it
   works, what's inside), an *Install the app* button and *Continue with Vidmoat*, with a footer
   crediting Vidmoat, a Buzz Innovations Ltd. company, and linking to this repository.
+* **Age**: onboarding asks who the profile is for and their age. Vidmoat accounts are for
+  adults, so anyone under 18 is set up by a parent or guardian ("My child") on the adult's
+  account, with consent recorded; under-13s get their own, gentler lessons (own lesson key, no
+  opinion-led formats) and the writer is told the viewer's age for every episode.
 * **Credits**: each student's first `STUDYTOK_FREE_VIDEOS` (15) videos are made on your Vidmoat
   key; then they connect their own Vidmoat account (*Use my Vidmoat account*: the same OAuth
   flow with the generation scopes, tokens sealed at rest) and every video they trigger spends

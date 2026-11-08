@@ -208,19 +208,45 @@ export function questionCard({ id, start, duration, track, accent, theme = 'pape
 }
 
 /** Exam drill: the worked solution, one step lit at a time, under the answer line. */
-export function answerSteps({ id, start, duration, track, accent, theme = 'paper' }, { steps, index, exam }) {
+/**
+ * Exam drill: the worked solution, one step lit at a time, under the answer line. `mode`:
+ * 'walk' (default: step `index` lit), 'all' (every step shown equally: spot the mistake), 'wrong'
+ * (step `wrong` turned red).
+ */
+export function answerSteps({ id, start, duration, track, accent, theme = 'paper' }, { steps, index = 0, exam, mode = 'walk', wrong = -1, heading }) {
   const t = themeOf(theme, accent);
   const h = 900;
   const list = steps.slice(0, 4);
+  const answer = exam?.options?.length ? `<div class="ans"><b>${ABC[exam.answerIndex]}</b><span>${esc(exam.options[exam.answerIndex])}</span></div>` : `<div class="q">${esc(exam?.question || '')}</div>`;
+  const cls = (i) => (mode === 'all' ? ' on' : mode === 'wrong' ? (i === wrong ? ' bad' : ' done') : i < index ? ' done' : i === index ? ' on' : '');
   return html(id, start, duration, track,
-    `<div class="c as"><div class="ans"><b>${ABC[exam.answerIndex]}</b><span>${esc(exam.options[exam.answerIndex])}</span></div><div class="h">Working</div>${list.map((s, i) =>
-      `<div class="r${i < index ? ' done' : i === index ? ' on' : ''}"><b>${i + 1}</b><span>${esc(s)}</span></div>`).join('')}</div>`,
+    `<div class="c as">${answer}<div class="h">${esc(heading || (mode === 'all' ? 'One step is wrong' : mode === 'wrong' ? 'The mistake' : 'Working'))}</div>${list.map((s, i) =>
+      `<div class="r${cls(i)}"><b>${mode === 'wrong' && i === wrong ? '✗' : i + 1}</b><span>${esc(s)}</span></div>`).join('')}</div>`,
     cardCss(accent, theme, `.as{gap:22px;justify-content:flex-start}
 .ans{display:flex;align-items:center;gap:24px;background:${accent};color:${t.onAccent};border-radius:28px;padding:20px 28px;font-size:46px;font-weight:900;line-height:1.1;margin-bottom:8px}
 .ans b{flex:none;width:72px;height:72px;border-radius:50%;background:${t.onAccent};color:${accent};display:flex;align-items:center;justify-content:center}
+.q{font-size:${(exam?.question || '').length > 70 ? 40 : 48}px;font-weight:800;line-height:1.2;margin-bottom:6px}
 .r{display:flex;align-items:flex-start;gap:24px;font-size:40px;font-weight:700;line-height:1.2;opacity:.3}.r.done{opacity:.7}.r.on{opacity:1}
-.r b{flex:none;width:64px;height:64px;border-radius:50%;background:${t.cell};display:flex;align-items:center;justify-content:center;font-size:36px}.r.on b{background:${accent};color:${t.onAccent}}`, { h }),
-    { y: -80, h, motion: index === 0 ? 'slide-up' : undefined });
+.r b{flex:none;width:64px;height:64px;border-radius:50%;background:${t.cell};display:flex;align-items:center;justify-content:center;font-size:36px}.r.on b{background:${accent};color:${t.onAccent}}
+.r.bad{opacity:1;color:#c43d33;text-decoration:line-through}.r.bad b{background:#e5484d;color:#fff;text-decoration:none}`, { h }),
+    { y: -80, h, motion: index === 0 && mode === 'walk' ? 'slide-up' : mode === 'all' ? 'slide-up' : undefined });
+}
+
+/** Tier list: rows S / A / B / C filling up as items are ranked; the newest item is highlighted. */
+export function tierCard({ id, start, duration, track, accent, theme = 'dark' }, { items, latest }) {
+  const t = themeOf(theme, accent);
+  const colors = { S: '#ff5a5f', A: '#ff9f43', B: '#ffd93d', C: '#8fc1ff' };
+  const rows = ['S', 'A', 'B', 'C'].map((tier) => {
+    const here = items.filter((it) => (it.tier || 'B') === tier);
+    return `<div class="row"><b style="background:${colors[tier]}">${tier}</b><div class="cells">${here.map((it) => `<span class="${it === latest ? 'new' : ''}">${esc(it.title)}</span>`).join('')}</div></div>`;
+  }).join('');
+  return html(id, start, duration, track,
+    `<div class="c tl">${rows}</div>`,
+    cardCss(accent, theme, `.tl{gap:16px;justify-content:center;padding:40px 44px}
+.row{display:flex;align-items:stretch;gap:16px;min-height:118px}.row b{flex:none;width:118px;border-radius:22px;display:flex;align-items:center;justify-content:center;font-family:'Bungee','Anton',${FONT};font-size:64px;color:#0b0b0b}
+.cells{flex:1;display:flex;flex-wrap:wrap;gap:12px;align-content:center;background:${t.cell};border-radius:22px;padding:12px}
+.cells span{font-size:34px;font-weight:800;line-height:1.1;padding:12px 18px;border-radius:16px;background:rgba(255,255,255,.1)}.cells span.new{background:${accent};color:${t.onAccent};transform:scale(1.04)}`, { pad: '40px 44px' }),
+    { motion: latest === items[0] ? 'slide-up' : undefined });
 }
 
 /** A labelled callout (common mistake, tip). */

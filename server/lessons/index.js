@@ -37,7 +37,9 @@ async function writeBatch(unit, audience, key, covered) {
   const recent = ((await kv.lrange(`formats:${key}`, 0, 9)) || []).reverse();
   // Formats that students on this topic actually watch through get written more often.
   const performance = await formatPerformance(unit.topic, FORMAT_IDS).catch(() => ({}));
-  const formats = pickFormats(unit.topic, config.anthropic.episodesPerCall, { recent, performance });
+  // Children under 13 do not get the opinion-led formats.
+  const allowed = audience.child ? FORMAT_IDS.filter((f) => !['hottake', 'wyr'].includes(f)) : FORMAT_IDS;
+  const formats = pickFormats(unit.topic, config.anthropic.episodesPerCall, { recent, performance, allowed });
   const raws = await writeEpisodes({
     unit, audience, covered, formats, count: formats.length, accent: topicOf(unit.topic).accent,
   });

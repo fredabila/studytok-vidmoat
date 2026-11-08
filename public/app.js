@@ -76,9 +76,30 @@ function toast(msg) {
 }
 
 // ============================================================================ onboarding
-const ob = { level: null, step: 1, profile: {}, interests: new Set(), programs: [], selected: new Set() };
+const ob = { level: null, step: 1, profile: {}, interests: new Set(), programs: [], selected: new Set(), who: 'self' };
+const ageOf = () => { const n = Number($('#ob-age').value); return Number.isInteger(n) && n >= 5 && n <= 120 ? n : null; };
+const ageBand = (age) => (age == null ? '' : age < 13 ? 'under13' : age < 18 ? '13-17' : '18+');
+/** Who the profile is for, and the rules: under-18s are set up by a parent or guardian on the adult's Vidmoat account. */
+function wireWho() {
+  const draw = () => {
+    $$('#ob-who [data-who]').forEach((b) => b.setAttribute('aria-checked', String(b.dataset.who === ob.who)));
+    $('#ob-age-label').textContent = ob.who === 'child' ? "Your child's age" : 'Your age';
+    $('#ob-consent').hidden = ob.who !== 'child';
+    $('#ob-minor-note').hidden = true;
+  };
+  $$('#ob-who [data-who]').forEach((b) => { b.onclick = () => { ob.who = b.dataset.who; draw(); }; });
+  draw();
+}
+function validateWho() {
+  const age = ageOf();
+  if (age == null) { toast('Please enter an age (5 to 120).'); $('#ob-age').focus(); return false; }
+  if (ob.who === 'self' && age < 18) { $('#ob-minor-note').hidden = false; toast('A parent or guardian needs to set this up.'); return false; }
+  if (ob.who === 'child' && !$('#ob-consent-box').checked) { toast('Please confirm you are the parent or guardian.'); return false; }
+  return true;
+}
 
 function showStep(n) {
+  if (n === 2 && ob.step === 1 && !validateWho()) return;
   ob.step = n;
   $$('#onboard .step').forEach((s) => { s.hidden = s.dataset.step !== String(n); });
   $$('#onboard [data-step-action]').forEach((b) => { b.hidden = b.dataset.stepAction !== String(n); });
@@ -221,7 +242,7 @@ async function buildSyllabus() {
 
 function profileBody() {
   const units = ob.programs.flatMap((p) => p.program.units.map((u) => u.id)).filter((id) => ob.selected.has(id));
-  return { profile: { ...ob.profile, level: ob.level }, programKeys: ob.programs.map((p) => p.program.key), units, interests: [...ob.interests] };
+  return { profile: { ...ob.profile, level: ob.level, age: ageOf(), managedBy: ob.who === 'child' ? 'guardian' : 'self' }, guardianConsent: ob.who === 'child' && $('#ob-consent-box').checked, programKeys: ob.programs.map((p) => p.program.key), units, interests: [...ob.interests] };
 }
 
 async function runOnboarding(prefill) {
@@ -231,7 +252,11 @@ async function runOnboarding(prefill) {
     ob.interests = new Set(prefill.interests || []);
     const form = $('#details');
     for (const k of ['country', 'institution', 'program', 'exam']) form[k].value = prefill.profile[k] || '';
+    ob.who = prefill.profile.managedBy === 'guardian' ? 'child' : 'self';
+    $('#ob-age').value = prefill.profile.age || '';
+    if (ob.who === 'child') $('#ob-consent-box').checked = true;
   }
+  wireWho();
   renderLevels();
   renderTopics();
   $('#countries').replaceChildren(...COUNTRIES.map((c) => el('option', { value: c })));
@@ -252,7 +277,13 @@ async function runOnboarding(prefill) {
   };
 
   await new Promise((resolve) => { $('#start').onclick = resolve; });
-  await api('POST', '/api/profile', profileBody());
+  try {
+    await api('POST', '/api/profile', profileBody());
+  } catch (err) {
+    toast(err.message || "Couldn't save your profile.");
+    showStep(1);
+    return runOnboarding({ ...(prefill || {}), profile: profileBody().profile, interests: [...ob.interests] });
+  }
   me = (await api('GET', '/api/me')).user;
   $('#onboard').hidden = true;
   $('#app').hidden = false;
@@ -916,8 +947,8 @@ function renderProfile() {
   const lvl = cfg.levels.find((l) => l.id === p.level);
   $('#profile-card').replaceChildren(
     el('div', { class: 'avatar', 'aria-hidden': 'true' }, (me?.vidmoat?.name || 'S').trim().charAt(0).toUpperCase()),
-    el('div', {}, el('h3', {}, me?.vidmoat?.name || 'Guest learner'), el('p', {}, [lvl?.label, p.institution].filter(Boolean).join(' · ') || 'Exploring'),
-      me?.vidmoat ? el('span', { class: 'badge' }, '✓ Synced with Vidmoat') : null),
+    el('div', {}, el('h3', {}, me?.vidmoat?.name || 'Guest learner'), el('p', {}, [lvl?.label, p.institution, p.age ? `age ${p.age}` : null].filter(Boolean).join(' · ') || 'Exploring'),
+      me?.vidmoat ? el('span', { class: 'badge' }, p.managedBy === 'guardian' ? '✓ Set up by a parent or guardian' : '✓ Synced with Vidmoat') : null),
   );
 
   renderCredits();
@@ -977,7 +1008,7 @@ function renderCredits() {
 
   if (b.mode === 'own') {
     const problemText = { exhausted: "You're out of Vidmoat credits, so new lessons are paused. Top up and they resume on their own.", plan: 'Your Vidmoat plan does not include AI speech yet. Upgrade to keep making narrated lessons.', reconnect: 'StudyTok lost access to your account. Connect it again to keep going.' }[b.problem];
-    card.replaceChildren(el('h3', {}, 'Credits · your Vidmoat account'),
+    card.replaceChildren(el('h3', {}, me?.profile?.managedBy === 'guardian' ? "Credits · the parent's Vidmoat account" : 'Credits · your Vidmoat account'),
       el('div', { class: 'credit-big' }, b.credits == null ? '—' : `${b.credits.toLocaleString()} credits`),
       el('p', { class: 'muted' }, problemText || `New lessons you trigger are made on your account (about 20 credits each)${b.plan ? ` · ${b.plan} plan` : ''}. Lessons already in the library are free to watch.`),
       el('div', { class: 'credit-actions' }, ...(b.problem === 'reconnect' ? [connect('Reconnect')] : [buy()]), ...(b.houseLeft > 0 ? [useHouse] : []), disconnect));
@@ -1071,6 +1102,16 @@ const SAMPLE_HOOKS = {
   flashcards: { topic: 'Chemistry', accent: '#a78bfa', hook: 'Say it before it <em>appears</em>', card: ['Question 1 / 4', 'Unit of amount of substance?'] },
   why: { topic: 'Geography', accent: '#60a5fa', hook: 'Why does it rain <em>more</em> near the equator?', card: ['Because', 'Hot air rises and cools'] },
   chat: { topic: 'Computer science', accent: '#2dd4bf', hook: 'Is recursion just a <em>loop</em> in disguise?', card: ['Tutor Ama', 'Not quite. Every call gets its own frame…'] },
+  levels: { topic: 'Chemistry', accent: '#a78bfa', hook: 'Entropy for a <em>kid</em>, a student, a professor', card: ['Level 2 · student', 'Disorder, measured in J/K'] },
+  spotmistake: { topic: 'Maths', accent: '#f472b6', hook: 'One step here is <em>wrong</em>. Find it', card: ['Step 3', '= 2x − 5x = 3x'] },
+  tierlist: { topic: 'History', accent: '#fbbf24', hook: 'Ranking the causes of <em>WW1</em>', card: ['S tier', 'Alliance system'] },
+  thisorthat: { topic: 'Biology', accent: '#34d399', hook: 'Mitosis or <em>meiosis</em>?', card: ['This or that', 'Mitosis | Meiosis'] },
+  pov: { topic: 'Biology', accent: '#2dd4bf', hook: 'POV: you are a <em>red blood cell</em>', card: ['You are here', 'Left ventricle → aorta'] },
+  hottake: { topic: 'Economics', accent: '#f5b971', hook: 'GDP is a <em>terrible</em> measure. Hear me out', stamp: 'Hot take', card: ['The point', 'It counts output, not wellbeing'] },
+  countdown: { topic: 'Physics', accent: '#8fc1ff', hook: '3 things that will be on your <em>exam</em>', card: ['03', 'Energy conservation'] },
+  speedrun: { topic: 'Geography', accent: '#60a5fa', hook: 'Plate tectonics in <em>30 seconds</em>', card: ['06 / 06', 'Subduction'] },
+  guess: { topic: 'Space', accent: '#8fc1ff', hook: 'Most students get this <em>wrong</em>', card: ['Guess first', 'Why is the sky dark at night?'] },
+  wyr: { topic: 'Law', accent: '#f472b6', hook: 'Would you rather sue in <em>tort</em> or contract?', card: ['Would you rather', 'Tort · Contract · Depends'] },
 };
 function renderLanding(notice) {
   const wrap = $('#ld-samples');
@@ -1153,7 +1194,7 @@ async function boot() {
     $('#sound-gate').hidden = true;
   }
   ensureEndSlide();
-  track('session_start', { source: matchMedia('(display-mode: standalone)').matches || navigator.standalone ? 'app' : 'browser', entry: linked ? 'link' : hash ? hash.slice(1, 12) : 'feed' });
+  track('session_start', { source: matchMedia('(display-mode: standalone)').matches || navigator.standalone ? 'app' : 'browser', entry: linked ? 'link' : hash ? hash.slice(1, 12) : 'feed', ageBand: ageBand(me?.profile?.age) });
   if (hash === '#library' || hash === '#profile') showView(hash.slice(1)); else showView('feed');
   if (linked) await openVideo(linked);
   await loadMore(3);
