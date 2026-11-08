@@ -23,6 +23,15 @@ export const config = {
     workspaceId: process.env.VIDMOAT_WORKSPACE_ID || '',
   },
 
+  // Sign in with Vidmoat (identity only: scope account.read, never credits). Create an OAuth
+  // client for your app in the Vidmoat developer console with the redirect URI
+  // https://<your domain>/api/auth/vidmoat/callback
+  oauth: {
+    clientId: process.env.VIDMOAT_OAUTH_CLIENT_ID || '',
+    clientSecret: process.env.VIDMOAT_OAUTH_CLIENT_SECRET || '',
+    publicUrl: (process.env.STUDYTOK_PUBLIC_URL || '').replace(/\/$/, ''),
+  },
+
   anthropic: {
     // When unset, lessons come from the built-in offline bank (server/lessons/bank.js).
     enabled: Boolean(process.env.ANTHROPIC_API_KEY || process.env.ANTHROPIC_AUTH_TOKEN),

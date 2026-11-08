@@ -38,6 +38,8 @@ export async function saveProfile(userId, body) {
       : typeof body.programKey === 'string' ? [body.programKey.slice(0, 40)] : existing?.programKeys || [],
     units: Array.isArray(body.units) ? body.units.map(String).slice(0, 40) : existing?.units || [],
     interests: Array.isArray(body.interests) ? body.interests.filter((t) => TOPIC_BY_ID[t]).slice(0, 14) : existing?.interests || [],
+    vidmoat: existing?.vidmoat || null,
+    setupDone: true,
   };
   // A student needs something to watch: with nothing chosen, fall back to all interest topics.
   if (!user.units.length && !user.interests.length) user.interests = INTEREST_TOPICS.map((t) => t.id);
@@ -64,7 +66,14 @@ async function updateProgress(userId, unitId, type, extra) {
 async function candidatesFor(user) {
   const out = [];
   const course = (await Promise.all(user.units.map((id) => getUnit(id)))).filter(Boolean);
-  course.forEach((unit, order) => out.push({ unit, kind: 'course', order, group: unit.programKey || 'course' }));
+  const sizes = {};
+  for (const u of course) sizes[u.programKey || 'course'] = (sizes[u.programKey || 'course'] || 0) + 1;
+  const seen = {};
+  course.forEach((unit, order) => {
+    const group = unit.programKey || 'course';
+    seen[group] = (seen[group] || 0) + 1;
+    out.push({ unit, kind: 'course', order, group, pos: { index: seen[group], total: sizes[group] } });
+  });
   for (const t of user.interests) {
     const unit = interestUnit(t);
     if (unit && !out.some((c) => c.unit.id === unit.id)) out.push({ unit, kind: 'interest' });
@@ -126,7 +135,7 @@ export async function nextItems(userId, count = 3) {
         await kv.lpush(`user:${userId}:generating`, video.id);
       }
       taken.add(video.id);
-      items.push({ video, unit: pick.unit, why: pick.parts });
+      items.push({ video, unit: pick.unit, why: { ...pick.parts, kind: pick.kind }, pos: pick.pos || null });
     } else if (!ready && generating < config.generation.readyAhead) {
       // Prefetch: start the likely next units now so they are ready when the viewer gets there.
       const started = await startVideo(pick.unit, audience, { requestedBy: userId });
@@ -186,7 +195,7 @@ export async function recordEvent(userId, { videoId, type, watchedSec = 0, corre
 
 // ---------------------------------------------------------------- views for the browser
 /** What the browser gets. The Vidmoat document is included only once the video is ready. */
-export async function publicVideo(v, userId, { withDocument = true, why } = {}) {
+export async function publicVideo(v, userId, { withDocument = true, why, pos } = {}) {
   const look = TOPIC_BY_ID[v.topic] || TOPIC_BY_ID.biology;
   const ready = v.status === 'ready';
   const [stats, liked, saved, document] = await Promise.all([
@@ -212,6 +221,7 @@ export async function publicVideo(v, userId, { withDocument = true, why } = {}) 
     liked, saved,
     likes: stats.likes,
     why: why || undefined,
+    position: pos || undefined,
     document: document || undefined,
   };
 }
@@ -234,7 +244,7 @@ export async function library(userId) {
   const units = await Promise.all(user.units.map(async (id) => {
     const u = await getUnit(id);
     const s = states[id];
-    return u ? { id, title: u.title, topic: u.topic, mastery: mastery(s), views: s?.views || 0, dueForReview: Boolean(s?.due && s.due <= Date.now() && s.lastSeen) } : null;
+    return u ? { id, title: u.title, topic: u.topic, programKey: u.programKey || null, mastery: mastery(s), views: s?.views || 0, dueForReview: Boolean(s?.due && s.due <= Date.now() && s.lastSeen) } : null;
   }));
   return {
     profile: user.profile,
@@ -260,4 +270,30 @@ export async function topUpLibrary({ units = 8, min = 4 } = {}) {
     pending.push(started.done);
   }
   return pending;
+}
+
+/**
+ * Links a Vidmoat identity to a StudyTok profile (Sign in with Vidmoat).
+ *  - identity already linked to a profile  -> that profile is restored on this device
+ *  - otherwise                            -> the current guest profile (or a new one) is linked
+ * Only { id, name, email } is kept: no tokens, nothing that can spend credits.
+ */
+export async function linkVidmoat(currentUserId, identity) {
+  const linkedId = await kv.get(`vidmoat:${identity.id}`);
+  const vidmoat = { id: identity.id, name: identity.name, email: identity.email, linkedAt: new Date().toISOString() };
+  if (linkedId) {
+    const linked = await db.getUser(linkedId);
+    if (linked) {
+      const user = { ...linked, vidmoat: { ...linked.vidmoat, ...vidmoat } };
+      await db.saveUser(user);
+      return { user, restored: linkedId !== currentUserId };
+    }
+  }
+  const current = currentUserId ? await db.getUser(currentUserId) : null;
+  const user = current
+    ? { ...current, vidmoat }
+    : { id: randomUUID(), createdAt: new Date().toISOString(), profile: cleanProfile(), programKeys: [], units: [], interests: [], vidmoat, setupDone: false };
+  await db.saveUser(user);
+  await kv.set(`vidmoat:${identity.id}`, user.id);
+  return { user, restored: false };
 }

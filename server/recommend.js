@@ -91,7 +91,10 @@ export function scoreUnits(candidates, states, recent = [], { now = Date.now(), 
     const s = { ...emptyState(), ...states[c.unit.id] };
     const engaged = s.completes + 2 * s.likes + s.quizRight;
     const disengaged = s.skips + 3 * s.less + 0.5 * s.quizWrong;
-    const affinity = sampleBeta(1 + engaged, 1 + disengaged, rand);
+    // With no engagement data the sample is pure noise and would override the syllabus order;
+    // trust it in proportion to the evidence (half-weight after 3 signals).
+    const confidence = (engaged + disengaged) / (engaged + disengaged + 3);
+    const affinity = confidence * sampleBeta(1 + engaged, 1 + disengaged, rand) + (1 - confidence) * 0.5;
 
     let progress = 0;
     if (c.kind === 'course') {

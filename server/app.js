@@ -9,10 +9,12 @@ import { LEVELS } from './levels.js';
 import { catalogNames } from './catalog.js';
 import { usingRedis, redisSource, redisLikeVarNames } from './kv.js';
 import * as db from './db.js';
-import { saveProfile, nextItems, recordEvent, publicVideo, library, topUpLibrary, cleanProfile } from './feed.js';
+import { saveProfile, nextItems, recordEvent, publicVideo, library, topUpLibrary, cleanProfile, linkVidmoat } from './feed.js';
 import { resolveProgram, getProgram } from './curriculum.js';
 import { queueStats } from './generator.js';
 import { getMe } from './vidmoat.js';
+import { signInEnabled, startSignIn, finishSignIn } from './auth.js';
+import { kv } from './kv.js';
 
 const EVENT_TYPES = new Set(['view', 'complete', 'like', 'unlike', 'save', 'unsave', 'skip', 'less', 'leave', 'quiz_answer']);
 
@@ -23,9 +25,12 @@ export const SECURITY_HEADERS = {
     "default-src 'self'",
     `frame-src ${config.vidmoat.playerOrigin}`,
     "img-src 'self' https: data:",
-    "style-src 'self'",
+    "style-src 'self' https://fonts.googleapis.com",
+    "font-src 'self' https://fonts.gstatic.com",
     "script-src 'self'",
     "connect-src 'self'",
+    "manifest-src 'self'",
+    "worker-src 'self'",
     "frame-ancestors 'none'",
   ].join('; '),
 };
@@ -65,6 +70,10 @@ async function cookieUser(req) {
   return m && (await db.getUser(m[1])) ? m[1] : null;
 }
 const userCookie = (req, id) => `st_uid=${id}; Path=/; HttpOnly; SameSite=Lax; Max-Age=31536000${isHttps(req) ? '; Secure' : ''}`;
+const clearCookie = (req, name) => `${name}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0${isHttps(req) ? '; Secure' : ''}`;
+const stateCookie = (req, v) => `st_oauth=${v}; Path=/api/auth; HttpOnly; SameSite=Lax; Max-Age=600${isHttps(req) ? '; Secure' : ''}`;
+const cookieValue = (req, name) => new RegExp(`(?:^|;\\s*)${name}=([^;]+)`).exec(req.headers.cookie || '')?.[1] || null;
+const redirect = (res, location, cookies = []) => { res.writeHead(302, { Location: location, 'Cache-Control': 'no-store', ...(cookies.length ? { 'Set-Cookie': cookies } : {}) }); res.end(); };
 
 // Storage status for /api/health. Only variable NAMES are reported, never values.
 function storageInfo() {
@@ -116,6 +125,7 @@ async function route(req, res, url) {
     return send(res, 200, {
       playerOrigin: config.vidmoat.playerOrigin,
       research: config.anthropic.enabled,
+      vidmoatSignIn: signInEnabled(),
       levels: LEVELS.map(({ id, label, emoji }) => ({ id, label, emoji })),
       topics: INTEREST_TOPICS.map(({ id, label, emoji, accent }) => ({ id, label, emoji, accent })),
     });
@@ -159,6 +169,30 @@ async function route(req, res, url) {
     return program ? send(res, 200, { program }) : send(res, 404, { error: 'Not found' });
   }
 
+  // ---- Sign in with Vidmoat (identity only; see server/auth.js) ----
+  if (key === 'GET /api/auth/vidmoat/start') {
+    if (!signInEnabled()) return redirect(res, '/?auth=unavailable');
+    const { url: to, state } = await startSignIn(req);
+    return redirect(res, to, [stateCookie(req, state)]);
+  }
+  if (key === 'GET /api/auth/vidmoat/callback') {
+    const state = url.searchParams.get('state');
+    const code = url.searchParams.get('code');
+    if (url.searchParams.get('error') || !code) return redirect(res, '/?auth=cancelled#profile', [clearCookie(req, 'st_oauth')]);
+    if (!state || state !== cookieValue(req, 'st_oauth')) return redirect(res, '/?auth=error#profile', [clearCookie(req, 'st_oauth')]);
+    try {
+      const identity = await finishSignIn({ code, state });
+      const { user, restored } = await linkVidmoat(await cookieUser(req), identity);
+      return redirect(res, `/?auth=${restored ? 'restored' : 'linked'}#profile`, [userCookie(req, user.id), clearCookie(req, 'st_oauth')]);
+    } catch (err) {
+      console.error('[auth]', err.message);
+      return redirect(res, '/?auth=error#profile', [clearCookie(req, 'st_oauth')]);
+    }
+  }
+  if (key === 'POST /api/auth/signout') {
+    return send(res, 200, { ok: true }, { 'Set-Cookie': clearCookie(req, 'st_uid') });
+  }
+
   // Create or update the viewer's profile (sets the session cookie).
   if (key === 'POST /api/profile' || key === 'POST /api/session') {
     const body = await readJson(req);
@@ -172,7 +206,9 @@ async function route(req, res, url) {
 
   if (key === 'GET /api/me') {
     const [u, seen, liked] = await Promise.all([db.getUser(userId), db.countSet(userId, 'seen'), db.countSet(userId, 'liked')]);
-    return send(res, 200, { user: { ...u, seen, liked } });
+    // Legacy profiles (before setupDone existed) count as set up when they have content.
+    const setupDone = u.setupDone ?? Boolean(u.units?.length || u.interests?.length);
+    return send(res, 200, { user: { ...u, setupDone, seen, liked } });
   }
 
   if (key === 'GET /api/library') return send(res, 200, await library(userId));
@@ -182,7 +218,7 @@ async function route(req, res, url) {
     const { items, pending } = await nextItems(userId, count);
     // Keep generating after the response (serverless) / let it run (long-lived server).
     if (pending.length) waitUntil(Promise.allSettled(pending));
-    return send(res, 200, { items: await Promise.all(items.map((x) => publicVideo(x.video, userId, { why: x.why }))) });
+    return send(res, 200, { items: await Promise.all(items.map((x) => publicVideo(x.video, userId, { why: x.why, pos: x.pos }))) });
   }
 
   const videoMatch = /^\/api\/videos\/([0-9a-f-]{36})$/.exec(path);
