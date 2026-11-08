@@ -11,8 +11,9 @@ import { level as levelOf, LEVEL_BY_ID } from '../curriculum/levels.js';
 import { getUnit, getProgram, interestUnit, customUnit } from '../curriculum/index.js';
 import { lessonKey } from '../lessons/index.js';
 import { startVideo, readyKeyFor } from '../video/generator.js';
-import { pickUnits, mastery, scoreVideo, exploreRate, applyEvent, emptyState } from './ranking.js';
-import { ingest, getSignals, getSession, noteServed, noteBreather } from './events.js';
+import { pickUnits, mastery, scoreVideo, exploreRate, applyEvent, emptyState, examUrgency } from './ranking.js';
+import { pickRecall, noteRecall, recallItem, getMisses } from './recall.js';
+import { ingest, getSignals, getSession, noteServed, noteBreather, studentStats } from './events.js';
 import { needsBreather, pickBreather, isBreatherUnit, BREATHER_REASONS } from './breathers.js';
 import { pickMoment, noteMoment, momentContext, momentItem } from './moments.js';
 import * as push from '../core/push.js';
@@ -31,6 +32,7 @@ export function cleanProfile(p = {}) {
     institution: clean(p.institution, 120),
     program: clean(p.program, 120),
     exam: clean(p.exam, 60),
+    examDate: /^\d{4}-\d{2}-\d{2}$/.test(p.examDate || '') && !Number.isNaN(Date.parse(p.examDate)) ? p.examDate : null,
     // Age and who manages the profile. Vidmoat accounts are for adults, so anyone under 18 is set
     // up by a parent or guardian on the adult's account ('guardian'), with their consent recorded.
     age,
@@ -184,7 +186,7 @@ async function candidatesFor(user) {
 /** A due unit's lessons are retrieval practice, written and filed separately from its first explanations. */
 export const reviewAudience = (audience) => ({ ...audience, lessonStyle: `${audience.lessonStyle || ''}|review`, review: true });
 
-async function reusable(userId, readyKey, taken, { signals, session, review = false } = {}) {
+async function reusable(userId, readyKey, taken, { signals, session, review = false, gentle = false } = {}) {
   const ids = (await db.readyIds(readyKey, 60)).filter((id) => !taken.has(id));
   if (!ids.length) return null;
   const blocked = await db.inAnySet(userId, ['seen', 'served'], ids);
@@ -194,7 +196,7 @@ async function reusable(userId, readyKey, taken, { signals, session, review = fa
   const stats = await Promise.all(videos.map((v) => db.getStats(v.id)));
   let best = null;
   videos.forEach((v, i) => {
-    const r = scoreVideo(v, stats[i], signals, session, { review });
+    const r = scoreVideo(v, stats[i], signals, session, { review, gentle });
     if (!best || r.score > best.score) best = { video: v, ...r };
   });
   return best;
@@ -247,7 +249,12 @@ export async function nextItems(userId, count = 3) {
   // No exploration for a new student's first videos (start at the beginning of the syllabus);
   // then a share that decays as the algorithm learns the student.
   const servedSoFar = Object.values(states).reduce((n, s) => n + (s.served || 0), 0);
-  const picks = pickUnits(candidates, states, recent, Math.min(candidates.length, count + 4), { hasCourse, explore: exploreRate(servedSoFar) });
+  // Exam near: review outweighs new material (ranking.js examUrgency). Back after days away: the
+  // first page eases in with gentler formats.
+  const urgency = examUrgency(user.profile?.examDate);
+  const stale = !session.lastAt || Date.now() - session.lastAt > 12 * 3600000;
+  const gentle = stale && signals.lastSeenAt > 0 && Date.now() - signals.lastSeenAt > 3 * 86400000;
+  const picks = pickUnits(candidates, states, recent, Math.min(candidates.length, count + 4), { hasCourse, explore: exploreRate(servedSoFar), urgency });
   const pending = [];
   const taken = new Set();
   const inFlight = await generatingFor(userId); // videos already being made for this student (prefetch, earlier pages)
@@ -259,9 +266,9 @@ export async function nextItems(userId, count = 3) {
   const pageSession = { ...session, lastFormats: [...(session.lastFormats || [])], lastTopics: [...(session.lastTopics || [])] };
   for (const pick of picks) {
     // A unit due for review: its retrieval-practice pool first, else its ordinary pool scored for review.
-    const review = (pick.parts?.review || 0) > 0;
-    const best = (review && await reusable(userId, readyKeyFor(pick.unit.id, reviewAudience(audience)), taken, { signals, session: pageSession, review }))
-      || await reusable(userId, readyKeyFor(pick.unit.id, audience), taken, { signals, session: pageSession, review });
+    const review = (pick.parts?.review || 0) > 0 || (urgency >= 0.5 && Boolean(states[pick.unit.id]?.lastSeen));
+    const best = (review && await reusable(userId, readyKeyFor(pick.unit.id, reviewAudience(audience)), taken, { signals, session: pageSession, review, gentle }))
+      || await reusable(userId, readyKeyFor(pick.unit.id, audience), taken, { signals, session: pageSession, review, gentle });
     if (best) {
       taken.add(best.video.id);
       ready.push({ pick, video: best.video, videoParts: best.parts });
@@ -334,10 +341,18 @@ export async function nextItems(userId, count = 3) {
   // A moment: a tip, a piece of news or an offer rendered by the app (feed/moments.js), paced so
   // the feed stays a feed. It takes the second slot of the page so a lesson always comes first.
   if (page.length) {
-    const ctx = momentContext({ user, signals, saved: await db.countSet(userId, 'saved'), watched: await db.countSet(userId, 'seen'),
+    // A recall card (a quick check the student got wrong, due again) takes the second slot;
+    // otherwise a moment may. Openers (welcome back, last time, exam countdown) go first.
+    const miss = await pickRecall(userId, { session });
+    if (miss) { page.splice(1, 0, { moment: recallItem(miss) }); await noteRecall(userId, session); }
+    const watched = await db.countSet(userId, 'seen');
+    const ctx = momentContext({ user, signals, saved: await db.countSet(userId, 'saved'), watched,
       invites: user.memberNo ? await db.referralCount(user.memberNo) : 0, pushEnabled: push.enabled(), pushSubscribed: push.enabled() && (await push.subscriptions(userId)).length > 0 });
-    const moment = await pickMoment(userId, { session, ctx, hasBreather: page.some((x) => x.why?.kind === 'breather') });
-    if (moment) { page.splice(1, 0, { moment: momentItem(moment, ctx) }); await noteMoment(userId, moment, session.viewed || 0); }
+    const stats = await studentStats(userId, { watched, progress: states, masteryOf: mastery });
+    stats.unitsTotal = candidates.filter((c) => c.kind === 'course').length || candidates.length;
+    const exam = user.profile?.examDate ? { name: user.profile.exam || 'your exam', days: Math.ceil((Date.parse(user.profile.examDate) - Date.now()) / 86400000) } : null;
+    const moment = miss ? null : await pickMoment(userId, { session, ctx, stats, exam, hasBreather: page.some((x) => x.why?.kind === 'breather') });
+    if (moment) { page.splice(moment.opener ? 0 : 1, 0, { moment: momentItem(moment, ctx) }); await noteMoment(userId, moment, session.viewed || 0); }
   }
 
   await kv.ltrim(`user:${userId}:generating`, 0, 19);
@@ -467,6 +482,7 @@ export async function library(userId) {
     prefs: cleanPrefs(user.prefs || {}),
     programs: programs.map((p) => ({ key: p.key, name: p.name, basis: p.basis, sources: p.sources || [] })),
     units, interests: user.interests, saved, history,
+    misses: (await getMisses(userId)).map(recallItem),
   };
 }
 

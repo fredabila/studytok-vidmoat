@@ -118,6 +118,49 @@ without drifting away from the course. `feed/breathers.js`:
   (`isBreatherUnit`), but they do feed the student's format and topic tastes and a
   `signals.breathers` counter (watch fraction, "less") that can switch them off.
 
+## Recall cards (your mistakes come back)
+
+The strongest learning signal StudyTok has is a quick check answered wrong. `feed/recall.js`
+keeps those questions (`user:{id}:misses`, at most 40) and brings each one back as a *recall
+card* in the feed: the question again, no video, with the lesson's explanation on a wrong
+answer and a "Watch the lesson again" button.
+
+* **Schedule**: a miss is due again after 30 minutes (in practice, the next session). Right
+  once, it comes back in two days; right twice, it is retired. Wrong again, it resets to 30
+  minutes and the card shows how often it was missed.
+* **Pacing** (`pickRecall`): never before the second lesson of a session, then one card every
+  four lessons at most, only when something is due. A recall card takes the second slot of the
+  page and displaces any moment that page would have had.
+* **Library**: the Course tab shows "N questions to fix" with a *Fix them now* button that
+  queues them all. The sheet's user row carries "To fix".
+* **Events**: `recall_view`, `recall_answer` (`id`, `correct`, `ms`), `recall_skip`; a right
+  recall answer counts into the session's right streak like a quiz answer. Daily: "Recall
+  answers" and "Misses fixed".
+
+## Exam countdown
+
+With an exam date on the profile (`profile.examDate`, optional), `ranking.js examUrgency`
+rises from 0 at 45 days out to 1 on the day. It multiplies the review term in `pickUnits` by
+`1 + urgency`, gives every started unit a small review pull (`0.3 × urgency`), shrinks the
+syllabus-frontier term by up to 30%, and from `urgency ≥ 0.5` every started unit is served in
+review mode (retrieval-practice formats). The app shows a countdown chip on the Library hero
+and the Profile, and the buddy line turns to revision in the last two weeks.
+
+## Openers and easing back in
+
+The first card of a visit can be an *opener* (`moments.js openerMoment`), at most one a day:
+
+* **Welcome back** after three or more days away ("Your streak starts again today. 3 lessons
+  and you are back in it."), and the first page eases in: `scoreVideo` gets `gentle: true`,
+  which favours the gentler formats (`FORMAT_GENTLENESS`) for that page only.
+* **Countdown** when the exam is within 60 days, once a week: units still to master and how
+  many lessons a day cover them.
+* **Last time** otherwise: how many lessons and quick checks the previous session had, what is
+  due today, the streak or the goal.
+
+Openers bypass the moment pacing (they are the start of the visit) and do not count against
+the day's quota.
+
 ## Moments
 
 Between lessons, every so often, the feed shows a *moment*: an animated card from Noti with a

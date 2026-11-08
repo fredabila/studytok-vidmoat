@@ -253,7 +253,7 @@ async function runOnboarding(prefill) {
     ob.profile = { ...prefill.profile };
     ob.interests = new Set(prefill.interests || []);
     const form = $('#details');
-    for (const k of ['country', 'institution', 'program', 'exam']) form[k].value = prefill.profile[k] || '';
+    for (const k of ['country', 'institution', 'program', 'exam', 'examDate']) form[k].value = prefill.profile[k] || '';
     ob.who = prefill.profile.managedBy === 'guardian' ? 'child' : 'self';
     $('#ob-age').value = prefill.profile.age || '';
     if (ob.who === 'child') $('#ob-consent-box').checked = true;
@@ -272,8 +272,8 @@ async function runOnboarding(prefill) {
   $('#details').onsubmit = (e) => {
     e.preventDefault();
     const f = e.target;
-    ob.profile = { level: ob.level, country: f.country.value.trim(), institution: f.institution.value.trim(), program: f.program.value.trim(), exam: f.exam.value.trim() };
-    if (ob.level === 'lifelong') ob.profile.institution = ob.profile.program = ob.profile.exam = '';
+    ob.profile = { level: ob.level, country: f.country.value.trim(), institution: f.institution.value.trim(), program: f.program.value.trim(), exam: f.exam.value.trim(), examDate: f.examDate.value || null };
+    if (ob.level === 'lifelong') { ob.profile.institution = ob.profile.program = ob.profile.exam = ''; ob.profile.examDate = null; }
     showStep(3);
     buildSyllabus();
   };
@@ -530,7 +530,7 @@ function addSlide(data, { at } = {}) {
 // ---------------------------------------------------------------------------- moments
 // A moment is a card between lessons (a tip, news or an offer) that the server paces
 // (server/feed/moments.js). It is rendered here, has no player, and sits in the feed like a slide.
-const MOMENT_KICKER = { tip: 'Tip', news: 'News', offer: 'Offer' };
+const MOMENT_KICKER = { tip: 'Tip', news: 'News', offer: 'Offer', welcome: 'Welcome back', recap: 'Last time', exam: 'Countdown' };
 function addMomentSlide(data) {
   const m = data.moment;
   const node = el('article', { class: 'slide moment-slide', 'data-theme': m.theme || 'sun', 'data-kind': m.type });
@@ -554,6 +554,62 @@ function addMomentSlide(data) {
   trackEl().insertBefore(node, feed.endEl);
   return item;
 }
+// ---------------------------------------------------------------------------- recall cards
+// A quick check the student got wrong, back as a card (server/feed/recall.js). Right twice,
+// spaced out, retires it; wrong brings it back sooner. No video: the question is the lesson.
+function addRecallSlide(data, { at } = {}) {
+  const r = data.recall;
+  const node = el('article', { class: 'slide moment-slide recall-slide', 'data-theme': 'grape', 'data-kind': 'recall' });
+  node.style.setProperty('--accent', data.topic?.accent || '#9b7bff');
+  const feedback = el('p', { class: 'r-feedback', 'aria-live': 'polite' });
+  const opts = el('div', { class: 'r-options' }, ...r.options.map((opt, i) => el('button', { type: 'button', class: 'quiz-opt r-opt', style: `--i:${i}` }, el('b', {}, 'ABC'[i]), opt)));
+  const again = el('button', { type: 'button', class: 'btn ghost small r-again', hidden: true }, 'Watch the lesson again');
+  const next = el('button', { type: 'button', class: 'btn primary r-next', hidden: true }, 'Next');
+  const skip = el('button', { type: 'button', class: 'r-skip' }, 'Skip for now');
+  const stage = el('div', { class: 'stage m-stage r-stage' },
+    el('div', { class: 'm-bg', 'aria-hidden': 'true' }, el('i'), el('i'), el('i')),
+    el('div', { class: 'm-card r-card' },
+      el('div', { class: 'm-kicker' }, el('span', { class: 'm-emoji' }, '🔁'), el('span', {}, r.box >= 1 ? 'Last time, for keeps' : 'Recall'), el('span', { class: 'm-from' }, '· from Noti')),
+      el('div', { class: 'm-mascot' }, svgEl(mascot('think', 88))),
+      el('p', { class: 'r-unit' }, `${data.topic?.emoji || ''} ${r.unit || data.topic?.label || 'Quick check'}`.trim(), r.misses > 1 ? el('span', { class: 'r-count' }, `missed ${r.misses}×`) : null),
+      el('h2', { class: 'm-title r-q' }, r.question),
+      opts, feedback, el('div', { class: 'r-actions' }, again, next, skip)));
+  node.append(stage);
+  const item = { data, el: node, moment: true, recall: true, player: null, polling: false, viewSent: false, completed: false, watched: 0, lastTime: 0, answered: false, watch: null, shownAt: 0 };
+  let shownAt = 0;
+  node.addEventListener('transitionend', () => { shownAt ||= Date.now(); }, { once: true });
+  $$('.r-opt', opts).forEach((b, i) => { b.onclick = (e) => {
+    e.stopPropagation();
+    if (item.answered) return;
+    item.answered = true;
+    const correct = i === r.answerIndex;
+    $$('.r-opt', opts).forEach((x, k) => { x.disabled = true; x.classList.toggle('right', k === r.answerIndex); x.classList.toggle('wrong', k === i && !correct); });
+    feedback.textContent = correct ? (r.box >= 1 ? "Right again. That one's yours now. 🎉" : 'Correct! 🎉 One more time in a couple of days and it sticks.') : `Not quite: it's ${'ABC'[r.answerIndex]}. ${r.explanation || ''}`.trim();
+    feedback.dataset.state = correct ? 'right' : 'wrong';
+    track('recall_answer', { id: r.videoId, correct, ms: Date.now() - (shownAt || item.shownAt || Date.now()) });
+    skip.hidden = true; next.hidden = false; again.hidden = correct;
+    if (correct && feed.items[feed.active] === item) setTimeout(() => { if (feed.items[feed.active] === item) go(1); }, 1800);
+  }; });
+  again.onclick = (e) => { e.stopPropagation(); openVideo(r.videoId); };
+  next.onclick = (e) => { e.stopPropagation(); go(1); };
+  skip.onclick = (e) => { e.stopPropagation(); track('recall_skip', { id: r.videoId }); go(1); };
+  stage.onclick = (e) => { if (item.answered && !e.target.closest('button')) go(1); };
+  ensureEndSlide();
+  if (at == null || at >= feed.items.length) { feed.items.push(item); trackEl().insertBefore(node, feed.endEl); }
+  else { feed.items.splice(at, 0, item); trackEl().insertBefore(node, feed.items[at + 1].el); }
+  return item;
+}
+/** Queues the Library's "to fix" questions right after the current slide. */
+function fixMisses(list) {
+  showView('feed');
+  const fresh = list.filter((d) => !feed.items.some((it) => it.data.id === d.id)).slice(0, 10);
+  const at = feed.active < 0 ? 0 : feed.active + 1;
+  fresh.forEach((d, i) => addRecallSlide(d, { at: at + i }));
+  layout(false);
+  if (fresh.length) { goTo(at); toast(`${fresh.length} question${fresh.length > 1 ? 's' : ''} to fix. Go.`); }
+  else { const i = feed.items.findIndex((it) => it.data.id === list[0]?.id); if (i >= 0) goTo(i); }
+}
+
 /** Where a moment's button takes the student. */
 function momentAction(item, cta) {
   const m = item.data.moment;
@@ -905,6 +961,7 @@ function activate(index) {
 function markViewed(item) {
   if (feed.items[feed.active] !== item || item.viewSent || item.data.status !== 'ready') return;
   item.viewSent = true;
+  if (item.recall) { track('recall_view', { id: item.data.recall.videoId }); return; }
   if (item.moment) { track('moment_view', { id: item.data.moment.id, kind: item.data.moment.type }); return; }
   nthVideo++;
   sendEvent(item.data.id, 'view', { nth: nthVideo, format: item.data.format?.id, source: item.source || 'feed' });
@@ -920,7 +977,7 @@ async function loadMore(count = 3) {
     const t0 = Date.now();
     const { items, credits } = await api('GET', `/api/feed?count=${count}`);
     track('load_more', { count: items.length, ms: Date.now() - t0, ready: items.filter((d) => d.status === 'ready').length, generating: items.filter((d) => d.status === 'generating').length });
-    items.filter((d) => !feed.items.some((it) => it.data.id === d.id)).forEach((d) => (d.kind === 'moment' ? addMomentSlide(d) : addSlide(d)));
+    items.filter((d) => !feed.items.some((it) => it.data.id === d.id)).forEach((d) => (d.kind === 'moment' ? addMomentSlide(d) : d.kind === 'recall' ? addRecallSlide(d) : addSlide(d)));
     noteCredits(credits);
     if (wasOnEnd && feed.items.length > before) { feed.active = -1; activate(before); }
     layout(false);
@@ -1148,6 +1205,9 @@ function buddyLine(stats) {
   const hour = new Date().getHours();
   if (stats.streak >= 2 && !stats.today && hour >= 17) return `Your ${stats.streak}-day streak ends tonight. One lesson keeps it.`;
   if (stats.due >= 2 && !stats.today) return `${stats.due} units are due for review. Five minutes brings them back.`;
+  if (stats.misses >= 3) return `${stats.misses} quick checks to fix. Each one you get right stays with you.`;
+  const ex = examDays(me?.profile);
+  if (ex != null && ex >= 0 && ex <= 14) return ex === 0 ? 'Exam day. Breathe. You know more than you think.' : `${ex} day${ex === 1 ? '' : 's'} to ${me.profile.exam || 'your exam'}. Revision first, new things after.`;
   if (stats.today && stats.today < stats.goal) return `${stats.today} of ${stats.goal} today. ${stats.goal - stats.today} more and the day is done.`;
   if (stats.today >= stats.goal && stats.streak < 3) return "Today's goal done. Anything more is a bonus.";
   if (stats.streak >= 7) return `${stats.streak} days in a row. You're unstoppable.`;
@@ -1157,6 +1217,21 @@ function buddyLine(stats) {
   if (stats.watched >= 5) return `${stats.watched} lessons in. It's sticking.`;
   if (stats.watched >= 1) return 'First lessons done. Swipe for more.';
   return "Your feed is ready. Let's go.";
+}
+/** Days until the exam date on the profile (null without one; negative once it has passed). */
+function examDays(p) {
+  const t = Date.parse(p?.examDate || '');
+  if (Number.isNaN(t)) return null;
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  return Math.round((t - today) / 86400e3);
+}
+/** A countdown pill: "WASSCE in 23 days" (nothing without a date, or once it is a week past). */
+function examChip(p) {
+  const d = examDays(p);
+  if (d == null || d < -7) return null;
+  const name = p.exam || 'Exam';
+  const text = d < 0 ? `${name} done. Well played.` : d === 0 ? `${name} is today` : d === 1 ? `${name} tomorrow` : `${name} in ${d} days`;
+  return el('span', { class: `exam-chip${d >= 0 && d <= 14 ? ' soon' : ''}`, title: p.examDate }, '📅 ', text);
 }
 /** The daily goal as a small ring: lessons watched today out of the goal. */
 function goalRing(stats) {
@@ -1189,8 +1264,15 @@ async function showLibrary() {
   course.append(el('div', { class: 'hero' }, svgEl(mascot(due ? 'think' : stats?.streak >= 3 ? 'cheer' : 'happy')), goalRing(stats),
     el('div', {}, el('h3', {}, due ? `${due} unit${due > 1 ? 's' : ''} due for review` : 'Your syllabus'),
       el('p', {}, due ? 'Spaced repetition says now is the moment. They are first in your feed.' : 'Untick what you have mastered; your feed follows what stays ticked.'),
+      examChip(me?.profile),
       el('div', { class: 'bubble' }, buddyLine(stats)))));
   course.append(statTiles(stats));
+  if (lib.misses?.length) {
+    const due = lib.misses.length;
+    course.append(el('div', { class: 'lib-strip fix-strip' }, svgEl(mascot('think', 64)),
+      el('div', {}, el('h3', {}, `${due} question${due > 1 ? 's' : ''} to fix`), el('p', {}, 'Quick checks you got wrong. Get each one right twice and it is yours for good.')),
+      el('button', { type: 'button', class: 'btn small primary', onclick: () => fixMisses(lib.misses) }, 'Fix them now')));
+  }
   const recap = recapCard(stats);
   if (recap && stats?.week) course.append(recap);
   if (!lib.units.length) {
@@ -1404,7 +1486,7 @@ function renderProfile() {
   }
 
   $('#studies-summary').replaceChildren(el('p', {}, [p.program, p.institution, p.country].filter(Boolean).join(' · ') || 'No course set'),
-    el('p', {}, [lvl?.label, p.exam && `Preparing for ${p.exam}`].filter(Boolean).join(' · ')));
+    el('p', {}, [lvl?.label, p.exam && `Preparing for ${p.exam}`].filter(Boolean).join(' · ')), examChip(p));
 }
 /** Who pays for new videos: the free allowance on StudyTok's account, or the student's own Vidmoat credits. */
 function renderCredits() {
@@ -1735,7 +1817,7 @@ async function boot() {
   if (linked) await openVideo(linked);
   await loadMore(3);
   if (feed.active < 0 && feed.items.length) goTo(0, { animate: false });
-  if (!store.get('st_swiped')) {
+  if (!store.get('st_swiped') && !feed.items[feed.active]?.moment) { // a moment card says how to continue itself
     $('#swipe-hint').hidden = false;
     setTimeout(() => { $('#swipe-hint').hidden = true; }, 6000);
   }

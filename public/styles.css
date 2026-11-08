@@ -692,3 +692,25 @@ body.landing-on { background: var(--paper); }
 @media (min-width: 900px) { .m-title { font-size: 30px; } .m-card { margin: 0 26px; } }
 @media (max-height: 700px) { .m-card { padding: 20px 18px 18px; gap: 9px; } .m-title { font-size: 24px; } .m-lines li { font-size: 14.5px; } .m-mascot { width: 72px; height: 72px; top: -36px; } .m-swipe { padding-bottom: 110px; } }
 @media (prefers-reduced-motion: reduce) { .m-bg i, .m-mascot, .m-swipe svg, .moment-slide.on .m-confetti i { animation: none; } .m-lines li, .m-cta, .m-card, .m-swipe { transition-delay: 0s !important; } }
+
+
+/* ============================================================================ recall cards, exam countdown */
+.r-card { gap: 10px; }
+.r-unit { margin: 0; font-family: var(--mono); font-size: 12px; color: var(--ink-3); display: flex; gap: 8px; align-items: center; }
+.r-count { padding: 2px 7px; border-radius: 999px; background: var(--m1); color: var(--ink); font-weight: 600; font-size: 10.5px; }
+.r-q { font-size: 24px; max-width: 100%; }
+.r-q::after { display: none; }
+.r-options { display: grid; gap: 8px; width: 100%; }
+.r-opt { opacity: 0; transform: translateY(6px); transition: opacity .35s var(--ease), transform .35s var(--ease), background .15s, border-color .15s; transition-delay: calc(.4s + var(--i) * .15s); }
+.moment-slide.on .r-opt { opacity: 1; transform: none; }
+.r-feedback { margin: 2px 0 0; min-height: 1.4em; font-size: 14.5px; line-height: 1.4; color: var(--ink-2); }
+.r-feedback[data-state="right"] { color: #15803d; font-weight: 600; }
+.r-feedback[data-state="wrong"] { color: var(--ink); }
+.r-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; width: 100%; }
+.r-skip { margin-left: auto; border: 0; background: none; color: var(--ink-3); font-family: var(--mono); font-size: 12px; cursor: pointer; text-decoration: underline; text-underline-offset: 3px; }
+.recall-slide .m-cta { display: none; }
+.exam-chip { display: inline-flex; align-items: center; gap: 4px; margin-top: 6px; padding: 5px 10px; border-radius: 999px; background: #fff; border: 1.5px solid var(--ink); font-family: var(--mono); font-size: 12px; font-weight: 600; width: max-content; }
+.exam-chip.soon { background: var(--hl); }
+.hero .exam-chip { margin: 6px 0 2px; }
+.fix-strip { border-color: #9b7bff; box-shadow: 4px 4px 0 #9b7bff; }
+.field input[type="date"] { font: inherit; font-size: 16px; color: var(--ink); background: #fff; border: 1.5px solid var(--line-2); border-radius: 10px; padding: 12px 15px; outline: none; }

@@ -18,6 +18,7 @@
 // third party. Validation is strict: unknown types and fields are dropped, numbers clamped.
 
 import { kv } from '../core/kv.js';
+import { recordMiss, recordRecall, getMisses } from './recall.js';
 import * as db from '../core/db.js';
 import { applyEvent, emptyState, mastery } from './ranking.js';
 import { audienceFor } from './index.js';
@@ -55,6 +56,9 @@ export const EVENT_SPECS = {
   lesson_share: { video: true, fields: { by: 's' } },
   moment_view: { fields: { id: 's', kind: 's' } },
   moment_cta: { fields: { id: 's', action: 's' } },
+  recall_view: { fields: { id: 's' } },
+  recall_answer: { fields: { id: 's', correct: 'b', ms: 'n' } },
+  recall_skip: { fields: { id: 's' } },
   invite_share: { fields: {} },
   refresh: { fields: { where: 's' } },
   skip: { video: true, fields: {} }, // legacy: an early leave
@@ -133,7 +137,7 @@ export function weekKey(at) {
   return d.toISOString().slice(0, 10);
 }
 const emptyWeek = () => ({ watched: 0, completes: 0, watchSec: 0, quizN: 0, quizRight: 0, units: {}, formats: {}, days: {}, mastered: [] });
-export const emptySession = () => ({ sid: '', startedAt: 0, lastAt: 0, served: 0, viewed: 0, lastFormats: [], lastTopics: [], wrongStreak: 0, rightStreak: 0, earlyStreak: 0, posture: 'unknown', hour: null, night: false });
+export const emptySession = () => ({ sid: '', startedAt: 0, lastAt: 0, served: 0, viewed: 0, quizN: 0, quizRight: 0, lastFormats: [], lastTopics: [], wrongStreak: 0, rightStreak: 0, earlyStreak: 0, posture: 'unknown', hour: null, night: false });
 const POSTURES = new Set(['hand', 'flat', 'moving', 'unknown']);
 /** The scene a timeline time falls in (for drop-off curves), by kind. */
 const sceneKindAt = (video, t) => { const s = (video?.scenes || []).findLast((x) => t >= x.start); return s?.kind || null; };
@@ -322,11 +326,20 @@ export async function ingest(userId, batch) {
         if (Number.isInteger(e.choice)) writes.push(stat(v.id, `choice${Math.min(2, e.choice)}`));
         bump(signals.formats, format, e.correct ? 'right' : 'wrong'); bump(signals.topics, topic, e.correct ? 'right' : 'wrong');
         signals.quiz.n++; signals.quiz.msSum += Math.min(120000, e.ms || 0); if (e.correct) signals.quiz.right++;
+        session.quizN = (session.quizN || 0) + 1; if (e.correct) session.quizRight = (session.quizRight || 0) + 1;
+        if (!e.correct) writes.push(recordMiss(userId, v, e.at)); // comes back as a recall card
         if (e.correct) { session.rightStreak++; session.wrongStreak = 0; } else { session.wrongStreak++; session.rightStreak = 0; }
         unitEvent('quiz_answer', { correct: Boolean(e.correct) });
         break;
       }
       case 'quiz_skip': writes.push(stat(v.id, 'quizSkips'), fstat(v, 'quizSkips')); signals.quiz.skips++; bump(signals.formats, format, 'quizSkips'); break;
+      case 'recall_answer': {
+        signals.recall ||= { n: 0, right: 0, retired: 0 };
+        signals.recall.n++; if (e.correct) signals.recall.right++;
+        writes.push(recordRecall(userId, e.id, Boolean(e.correct), e.at).then((o) => { if (o === 'retired') writes.push(kv.hincrby(`events:day:${day(e.at)}`, 'recall_retired', 1)); }));
+        if (e.correct) { session.rightStreak++; session.wrongStreak = 0; } else { session.wrongStreak++; session.rightStreak = 0; }
+        break;
+      }
       case 'player_error': writes.push(stat(v.id, 'errors')); break;
       case 'drop': writes.push(kv.hincrby('stats:device', 'drops', 1)); break;
       case 'sensors': writes.push(kv.hincrby('stats:device', e.motion ? 'motionOn' : 'motionOff', 1), kv.hincrby('stats:device', `perm_${(e.permission || 'unknown').replace(/[^a-z-]/g, '')}`, 1)); break;
@@ -405,6 +418,8 @@ export async function studentStats(userId, { watched = 0, progress = {}, mastery
     // The daily goal (lessons watched today) and what spaced repetition says is due right now.
     today: s.today?.date === day(now) ? s.today.n : 0, goal: DAILY_GOAL,
     due: Object.values(progress).filter((st) => st.lastSeen && st.due && st.due <= now && !(masteryOf(st) >= 0.7 && st.box >= 3)).length,
+    misses: (await getMisses(userId)).length, // quick checks got wrong, waiting to come back
+    recallN: s.recall?.n || 0, recallRight: s.recall?.right || 0,
     week: recapOf(s, thisWeek), lastWeek: recapOf(s, lastWeek),
   };
 }
