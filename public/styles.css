@@ -382,6 +382,7 @@ body.onboarding .toast { bottom: calc(96px + var(--safe-b)); }
 .ld-foot img { width: 14px; height: 14px; border-radius: 3px; vertical-align: -3px; margin-right: 4px; }
 .ld-foot a { color: var(--ink); font-weight: 600; text-decoration: none; border-bottom: 1.5px solid var(--hl); }
 @media (max-height: 740px) { .ld-kicker { display: none; } .ld-hero .lead { font-size: 13px; } .sample { height: 150px; } .sample .s-foot { display: none; } .sample .s-card { font-size: 8px; } }
+@media (max-width: 819px) and (max-height: 700px) { .ld-trust { display: none; } .ld-foot { font-size: 10.5px; line-height: 1.4; padding-bottom: 6px; } .ld-cta { gap: 6px; padding-bottom: 4px; } }
 @media (max-height: 640px) { .ld-pills { display: none; } .ld-hero .lead { display: none; } .ld-trust { display: none; } }
 
 /* Desktop and tablets in landscape: copy and buttons on the left, a fan of sample cards on the right. */
