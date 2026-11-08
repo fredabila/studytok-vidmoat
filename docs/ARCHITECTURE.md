@@ -81,6 +81,13 @@ tastes (`signals`) and the current `session`, plus a capped raw log. Those feed 
 into step 3 and into the format rotation of step 4. See [EVENTS.md](EVENTS.md) and
 [ALGORITHM.md](ALGORITHM.md).
 
+## Who pays (`core/billing.js`)
+
+Each student's first videos are made on StudyTok's key; then they connect their own Vidmoat
+account and the generator runs inside `withCredential(token)`, so the same pipeline makes the
+video on their account. Out-of-credit answers from Vidmoat pause that student's generation
+and the app sends them to buy credits or upgrade. See [BILLING.md](BILLING.md).
+
 ## Storage (`core/kv.js`, `core/db.js`)
 
 A tiny Redis-command interface (`get/set/sadd/zadd/hincrby/lpush…`) backed by Upstash Redis

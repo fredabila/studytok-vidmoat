@@ -252,8 +252,8 @@ async function runOnboarding(prefill) {
   };
 
   await new Promise((resolve) => { $('#start').onclick = resolve; });
-  const { user } = await api('POST', '/api/profile', profileBody());
-  me = user;
+  await api('POST', '/api/profile', profileBody());
+  me = (await api('GET', '/api/me')).user;
   $('#onboard').hidden = true;
   $('#app').hidden = false;
   document.body.classList.remove('onboarding');
@@ -291,6 +291,24 @@ function ensureEndSlide() {
   feed.endEl = el('article', { class: 'slide end-slide' },
     el('div', { class: 'stage' }, el('div', {}, el('span', { class: 'spinner', 'aria-hidden': 'true' }), el('p', {}, 'Finding your next lesson…'))));
   trackEl().append(feed.endEl);
+}
+/** The server could not start a new video for this student: say why on the end slide, once as a toast. */
+let creditsNoted = null;
+function noteCredits(credits) {
+  if (!credits?.needed) return;
+  const reason = credits.reason;
+  const copy = {
+    allowance: ['Your free lessons are used up', `Connect your Vidmoat account to keep new lessons coming${credits.unit ? ` (next up: ${credits.unit})` : ''}. Lessons already in the library stay free.`],
+    exhausted: ["You're out of Vidmoat credits", 'Top up or upgrade on Vidmoat and new lessons resume automatically.'],
+    plan: ['Your Vidmoat plan needs an upgrade', 'AI narration needs a Creator plan or above. Upgrade on Vidmoat to keep making lessons.'],
+    reconnect: ['Reconnect your Vidmoat account', 'StudyTok lost access to your account. Connect it again from your Profile.'],
+  }[reason] || ['New lessons are paused', 'Check Credits on your Profile.'];
+  const action = reason === 'allowance' || reason === 'reconnect'
+    ? el('a', { class: 'btn vidmoat', href: '/api/auth/vidmoat/connect', onclick: () => { track('signin_click', { where: 'feed_connect' }); flush(true); } }, el('img', { class: 'vm-logo', src: 'https://www.vidmoat.com/logo-512.png', alt: '', width: '22', height: '22' }), reason === 'reconnect' ? 'Reconnect' : 'Use my Vidmoat account')
+    : el('a', { class: 'btn primary', href: cfg.billingUrl, target: '_blank', rel: 'noopener noreferrer', onclick: () => track('signin_click', { where: 'feed_buy' }) }, 'Buy credits or upgrade');
+  $('.stage', feed.endEl).replaceChildren(el('div', { class: 'credits-box' }, el('h3', {}, copy[0]), el('p', {}, copy[1]), action,
+    el('button', { type: 'button', class: 'btn ghost', onclick: () => showView('profile') }, 'See Credits in Profile')));
+  if (creditsNoted !== reason) { creditsNoted = reason; toast(copy[0]); }
 }
 
 // ============================================================================ feed: navigation
@@ -685,9 +703,10 @@ async function loadMore(count = 3) {
     const wasOnEnd = feed.active === before;
     if (wasOnEnd && before > 0) track('end_reached');
     const t0 = Date.now();
-    const { items } = await api('GET', `/api/feed?count=${count}`);
+    const { items, credits } = await api('GET', `/api/feed?count=${count}`);
     track('load_more', { count: items.length, ms: Date.now() - t0, ready: items.filter((d) => d.status === 'ready').length, generating: items.filter((d) => d.status === 'generating').length });
     items.filter((d) => !feed.items.some((it) => it.data.id === d.id)).forEach((d) => addSlide(d));
+    noteCredits(credits);
     if (wasOnEnd && feed.items.length > before) { feed.active = -1; activate(before); }
     layout(false);
     preferReady();
@@ -725,7 +744,7 @@ const PREFS = [
 
 async function patchMe(body) {
   const res = await api('PATCH', '/api/me', body);
-  me = res.user;
+  me = { ...res.user, billing: me?.billing };
   return res;
 }
 
@@ -893,6 +912,7 @@ function renderProfile() {
       me?.vidmoat ? el('span', { class: 'badge' }, '✓ Synced with Vidmoat') : null),
   );
 
+  renderCredits();
   const account = $('#account-card');
   if (me?.vidmoat) {
     account.replaceChildren(el('h3', {}, 'Vidmoat account'),
@@ -923,6 +943,47 @@ function renderProfile() {
 
   $('#studies-summary').replaceChildren(el('p', {}, [p.program, p.institution, p.country].filter(Boolean).join(' · ') || 'No course set'),
     el('p', {}, [lvl?.label, p.exam && `Preparing for ${p.exam}`].filter(Boolean).join(' · ')));
+}
+/** Who pays for new videos: the free allowance on StudyTok's account, or the student's own Vidmoat credits. */
+function renderCredits() {
+  const card = $('#credits-card');
+  const b = me?.billing;
+  if (!b || !cfg.vidmoatSignIn) { card.hidden = true; return; }
+  card.hidden = false;
+  card.classList.toggle('warn', Boolean(b.problem) || (b.mode === 'house' && b.houseLeft === 0));
+  const logo = () => el('img', { class: 'vm-logo', src: 'https://www.vidmoat.com/logo-512.png', alt: '', width: '22', height: '22' });
+  const connect = (label = 'Use my Vidmoat account') => el('a', { class: 'btn vidmoat', href: '/api/auth/vidmoat/connect', onclick: () => { track('signin_click', { where: 'connect' }); flush(true); } }, logo(), label);
+  const buy = (label = 'Buy credits or upgrade') => el('a', { class: 'btn primary', href: b.billingUrl, target: '_blank', rel: 'noopener noreferrer', onclick: () => track('signin_click', { where: 'buy_credits' }) }, label);
+  const disconnect = el('button', { type: 'button', class: 'btn ghost', onclick: async () => {
+    const r = await api('POST', '/api/billing/disconnect').catch(() => null);
+    if (r) { me.billing = r.billing; toast('Disconnected. New videos use your free allowance.'); renderCredits(); }
+  } }, 'Disconnect');
+  const useHouse = el('button', { type: 'button', class: 'btn ghost', onclick: async () => {
+    const r = await api('POST', '/api/billing/mode', { mode: 'house' }).catch(() => null);
+    if (r) { me.billing = r.billing; renderCredits(); }
+  } }, `Use free allowance (${b.houseLeft} left)`);
+  const useOwn = el('button', { type: 'button', class: 'btn ghost', onclick: async () => {
+    const r = await api('POST', '/api/billing/mode', { mode: 'own' }).catch(() => null);
+    if (r) { me.billing = r.billing; renderCredits(); }
+  } }, 'Use my Vidmoat credits');
+
+  if (b.mode === 'own') {
+    const problemText = { exhausted: "You're out of Vidmoat credits, so new lessons are paused. Top up and they resume on their own.", plan: 'Your Vidmoat plan does not include AI speech yet. Upgrade to keep making narrated lessons.', reconnect: 'StudyTok lost access to your account. Connect it again to keep going.' }[b.problem];
+    card.replaceChildren(el('h3', {}, 'Credits · your Vidmoat account'),
+      el('div', { class: 'credit-big' }, b.credits == null ? '—' : `${b.credits.toLocaleString()} credits`),
+      el('p', { class: 'muted' }, problemText || `New lessons you trigger are made on your account (about 20 credits each)${b.plan ? ` · ${b.plan} plan` : ''}. Lessons already in the library are free to watch.`),
+      el('div', { class: 'credit-actions' }, ...(b.problem === 'reconnect' ? [connect('Reconnect')] : [buy()]), ...(b.houseLeft > 0 ? [useHouse] : []), disconnect));
+  } else {
+    const pct = b.freeVideos ? Math.round((b.houseUsed / b.freeVideos) * 100) : 100;
+    card.replaceChildren(el('h3', {}, 'Credits · free allowance'),
+      el('div', { class: 'credit-meter' }, el('i', { style: `width:${pct}%` })),
+      el('div', { class: 'credit-row' }, el('span', {}, `${b.houseUsed} of ${b.freeVideos} free lessons used`), el('span', {}, `${b.houseLeft} left`)),
+      el('p', { class: 'muted' }, b.houseLeft === 0
+        ? 'Your free lessons are used up. Connect your Vidmoat account to keep generating new lessons with your own credits; everything already made stays free to watch.'
+        : 'Your first lessons are made on StudyTok’s Vidmoat account. Connect yours any time to make lessons with your own credits.'),
+      el('ul', { class: 'reassure' }, el('li', {}, 'Only lessons you trigger spend credits (about 20 each)'), el('li', {}, 'Never renders, exports or your voices'), el('li', {}, 'Disconnect any time')),
+      el('div', { class: 'credit-actions' }, b.connected ? useOwn : connect(), ...(b.houseLeft === 0 && !b.connected ? [buy('Get Vidmoat credits')] : [])));
+  }
 }
 async function signOut() {
   await api('POST', '/api/auth/signout').catch(() => {});
@@ -1040,6 +1101,9 @@ function authNotice() {
     cancelled: 'Sign-in cancelled.',
     error: "Sign-in didn't work. Please try again.",
     unavailable: 'Sign-in is not configured on this server yet.',
+    connected: 'Connected! New lessons now use your Vidmoat credits.',
+    mismatch: 'That is a different Vidmoat account. Connect the one you signed in with.',
+    scopes: 'Vidmoat did not grant the permissions StudyTok needs. Try again and allow all of them.',
   }[auth] || null;
 }
 

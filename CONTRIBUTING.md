@@ -33,7 +33,7 @@ server/
 public/              the PWA: index.html, app.js (one module), telemetry.js, player.js (embed protocol), styles.css, sw.js, icons
 scripts/             preview.mjs (build a lesson into a real project and grab frames), warm.mjs (pre-generate a library)
 test/                node:test suites: core (schema, composer, visuals, narration), recommend (ranking stage 1), events (ingestion + ranking stage 2), feed, auth
-docs/                ARCHITECTURE, FORMATS, EVENTS, ALGORITHM
+docs/                ARCHITECTURE, FORMATS, EVENTS, ALGORITHM, BILLING
 ```
 
 Read [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) first: it walks one request from "swipe" to

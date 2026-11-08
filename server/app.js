@@ -12,7 +12,8 @@ import * as db from './core/db.js';
 import { saveProfile, editProfile, prefetch, nextItems, publicVideo, library, topUpLibrary, cleanProfile, linkVidmoat } from './feed/index.js';
 import { resolveProgram, getProgram } from './curriculum/index.js';
 import { queueStats } from './video/generator.js';
-import { getMe } from './core/vidmoat.js';
+import { getMe, getMeAs } from './core/vidmoat.js';
+import { connectOwnAccount, disconnectOwnAccount, setMode, billingStatus } from './core/billing.js';
 import { signInEnabled, signInRequired, startSignIn, finishSignIn } from './core/auth.js';
 import { FORMATS, FORMAT_IDS } from './video/formats.js';
 import { ingest, stats as eventStats } from './feed/events.js';
@@ -129,6 +130,8 @@ async function route(req, res, url) {
       research: config.anthropic.enabled,
       vidmoatSignIn: signInEnabled(),
       signInRequired: signInRequired(),
+      freeVideos: config.billing.freeVideos,
+      billingUrl: config.billing.billingUrl,
       formats: Object.entries(FORMATS).map(([id, f]) => ({ id, name: f.name, tag: f.tag, blurb: f.blurb })),
       levels: LEVELS.map(({ id, label, emoji }) => ({ id, label, emoji })),
       topics: INTEREST_TOPICS.map(({ id, label, emoji, accent }) => ({ id, label, emoji, accent })),
@@ -187,14 +190,35 @@ async function route(req, res, url) {
       return redirect(res, '/?auth=error');
     }
   }
+  // "Use my Vidmoat account": the same flow with the generation scopes (core/billing.js).
+  if (key === 'GET /api/auth/vidmoat/connect') {
+    if (!signInEnabled()) return redirect(res, '/?auth=unavailable');
+    if (!(await signedIn(await cookieUser(req)))) return redirect(res, '/?auth=error');
+    try {
+      const { url: to, state } = await startSignIn(req, { purpose: 'generate' });
+      return redirect(res, to, [stateCookie(req, state)]);
+    } catch (err) {
+      console.error('[auth] connect failed:', err.message);
+      return redirect(res, '/?auth=error#profile');
+    }
+  }
   if (key === 'GET /api/auth/vidmoat/callback') {
     const state = url.searchParams.get('state');
     const code = url.searchParams.get('code');
     if (url.searchParams.get('error') || !code) return redirect(res, '/?auth=cancelled', [clearCookie(req, 'st_oauth')]);
     if (!state || state !== cookieValue(req, 'st_oauth')) return redirect(res, '/?auth=error', [clearCookie(req, 'st_oauth')]);
     try {
-      const identity = await finishSignIn({ code, state });
-      const { user, restored } = await linkVidmoat(await cookieUser(req), identity);
+      const result = await finishSignIn({ code, state });
+      const current = await cookieUser(req);
+      if (result.purpose === 'generate') {
+        // Connecting an account: it must be the one this student signed in with.
+        const user = current && (await db.getUser(current));
+        if (!user?.vidmoat || user.vidmoat.id !== result.id) return redirect(res, '/?auth=mismatch#profile', [clearCookie(req, 'st_oauth')]);
+        if (result.missingScopes.length) return redirect(res, '/?auth=scopes#profile', [clearCookie(req, 'st_oauth')]);
+        await connectOwnAccount(user.id, result.tokens);
+        return redirect(res, '/?auth=connected#profile', [clearCookie(req, 'st_oauth')]);
+      }
+      const { user, restored } = await linkVidmoat(current, result);
       return redirect(res, `/?auth=${restored ? 'restored' : 'linked'}`, [userCookie(req, user.id), clearCookie(req, 'st_oauth')]);
     } catch (err) {
       console.error('[auth]', err.message);
@@ -226,7 +250,20 @@ async function route(req, res, url) {
     const [u, seen, liked] = await Promise.all([db.getUser(userId), db.countSet(userId, 'seen'), db.countSet(userId, 'liked')]);
     // Legacy profiles (before setupDone existed) count as set up when they have content.
     const setupDone = u.setupDone ?? Boolean(u.units?.length || u.interests?.length);
-    return send(res, 200, { user: { ...u, setupDone, seen, liked } });
+    const billing = await billingStatus(u, { fetchMe: getMeAs });
+    const { vidmoatTokens, ...safe } = u; // sealed tokens never leave the server
+    return send(res, 200, { user: { ...safe, setupDone, seen, liked, billing } });
+  }
+
+  // Credits: switch between the free allowance and the student's own account, or disconnect it.
+  if (key === 'POST /api/billing/mode') {
+    const body = await readJson(req);
+    const user = await setMode(userId, body.mode);
+    return send(res, 200, { billing: await billingStatus(user) });
+  }
+  if (key === 'POST /api/billing/disconnect') {
+    const user = await disconnectOwnAccount(userId);
+    return send(res, 200, { billing: await billingStatus(user) });
   }
 
   if (key === 'GET /api/library') return send(res, 200, await library(userId));
@@ -241,10 +278,10 @@ async function route(req, res, url) {
 
   if (key === 'GET /api/feed') {
     const count = Math.min(5, Math.max(1, Number(url.searchParams.get('count')) || 3));
-    const { items, pending } = await nextItems(userId, count);
+    const { items, pending, credits } = await nextItems(userId, count);
     // Keep generating after the response (serverless) / let it run (long-lived server).
     if (pending.length) waitUntil(Promise.allSettled(pending));
-    return send(res, 200, { items: await Promise.all(items.map((x) => publicVideo(x.video, userId, { why: x.why, pos: x.pos, queuedFor: x.queuedFor }))) });
+    return send(res, 200, { items: await Promise.all(items.map((x) => publicVideo(x.video, userId, { why: x.why, pos: x.pos, queuedFor: x.queuedFor }))), credits: credits || undefined });
   }
 
   const videoMatch = /^\/api\/videos\/([0-9a-f-]{36})$/.exec(path);
