@@ -17,6 +17,7 @@ import { connectOwnAccount, disconnectOwnAccount, setMode, billingStatus } from 
 import { signInEnabled, signInRequired, startSignIn, finishSignIn } from './core/auth.js';
 import { FORMATS, FORMAT_IDS } from './video/formats.js';
 import { ingest, stats as eventStats, studentStats } from './feed/events.js';
+import { syncUser, syncDaily, resyncAll, enabled as sheetEnabled } from './core/sheet.js';
 import { mastery } from './feed/ranking.js';
 import { getProgress } from './feed/index.js';
 import { kv } from './core/kv.js';
@@ -165,7 +166,13 @@ async function route(req, res, url) {
     if (!process.env.CRON_SECRET || req.headers.authorization !== `Bearer ${process.env.CRON_SECRET}`) return send(res, 401, { error: 'Unauthorized' });
     const pending = await topUpLibrary();
     if (pending.length) waitUntil(Promise.allSettled(pending));
+    waitUntil(syncDaily());
     return send(res, 200, { started: pending.length });
+  }
+  // Admin: rebuild the Google Sheet from every student (Authorization: Bearer $STUDYTOK_SHEET_SECRET).
+  if (key === 'POST /api/admin/sheet/resync') {
+    if (!sheetEnabled() || req.headers.authorization !== `Bearer ${config.sheet.secret}`) return send(res, 401, { error: 'Unauthorized' });
+    return send(res, 200, await resyncAll());
   }
 
   // Course lookup: catalog match, or start/poll research of the student's institution/course.
@@ -218,9 +225,11 @@ async function route(req, res, url) {
         if (!user?.vidmoat || user.vidmoat.id !== result.id) return redirect(res, '/?auth=mismatch#profile', [clearCookie(req, 'st_oauth')]);
         if (result.missingScopes.length) return redirect(res, '/?auth=scopes#profile', [clearCookie(req, 'st_oauth')]);
         await connectOwnAccount(user.id, result.tokens);
+        waitUntil(syncUser(user.id, { event: 'connected own account' }));
         return redirect(res, '/?auth=connected#profile', [clearCookie(req, 'st_oauth')]);
       }
       const { user, restored } = await linkVidmoat(current, result);
+      waitUntil(syncUser(user.id, { event: Date.now() - Date.parse(user.createdAt) < 60_000 ? 'joined' : restored ? 'signed in again' : null, detail: result.email || '' }));
       return redirect(res, `/?auth=${restored ? 'restored' : 'linked'}`, [userCookie(req, user.id), clearCookie(req, 'st_oauth')]);
     } catch (err) {
       console.error('[auth]', err.message);
@@ -239,7 +248,9 @@ async function route(req, res, url) {
     const current = await cookieUser(req);
     if (signInRequired() && !(await signedIn(current))) return send(res, 401, { error: 'Sign in with Vidmoat to start', signin: true });
     let user;
-    try { user = await saveProfile(current, body); } catch (err) { if (err.status === 400) return send(res, 400, { error: err.message, code: err.code }); throw err; }
+    let before;
+    try { before = current ? await db.getUser(current) : null; user = await saveProfile(current, body); } catch (err) { if (err.status === 400) return send(res, 400, { error: err.message, code: err.code }); throw err; }
+    waitUntil(syncUser(user.id, { event: user.setupDone && !before?.setupDone ? 'set up' : null, detail: user.profile?.program || (user.profile?.level || ''), force: true }));
     // Start the first videos now, so the feed opens without a wait.
     waitUntil(prefetch(user.id).then((pending) => Promise.allSettled(pending)).catch((err) => console.warn('[prefetch]', err.message)));
     return send(res, 200, { user }, { 'Set-Cookie': userCookie(req, user.id) });
@@ -266,6 +277,7 @@ async function route(req, res, url) {
   }
   if (key === 'POST /api/billing/disconnect') {
     const user = await disconnectOwnAccount(userId);
+    waitUntil(syncUser(userId, { event: 'disconnected own account' }));
     return send(res, 200, { billing: await billingStatus(user) });
   }
 
@@ -298,6 +310,7 @@ async function route(req, res, url) {
     const body = await readJson(req, 256 * 1024);
     const batch = Array.isArray(body.events) ? body : { events: [body] };
     const { accepted, levelUps } = await ingest(userId, batch);
+    if (accepted) waitUntil(syncUser(userId, levelUps?.length ? { event: 'level up', detail: levelUps.map((l) => l.title).join(', ') } : {}));
     return send(res, 200, { ok: true, accepted, levelUps });
   }
 

@@ -101,6 +101,15 @@ If a device is still too slow, the remaining lever is rendering popular library 
 with `POST /v1/projects/{id}/render` and playing the file instead of the document (costs a
 render per video and a plan with exports); StudyTok does not do that today.
 
+## The admin sheet (`core/sheet.js`)
+
+An optional mirror of students, joins and daily numbers into a Google Sheet, written by POSTing
+rows to a bound Apps Script (`scripts/sheet/Code.gs`). `syncUser()` refreshes a student's row
+(throttled to once per ten minutes, immediately on sign-in, profile save and billing changes) and
+appends milestones to a Joins tab; `syncDaily()` runs from the cron; `POST /api/admin/sheet/resync`
+rebuilds the Users tab from the `users` index. Every call is fire-and-forget through `waitUntil()`
+and never fails a request. Off unless `STUDYTOK_SHEET_URL` and `STUDYTOK_SHEET_SECRET` are set.
+
 ## Who pays (`core/billing.js`)
 
 Each student's first videos are made on StudyTok's key; then they connect their own Vidmoat

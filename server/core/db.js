@@ -9,6 +9,7 @@
 //   covered:{topic}       LIST  recent lesson titles/subtopics (to keep lessons varied)
 //   user:{id}             JSON  { id, createdAt, interests }
 //   user:{id}:seen|served|liked   SET
+//   users                 ZSET  every user id scored by join time; users:active scored by last activity
 //   media:{url}           JSON  imported stock media, keyed by stock download URL
 
 import { kv } from './kv.js';
@@ -91,6 +92,8 @@ export async function ensureMemberNo(user) {
   return next;
 }
 export const saveUser = (u) => kv.set(`user:${u.id}`, u);
+/** Lists a user in the `users` index (scored by join time) so admin jobs can walk every student. */
+export const indexUser = (u) => kv.zadd('users', { score: Date.parse(u.createdAt) || Date.now(), member: u.id });
 
 export const addToSet = (userId, set, ...ids) => (ids.length ? kv.sadd(`user:${userId}:${set}`, ...ids) : 0);
 export const removeFromSet = (userId, set, ...ids) => (ids.length ? kv.srem(`user:${userId}:${set}`, ...ids) : 0);

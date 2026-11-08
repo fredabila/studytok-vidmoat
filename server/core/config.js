@@ -45,6 +45,13 @@ export const config = {
     billingUrl: process.env.STUDYTOK_VIDMOAT_BILLING_URL || 'https://www.vidmoat.com/pricing',
   },
 
+  // Google Sheet mirror of students, joins and daily numbers (server/core/sheet.js,
+  // scripts/sheet/README.md). Off until both are set.
+  sheet: {
+    url: process.env.STUDYTOK_SHEET_URL || '',
+    secret: process.env.STUDYTOK_SHEET_SECRET || '',
+  },
+
   anthropic: {
     // When unset, lessons come from the built-in offline bank (server/lessons/bank.js).
     enabled: Boolean(process.env.ANTHROPIC_API_KEY || process.env.ANTHROPIC_AUTH_TOKEN),
