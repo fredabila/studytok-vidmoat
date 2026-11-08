@@ -1,0 +1,21 @@
+{
+  "name": "studytok",
+  "version": "0.1.0",
+  "private": true,
+  "description": "A TikTok-style feed of short study videos, generated on the fly with the Vidmoat API and played live in the Vidmoat embed player (no MP4 exports).",
+  "type": "module",
+  "engines": {
+    "node": ">=22.10"
+  },
+  "scripts": {
+    "start": "node --env-file-if-exists=.env server/index.js",
+    "dev": "node --env-file-if-exists=.env --watch server/index.js",
+    "test": "node --test test/*.test.js",
+    "warm": "node --env-file-if-exists=.env scripts/warm.mjs",
+    "preview": "node --env-file-if-exists=.env scripts/preview.mjs"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^1.6.0",
+    "zod": "^4.6.7"
+  }
+}
