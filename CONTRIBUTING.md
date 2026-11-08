@@ -59,6 +59,11 @@ Read [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) first: it walks one request fr
 
 ## Common contributions
 
+**Share material as a pack (no code).** Add `content/<slug>/pack.md` following
+[content/README.md](content/README.md): a book's ideas, course notes, what your project does.
+`npm run content:check` tells you what to fix; a maintainer reviews the text and any assets
+before merging. Your name, link and call to action are shown with every lesson made from it.
+
 ### Add a video format
 
 1. Add an entry to `FORMATS` in `server/video/formats.js`: `name`, `tag`, `blurb`, `spec` (what

@@ -738,3 +738,14 @@ body.landing-on { background: var(--paper); }
 .segmented.small button { padding: 6px 10px; font-size: 12.5px; min-height: 0; }
 .pref-hint { margin: -2px 0 10px; font-size: 12.5px; color: var(--ink-3); line-height: 1.4; }
 @media (min-width: 900px) { .gaps-chip { right: 12px; } }
+
+
+/* ============================================================================ community packs */
+.packs { display: grid; gap: 10px; margin: 10px 0 6px; }
+.pack-row { display: grid; grid-template-columns: 1fr auto; gap: 12px; align-items: start; padding: 12px; border-radius: 14px; border: 1.5px solid var(--line-2); background: #fff; }
+.pack-body { display: grid; gap: 3px; min-width: 0; }
+.pack-body b { font-family: var(--serif); font-size: 16px; line-height: 1.25; }
+.pack-body small { color: var(--ink-3); font-size: 12px; }
+.pack-body p { margin: 4px 0 0; font-size: 13px; line-height: 1.4; color: var(--ink-2); }
+.pack-card { border-color: #5fb0ff; }
+.pack-foot { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }

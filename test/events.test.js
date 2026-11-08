@@ -215,7 +215,7 @@ test('quizGuidance speaks only with evidence: too easy, too hard, or nothing; st
 
   const user = await saveProfile(null, { profile: { level: 'high-school', program: 'Biology' }, units: ['hs-biology-1'] });
   const v1 = await video('explain'), v2 = await video('rapid');
-  const now = Date.now();
+  const now = new Date().setUTCHours(12, 0, 0, 0); // noon, so +25 minutes stays on the same UTC day
   await ingest(user.id, { ctx: { sid: 'g' }, events: [{ type: 'view', videoId: v1.id, at: now }, { type: 'view', videoId: v2.id, at: now + 500 }, { type: 'quiz_answer', videoId: v1.id, correct: false, choice: 0, ms: 500, at: now + 900 }] });
   const st = await studentStats(user.id, { progress: await getProgress(user.id), now: now + 1000 });
   assert.equal(st.today, 2); assert.equal(st.goal, 3);

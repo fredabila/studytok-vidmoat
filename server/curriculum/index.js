@@ -7,6 +7,7 @@
 // fresh subtopic each episode.
 
 import { createHash } from 'node:crypto';
+import { packUnit, isPackUnit } from './packs.js';
 import { config } from '../core/config.js';
 import { kv } from '../core/kv.js';
 import { CATALOG, matchProgram, normalize } from './catalog.js';
@@ -26,6 +27,7 @@ const catalogUnits = new Map(CATALOG.flatMap((p) => p.units.map((u) => [u.id, { 
 /** A unit by id: catalog, interest topic, custom, or researched (stored in KV). */
 export async function getUnit(id) {
   if (catalogUnits.has(id)) return catalogUnits.get(id);
+  if (isPackUnit(id)) return packUnit(id);
   if (id.startsWith('topic:')) return interestUnit(id.slice(6));
   if (id.startsWith('fun:')) return breatherUnit(id);
   return kv.get(`unit:${id}`);

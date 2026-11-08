@@ -3,6 +3,7 @@
 // function alive after the response and is a no-op on a normal long-running server.
 
 import { waitUntil } from '@vercel/functions';
+import { PACKS, publicPack } from './curriculum/packs.js';
 import { config } from './core/config.js';
 import { INTEREST_TOPICS } from './curriculum/topics.js';
 import { LEVELS } from './curriculum/levels.js';
@@ -210,6 +211,8 @@ async function route(req, res, url) {
     if (!process.env.CRON_SECRET || req.headers.authorization !== `Bearer ${process.env.CRON_SECRET}`) return send(res, 401, { error: 'Unauthorized' });
     return send(res, 200, await push.remindDue());
   }
+  // Community packs (content/): public, so a pack page can be linked before sign-in.
+  if (key === 'GET /api/packs') return send(res, 200, { packs: PACKS.map(publicPack) }, { 'Cache-Control': 'public, max-age=300' });
   // The VAPID public key the browser subscribes with (public by design; { enabled: false } when unset).
   if (key === 'GET /api/push/key') return send(res, 200, { enabled: push.enabled(), publicKey: push.publicKey() });
   // Admin: the extra moments (offers, news) shown between lessons; GET lists them, POST replaces

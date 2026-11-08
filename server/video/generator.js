@@ -11,6 +11,7 @@
 // response; on a long-running server the promise simply runs in the background.
 
 import { randomUUID } from 'node:crypto';
+import { packOfUnit } from '../curriculum/packs.js';
 import { config } from '../core/config.js';
 import { topic as topicOf } from '../curriculum/topics.js';
 import { nextLesson, lessonKey } from '../lessons/index.js';
@@ -113,7 +114,7 @@ async function buildVideo(video, unit, audience) {
 
   const [voice, media, music, sfx] = await Promise.all([
     audience.prefs?.voice === 'off' ? Promise.resolve(null) : narrate(lesson),
-    resolveLessonMedia(lesson, look.fallbackVisual),
+    resolveLessonMedia(lesson, look.fallbackVisual, { assets: packOfUnit(unit.id)?.assets || [] }),
     config.generation.music ? resolveMusic(skin.music).catch(() => null) : null,
     sfxP,
   ]);

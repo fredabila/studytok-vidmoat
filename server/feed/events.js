@@ -65,6 +65,9 @@ export const EVENT_SPECS = {
   gaps_reveal: { video: true, fields: { t: 'n' } },
   chapter_seek: { video: true, fields: { from: 'n', to: 'n' } },
   quiz_stamp: { video: true, fields: {} },
+  pack_add: { fields: { slug: 's', by: 's' } },
+  pack_remove: { fields: { slug: 's' } },
+  pack_link: { fields: { slug: 's' } },
   invite_share: { fields: {} },
   refresh: { fields: { where: 's' } },
   skip: { video: true, fields: {} }, // legacy: an early leave

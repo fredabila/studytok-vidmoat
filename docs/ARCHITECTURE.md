@@ -39,6 +39,22 @@ search) what an institution's course actually covers and caches the result per
 institution + program; `index.js` resolves whichever applies and looks units up by id.
 Custom topics typed by a student become open-ended units (`cu:<hash>`).
 
+## Community packs (`curriculum/packs.js`, `content/`)
+
+`content/<slug>/pack.md` files (format and rules in `content/README.md`) are parsed once at
+startup into packs: metadata, 2-12 units (`pack:<slug>:<n>`, each with a summary and facts),
+pack-wide facts, a quiz bank and labelled assets (served from the repo on GitHub,
+`STUDYTOK_CONTENT_BASE`). Vercel bundles the `.md` files with the function (`includeFiles`).
+A student adds a pack from the Library (`PATCH /api/me { addPack }`) or by opening `?pack=<slug>`
+(kept on the device until setup is done, then sent with the profile); its units join
+`user.units` and `user.packs`, grouped as their own course. `getUnit()` resolves pack units
+from memory. The lesson writer gets `packContext()`: the pack's words, facts, the assets by file
+name (`visual.query: "asset:<file>"`, which `media.js` imports into Vidmoat like stock) and the
+quiz bank. `publicVideo` carries `pack: { title, by, link, cta }` for the credit line and the
+*Why* sheet. `scripts/content-check.mjs` validates packs and measures asset files (image
+dimensions from the file headers, MP4 duration/size/codecs from the boxes, MP3 duration from
+the frames) and runs in CI on pull requests.
+
 ## 3. The feed page (`feed/index.js nextItems`)
 
 1. **Candidates**: the student's course units (in order, grouped per program) plus interest

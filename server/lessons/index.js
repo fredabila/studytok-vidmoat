@@ -5,6 +5,7 @@
 // A short lock stops two concurrent requests from paying for the same batch.
 
 import { config } from '../core/config.js';
+import { packOfUnit } from '../curriculum/packs.js';
 import { kv } from '../core/kv.js';
 import { normalize } from '../curriculum/catalog.js';
 import { topic as topicOf } from '../curriculum/topics.js';
@@ -44,7 +45,7 @@ async function writeBatch(unit, audience, key, covered) {
   const formats = pickFormats(unit.topic, config.anthropic.episodesPerCall, { recent, performance, allowed });
   const hooks = await hookGuidance(unit.topic).catch(() => null);
   const quizNote = await quizGuidance(unit.topic).catch(() => null);
-  const raws = await writeEpisodes({
+  const raws = await writeEpisodes({ extra: packContext(unit),
     unit, audience, covered, formats, count: formats.length, accent: topicOf(unit.topic).accent, hooks, quizNote,
   });
   const lessons = [];
@@ -65,6 +66,21 @@ async function writeBatch(unit, audience, key, covered) {
  * @param audience  { level, levelLabel, audience, country, institution, exam }
  * @returns {Promise<{ lesson, source: 'queue'|'claude'|'bank' }>}
  */
+/** What the writer is told about a pack unit: the pack, its facts, assets and quiz bank. */
+export function packContext(unit) {
+  const pack = packOfUnit(unit.id);
+  if (!pack) return [];
+  const u = pack.units.find((x) => x.id === unit.id);
+  return [
+    `SOURCE PACK: this unit comes from "${pack.title}" (${pack.kind}) by ${pack.by}, a community pack. Teach from its words below and stay faithful to them; name the pack once, in the hook or the outro, as the source.`,
+    `About the pack: ${pack.about}`,
+    u?.facts?.length && `Facts for this unit (must be right):\n${u.facts.map((f) => `- ${f}`).join('\n')}`,
+    pack.facts.length && `Facts for the whole pack (must be right):\n${pack.facts.slice(0, 25).map((f) => `- ${f}`).join('\n')}`,
+    pack.assets.length && `Assets the pack provides. To use one as a beat's visual, set visual.kind to "photo" (image) or "footage" (video) and visual.query to exactly "asset:<file>". Use an asset when it shows what the beat is about; otherwise describe stock as usual:\n${pack.assets.filter((a) => a.kind !== 'audio').map((a) => `- asset:${a.file} (${a.kind}): ${a.shows}`).join('\n')}`,
+    pack.quiz.length && `Quiz bank from the pack (use one of these for the quick check when it fits the episode; the first option is correct, reorder the options):\n${pack.quiz.slice(0, 12).map((q) => `- ${q.question} | ${q.options.join(' | ')}`).join('\n')}`,
+  ].filter(Boolean);
+}
+
 export async function nextLesson(unit, audience) {
   const key = lessonKey(unit.id, audience);
   const meta = { unitId: unit.id, level: audience.level };

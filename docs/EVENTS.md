@@ -70,6 +70,8 @@ acceleration samples never leave the device, and nothing is recorded when permis
 | `gaps_reveal` | `t` | the viewer revealed the hidden terms |
 | `chapter_seek` | `from`, `to` | tapped a scene marker on the progress bar |
 | `quiz_stamp` | | the viewer's quiz answer was stamped into the video over the reveal |
+| `pack_add` / `pack_remove` | `slug`, `by` library/link | a community pack joined or left the course |
+| `pack_link` | `slug` | the pack's call to action was tapped |
 | `quiz_shown` / `quiz_hold` | `t` | options appeared / the video was held at the question |
 | `quiz_answer` | `choice`, `correct`, `ms` (time to answer) | tapped an option |
 | `quiz_skip` | `ms` | tapped Skip |

@@ -9,6 +9,7 @@ import { INTEREST_TOPICS, TOPIC_BY_ID } from '../curriculum/topics.js';
 import { format as formatOf } from '../video/formats.js';
 import { level as levelOf, LEVEL_BY_ID } from '../curriculum/levels.js';
 import { getUnit, getProgram, interestUnit, customUnit } from '../curriculum/index.js';
+import { PACK_BY_SLUG, PACKS, packOfUnit, publicPack, SLUG as PACK_SLUG } from '../curriculum/packs.js';
 import { lessonKey } from '../lessons/index.js';
 import { startVideo, readyKeyFor } from '../video/generator.js';
 import { pickUnits, mastery, scoreVideo, exploreRate, applyEvent, emptyState, examUrgency } from './ranking.js';
@@ -95,6 +96,7 @@ export async function saveProfile(userId, body) {
     prefs: cleanPrefs(body.prefs || {}, existing?.prefs || DEFAULT_PREFS),
     // Custom units a student added inside a course: unitId -> programKey.
     unitGroups: existing?.unitGroups || {},
+    packs: existing?.packs || [],
     vidmoat: existing?.vidmoat || null,
     // A draft is saved while the student is still reading their syllabus, so the first videos
     // can start generating before they press "Start learning".
@@ -106,7 +108,21 @@ export async function saveProfile(userId, body) {
   await db.saveUser(user);
   await db.indexMember(user);
   if (body.ref != null && !user.referredBy) await recordReferral(user, body.ref);
+  if (typeof body.pack === 'string' && PACK_BY_SLUG[body.pack]) { addPack(user, body.pack); await db.saveUser(user); }
   return user;
+}
+
+/** Puts a community pack's units on the student's course (idempotent). */
+export function addPack(user, slug) {
+  const pack = PACK_BY_SLUG[slug];
+  if (!pack) return false;
+  user.packs = [...new Set([...(user.packs || []), slug])].slice(0, 12);
+  for (const u of pack.units) if (!user.units.includes(u.id)) user.units.push(u.id);
+  return true;
+}
+export function removePack(user, slug) {
+  user.packs = (user.packs || []).filter((s) => s !== slug);
+  user.units = user.units.filter((id) => !id.startsWith(`pack:${slug}:`));
 }
 
 export function audienceFor(user) {
@@ -122,7 +138,7 @@ export function audienceFor(user) {
 
 /**
  * Edits from the app: toggle units, add custom topics, change interests or preferences.
- * body: { units?: string[], interests?: string[], prefs?: object, addCustom?: { title, programKey? }, removeUnit?: string }
+ * body: { units?: string[], interests?: string[], prefs?: object, addCustom?: { title, programKey? }, removeUnit?: string, addPack?: slug, removePack?: slug }
  */
 export async function editProfile(userId, body) {
   const user = await db.getUser(userId);
@@ -143,6 +159,8 @@ export async function editProfile(userId, body) {
     user.units = user.units.filter((id) => id !== body.removeUnit);
     delete user.unitGroups[body.removeUnit];
   }
+  if (typeof body.addPack === 'string' && PACK_SLUG.test(body.addPack)) { if (addPack(user, body.addPack)) added = { pack: publicPack(PACK_BY_SLUG[body.addPack]) }; }
+  if (typeof body.removePack === 'string') removePack(user, body.removePack);
   if (!user.units.length && !user.interests.length) user.interests = INTEREST_TOPICS.map((t) => t.id);
   await db.saveUser(user);
   return { user, added };
@@ -161,7 +179,7 @@ async function updateProgress(userId, unitId, type, extra) {
 async function candidatesFor(user) {
   const out = [];
   const course = (await Promise.all(user.units.map((id) => getUnit(id)))).filter(Boolean);
-  const groupOf = (u) => u.programKey || user.unitGroups?.[u.id] || (u.custom ? 'custom' : 'course');
+  const groupOf = (u) => u.programKey || user.unitGroups?.[u.id] || (u.pack ? `pack:${u.pack}` : u.custom ? 'custom' : 'course');
   const sizes = {};
   for (const u of course) sizes[groupOf(u)] = (sizes[groupOf(u)] || 0) + 1;
   const seen = {};
@@ -422,6 +440,7 @@ export async function publicVideo(v, userId, { withDocument = true, why, pos, qu
     topic: { id: look.id, label: look.label, emoji: look.emoji, accent: look.accent },
     format: { id: v.format || 'explain', tag: formatOf(v.format).tag, name: formatOf(v.format).name },
     unit: v.unitId ? { id: v.unitId, title: v.unitTitle || null } : null,
+    pack: packOfUnit(v.unitId) ? (({ slug, title, by, link, cta, kind }) => ({ slug, title, by, link, cta, kind }))(packOfUnit(v.unitId)) : undefined,
     title: v.lesson?.title || null,
     hook: v.lesson?.hook || null,
     subtopic: v.lesson?.subtopic || null,
@@ -519,6 +538,7 @@ export async function library(userId) {
   for (const raw of historyRaw || []) { const [id, ts] = String(raw).split('|'); if (!seenAt.has(id)) seenAt.set(id, Number(ts) || null); }
   const history = (await Promise.all([...seenAt].map(([id, at]) => summarize(id, at)))).filter(Boolean);
   const programs = (await Promise.all((user.programKeys || []).map((k) => getProgram(k)))).filter(Boolean);
+  const packs = (user.packs || []).map((s) => PACK_BY_SLUG[s]).filter(Boolean);
   const active = new Set(user.units);
   const row = (u, programKey) => {
     const s = states[u.id];
@@ -532,12 +552,14 @@ export async function library(userId) {
   for (const id of user.units) {
     if (units.some((u) => u.id === id)) continue;
     const u = await getUnit(id);
-    if (u) units.push(row(u, user.unitGroups?.[id] || (u.custom ? 'custom' : null)));
+    if (u) units.push(row(u, user.unitGroups?.[id] || (u.pack ? `pack:${u.pack}` : u.custom ? 'custom' : null)));
   }
   return {
     profile: user.profile,
     prefs: cleanPrefs(user.prefs || {}),
-    programs: programs.map((p) => ({ key: p.key, name: p.name, basis: p.basis, sources: p.sources || [] })),
+    programs: [...programs.map((p) => ({ key: p.key, name: p.name, basis: p.basis, sources: p.sources || [] })),
+      ...packs.map((p) => ({ key: `pack:${p.slug}`, name: p.title, basis: `A community pack by ${p.by}`, sources: [], pack: publicPack(p) }))],
+    packs: PACKS.map((p) => ({ ...publicPack(p), added: (user.packs || []).includes(p.slug) })),
     units, interests: user.interests, saved, history,
     misses: (await getMisses(userId)).map(recallItem),
   };
