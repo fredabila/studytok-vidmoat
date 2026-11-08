@@ -23,6 +23,18 @@ Visual rules (each beat has one visual):
 - steps: 3-5 short steps (max 40 chars each). timeline: 3-5 "when|what" items. compare: title "A|B" and 3-4 "a|b" rows. definition: title = the term, items = [definition, max 130 characters]. equation: 1-3 lines using unicode (×, ÷, ², √, →, Δ, ≈) plus title = what it means. stat: value + unit + title label, only for a well-established figure.
 - ambient: a calm background footage query that fits the whole episode.`;
 
+// Student preferences (feed.js DEFAULT_PREFS) as instructions. Defaults add no lines.
+function prefLines(prefs = {}) {
+  const out = [];
+  if (prefs.length === 'quick') out.push('Length: quick. 20-30 seconds: exactly 2 beats of at most 16 words, a short quiz, a 6-word takeaway.');
+  if (prefs.length === 'deep') out.push('Length: deep. 45-60 seconds: 4 beats, one of them a worked example or common mistake, and a fuller explanation.');
+  if (prefs.visuals === 'diagrams') out.push('Visuals: use a teaching visual (diagram, steps, compare, timeline, definition, equation, stat) on every beat; no photo or footage.');
+  if (prefs.visuals === 'footage') out.push('Visuals: prefer photo and footage of real things; use a teaching visual only for an equation, definition or step list that cannot be filmed.');
+  if (prefs.difficulty === 'easier') out.push('Difficulty: pitch it a step below the stated level: simpler words, one idea at a time, a concrete everyday example in every beat.');
+  if (prefs.difficulty === 'harder') out.push('Difficulty: pitch it a step above the stated level: precise terminology, mechanisms and edge cases, an exam-style application in the quiz.');
+  return out;
+}
+
 /**
  * @param {object} p
  * @param {object} p.unit        { title, summary, topic, open?, programName? }
@@ -39,6 +51,7 @@ export async function writeEpisodes({ unit, audience, covered = [], count = 3, a
     audience.country && `Country: ${audience.country}`,
     audience.institution && `Institution: ${audience.institution}`,
     audience.exam && `Preparing for: ${audience.exam}`,
+    ...prefLines(audience.prefs),
     covered.length && `Already covered for this unit (do not repeat):\n${covered.slice(-30).map((c) => `- ${c}`).join('\n')}`,
     `Write ${count} episodes.`,
   ].filter(Boolean).join('\n');

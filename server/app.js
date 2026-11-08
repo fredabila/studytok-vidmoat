@@ -9,7 +9,7 @@ import { LEVELS } from './levels.js';
 import { catalogNames } from './catalog.js';
 import { usingRedis, redisSource, redisLikeVarNames } from './kv.js';
 import * as db from './db.js';
-import { saveProfile, nextItems, recordEvent, publicVideo, library, topUpLibrary, cleanProfile, linkVidmoat } from './feed.js';
+import { saveProfile, editProfile, prefetch, nextItems, recordEvent, publicVideo, library, topUpLibrary, cleanProfile, linkVidmoat } from './feed.js';
 import { resolveProgram, getProgram } from './curriculum.js';
 import { queueStats } from './generator.js';
 import { getMe } from './vidmoat.js';
@@ -203,6 +203,8 @@ async function route(req, res, url) {
     const body = await readJson(req);
     if (key === 'POST /api/session' && !body.profile) body.profile = { level: 'lifelong' };
     const user = await saveProfile(await cookieUser(req), body);
+    // Start the first videos now, so the feed opens without a wait.
+    waitUntil(prefetch(user.id).then((pending) => Promise.allSettled(pending)).catch((err) => console.warn('[prefetch]', err.message)));
     return send(res, 200, { user }, { 'Set-Cookie': userCookie(req, user.id) });
   }
 
@@ -218,12 +220,20 @@ async function route(req, res, url) {
 
   if (key === 'GET /api/library') return send(res, 200, await library(userId));
 
+  // Edit units, interests, preferences; add a custom topic (optionally into a course); remove a unit.
+  if (key === 'PATCH /api/me') {
+    const body = await readJson(req);
+    const { user, added } = await editProfile(userId, body);
+    waitUntil(prefetch(userId).then((pending) => Promise.allSettled(pending)).catch(() => {}));
+    return send(res, 200, { user, added });
+  }
+
   if (key === 'GET /api/feed') {
     const count = Math.min(5, Math.max(1, Number(url.searchParams.get('count')) || 3));
     const { items, pending } = await nextItems(userId, count);
     // Keep generating after the response (serverless) / let it run (long-lived server).
     if (pending.length) waitUntil(Promise.allSettled(pending));
-    return send(res, 200, { items: await Promise.all(items.map((x) => publicVideo(x.video, userId, { why: x.why, pos: x.pos }))) });
+    return send(res, 200, { items: await Promise.all(items.map((x) => publicVideo(x.video, userId, { why: x.why, pos: x.pos, queuedFor: x.queuedFor }))) });
   }
 
   const videoMatch = /^\/api\/videos\/([0-9a-f-]{36})$/.exec(path);

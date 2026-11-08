@@ -41,6 +41,9 @@ function pump() {
 }
 export const queueStats = () => ({ running, waiting: queue.length });
 
+/** Videos are filed by lesson key plus the preferences that change the video itself. */
+export const readyKeyFor = (unitId, audience) => `${lessonKey(unitId, audience)}${audience.prefs?.voice === 'off' ? '|novoice' : ''}`;
+
 /**
  * Registers a new video as "generating" and starts building it.
  * @param unit      { id, title, topic, ... }
@@ -50,7 +53,7 @@ export const queueStats = () => ({ running, waiting: queue.length });
 export async function startVideo(unit, audience, { requestedBy } = {}) {
   const video = {
     id: randomUUID(), unitId: unit.id, unitTitle: unit.title, topic: unit.topic, level: audience.level,
-    readyKey: lessonKey(unit.id, audience), status: 'generating',
+    readyKey: readyKeyFor(unit.id, audience), status: 'generating',
     createdAt: new Date().toISOString(), requestedBy: requestedBy || null,
   };
   await saveVideo(video);
@@ -88,14 +91,14 @@ async function buildVideo(video, unit, audience) {
     const topicUnit = interestUnit(unit.topic);
     if (topicUnit) {
       unit = topicUnit;
-      await updateVideo(video.id, { unitId: unit.id, unitTitle: unit.title, readyKey: lessonKey(unit.id, audience) });
+      await updateVideo(video.id, { unitId: unit.id, unitTitle: unit.title, readyKey: readyKeyFor(unit.id, audience) });
     }
   }
   await updateVideo(video.id, { lesson, lessonSource: source });
   const lessonMs = Date.now() - started;
 
   const [voice, media, music, sfx] = await Promise.all([
-    narrate(lesson),
+    audience.prefs?.voice === 'off' ? Promise.resolve(null) : narrate(lesson),
     resolveLessonMedia(lesson, look.fallbackVisual),
     musicP,
     sfxP,

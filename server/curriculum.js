@@ -10,7 +10,7 @@ import { createHash } from 'node:crypto';
 import { config } from './config.js';
 import { kv } from './kv.js';
 import { CATALOG, matchProgram, normalize } from './catalog.js';
-import { TOPIC_BY_ID } from './topics.js';
+import { TOPIC_BY_ID, guessTopic } from './topics.js';
 import { researchProgram } from './research.js';
 
 const STALE_RESEARCH_MS = 5 * 60 * 1000;
@@ -22,11 +22,27 @@ export const interestUnit = (topicId) => {
 
 const catalogUnits = new Map(CATALOG.flatMap((p) => p.units.map((u) => [u.id, { ...u, programKey: `cat:${p.id}`, programName: p.name }])));
 
-/** A unit by id: catalog, interest topic, or researched (stored in KV). */
+/** A unit by id: catalog, interest topic, custom, or researched (stored in KV). */
 export async function getUnit(id) {
   if (catalogUnits.has(id)) return catalogUnits.get(id);
   if (id.startsWith('topic:')) return interestUnit(id.slice(6));
   return kv.get(`unit:${id}`);
+}
+
+/**
+ * A custom topic typed by a student ("Python decorators", "The Ashanti Empire"). Open-ended:
+ * Claude picks a fresh subtopic each episode. Shared by everyone who adds the same title, so
+ * lessons and videos are reused. Returns null for an empty title.
+ */
+export async function customUnit(title) {
+  const clean = String(title || '').replace(/\s+/g, ' ').trim().slice(0, 60);
+  if (clean.length < 2) return null;
+  const id = `cu:${createHash('sha1').update(normalize(clean)).digest('hex').slice(0, 12)}`;
+  const existing = await kv.get(`unit:${id}`);
+  if (existing) return existing;
+  const unit = { id, title: clean, summary: '', topic: guessTopic(clean), open: true, custom: true, createdAt: new Date().toISOString() };
+  await kv.set(`unit:${id}`, unit);
+  return unit;
 }
 
 export function researchKey(profile) {

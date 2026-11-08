@@ -14,16 +14,40 @@ async function search(query, type) {
   return searchCache.get(key);
 }
 
+// Pixabay serves the same video at several sizes under one id: _tiny (640), _small (960),
+// _medium (1280) and _large (1920). The stock search returns _medium or _tiny; the 1080p file
+// is one URL away. Pexels and Commons URLs carry no such variants.
+export function pixabayLarge(url) {
+  return /cdn\.pixabay\.com\/video\/.*_(tiny|small|medium)\.mp4$/.test(url) ? url.replace(/_(tiny|small|medium)\.mp4$/, '_large.mp4') : null;
+}
+/** How much a w x h source is enlarged to cover 1080x1920 (1 = native, 2.67 = landscape 720p). */
+export const upscaleFactor = (w, h) => (w && h ? Math.max(1080 / w, 1920 / h) : 2.5);
+
+/** Dimensions a candidate will have once imported (after the Pixabay upgrade). */
+export function effectiveDims(r) {
+  if (r.width && r.height && pixabayLarge(r.downloadUrl || '')) {
+    const f = 1920 / Math.max(r.width, r.height);
+    return { width: Math.round(r.width * f), height: Math.round(r.height * f) };
+  }
+  return { width: r.width || 0, height: r.height || 0 };
+}
+
 async function importOnce(result) {
   const hit = await getMedia(result.downloadUrl);
   if (hit) return hit;
-  const media = await importMedia(result.downloadUrl);
+  let media = null;
+  let dims = { width: result.width ?? null, height: result.height ?? null };
+  const large = pixabayLarge(result.downloadUrl);
+  if (large) {
+    try { media = await importMedia(large); dims = effectiveDims(result); } catch { media = null; }
+  }
+  if (!media) media = await importMedia(result.downloadUrl);
   const entry = {
     src: media.url,
     type: media.mediaType,
     mediaDuration: media.durationSec ?? result.duration ?? null,
-    width: result.width ?? null,
-    height: result.height ?? null,
+    width: dims.width,
+    height: dims.height,
     thumbnailUrl: result.thumbnailUrl ?? null,
     credit: result.photographer || result.username || null,
     sourceUrl: result.sourceUrl ?? null,
@@ -34,10 +58,12 @@ async function importOnce(result) {
   return entry;
 }
 
-// Rank candidates: keyword relevance first (Pexels result URLs carry a description slug, e.g.
-// /video/microscopic-view-of-blue-glowing-cells-29851224/), then portrait footage (no crop),
-// then short files (fast import), with a little randomness so repeated queries vary.
-export function rank(results, avoid, query = '', { preferCommons = false } = {}) {
+// Rank candidates: keyword relevance (Pexels result URLs carry a description slug), then
+// sharpness on a 1080x1920 canvas (how much the file must be scaled up to cover it: a portrait
+// 1080p file barely scales, a landscape 720p file scales 2.7x and looks soft), Commons for
+// named things, short files (fast import), and a little randomness so repeated queries vary.
+// `maxScale` drops anything that would be scaled up more than that.
+export function rank(results, avoid, query = '', { preferCommons = false, maxScale = Infinity } = {}) {
   const terms = query.toLowerCase().split(/\s+/).filter((w) => w.length > 2);
   return results
     .filter((r) => r.downloadUrl && !avoid.has(r.downloadUrl))
@@ -45,9 +71,13 @@ export function rank(results, avoid, query = '', { preferCommons = false } = {})
       const text = `${r.sourceUrl || ''} ${r.name || ''} ${(r.tags || []).join(' ')}`.toLowerCase();
       const hits = terms.filter((t) => text.includes(t.replace(/s$/, ''))).length;
       const commons = preferCommons && r.provider === 'commons' ? 2.5 : 0;
-      const score = hits * 2 + commons + (r.height > r.width ? 1.5 : 0) + (r.duration && r.duration <= 20 ? 0.5 : 0) + Math.random();
-      return { r, score };
+      const { width, height } = effectiveDims(r);
+      const scale = upscaleFactor(width, height);
+      const sharp = Math.max(0, Math.min(1.8, 2.8 - scale));
+      const score = hits * 2 + commons + sharp + (r.duration && r.duration <= 20 ? 0.3 : 0) + Math.random() * 0.8;
+      return { r, score, scale };
     })
+    .filter((x) => x.scale <= maxScale)
     .sort((a, b) => b.score - a.score)
     .map((x) => x.r);
 }
@@ -88,14 +118,17 @@ export async function resolveBroll(queries, fallbackQuery) {
  */
 export async function resolveLessonMedia(lesson, fallbackQuery) {
   const used = new Set();
+  const SHARP = { maxScale: 2 }; // portrait 720p, landscape 1080p or better
   const beatJobs = lesson.beats.map((b) => {
     const v = b.visual || {};
-    if (v.kind === 'photo') return [[v.query, 'image', { preferCommons: true }], [v.query, 'video']];
-    if (v.kind === 'footage') return [[v.query, 'video'], [v.query, 'image']];
+    if (v.kind === 'photo') return [[v.query, 'image', { preferCommons: true }], [v.query, 'video', SHARP], [v.query, 'video']];
+    if (v.kind === 'footage') return [[v.query, 'video', SHARP], [v.query, 'image'], [v.query, 'video']];
     return null;
   });
+  // Ambient: sharp video when the library has one, otherwise a high-resolution photo with a slow
+  // push-in beats an upscaled 720p clip behind the cards.
   const [ambient, ...beatMedia] = await Promise.all([
-    resolveOne([[lesson.ambient, 'video'], [fallbackQuery, 'video']], used),
+    resolveOne([[lesson.ambient, 'video', SHARP], [lesson.ambient, 'image'], [fallbackQuery, 'video', SHARP], [fallbackQuery, 'image'], [lesson.ambient, 'video']], used),
     ...beatJobs.map((attempts) => (attempts ? resolveOne([...attempts, [fallbackQuery, 'video']], used) : null)),
   ]);
   return { ambient, beatMedia };

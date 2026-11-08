@@ -73,7 +73,7 @@ export const config = {
     music: bool(process.env.STUDYTOK_MUSIC, true),
     sfx: bool(process.env.STUDYTOK_SFX, true),
     // Ready videos to keep queued ahead of each viewer (generated in the background).
-    readyAhead: num(process.env.STUDYTOK_READY_AHEAD, 3),
+    readyAhead: num(process.env.STUDYTOK_READY_AHEAD, 4),
     // Automatic retries for a failed generation.
     retries: num(process.env.STUDYTOK_GEN_RETRIES, 1),
     // Prefer reusing an unseen library video over generating a new one when one exists.

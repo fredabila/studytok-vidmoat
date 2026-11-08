@@ -394,6 +394,7 @@ function addSlide(data, { at } = {}) {
   $('.like', node).onclick = () => toggleFlag(item, 'liked', 'like', 'unlike');
   $('.save', node).onclick = () => toggleFlag(item, 'saved', 'save', 'unsave');
   $('.why', node).onclick = () => openWhy(item);
+  $('.tune', node).onclick = () => openTune();
   $('.less', node).onclick = () => {
     sendEvent(item.data.id, 'less');
     toast(`Got it: less of ${item.data.unit?.title || item.data.topic.label}`);
@@ -405,6 +406,7 @@ function addSlide(data, { at } = {}) {
 
 function unitLabel(d) {
   const name = d.unit?.title || d.topic.label;
+  if (d.starter) return `${d.topic.emoji} ${name} · while you wait`;
   return d.position ? `Unit ${d.position.index} of ${d.position.total} · ${name}` : `${d.topic.emoji} ${name}`;
 }
 
@@ -427,6 +429,9 @@ function renderSlide(item) {
   $('.credits', node).textContent = credits.length ? `Stock: ${credits.slice(0, 3).join(', ')}` : '';
   const poster = $('.poster', node);
   if (d.poster && poster.getAttribute('src') !== d.poster) poster.src = d.poster;
+  const note = $('.next-note', node);
+  note.hidden = !d.queuedFor;
+  note.textContent = d.queuedFor ? `Your lesson on ${d.queuedFor} is being made and will follow.` : '';
 }
 
 async function poll(item) {
@@ -566,6 +571,7 @@ function answer(item, i) {
 function openWhy(item) {
   const d = item.data, w = d.why || {};
   const reasons = [];
+  if (w.starter) reasons.push(['⏱️', `A ready lesson from the library while yours is being made${d.queuedFor ? ` (${d.queuedFor})` : ''}.`]);
   if (w.explored) reasons.push(['🧭', 'Something a little different. A small share of your feed explores, so it never gets stale.']);
   if (w.kind === 'course' && w.progress >= 0.7) reasons.push(['📚', d.position ? `Next up in your syllabus: unit ${d.position.index} of ${d.position.total}.` : 'Next up in your syllabus.']);
   else if (w.kind === 'course') reasons.push(['📚', 'Part of your course.']);
@@ -578,14 +584,19 @@ function openWhy(item) {
   if (!reasons.length) reasons.push(['🎯', 'Picked for you from your course and interests.']);
   openSheet("Why you're seeing this", el('ul', { class: 'why-list' }, ...reasons.map(([icon, text]) => el('li', {}, el('span', {}, icon), el('span', {}, text)))));
 }
-function openSheet(title, body) {
+let sheetOnClose = null;
+function openSheet(title, body, onClose = null) {
   $('#sheet-title').textContent = title;
   $('#sheet-body').replaceChildren(body);
   $('#sheet').hidden = false;
+  sheetOnClose = onClose;
   feed.items[feed.active]?.player?.pause();
 }
-function closeSheet() {
+async function closeSheet() {
   $('#sheet').hidden = true;
+  const cb = sheetOnClose;
+  sheetOnClose = null;
+  if (cb) await cb();
   if (view === 'feed' && !feed.paused) feed.items[feed.active]?.player?.play();
 }
 
@@ -650,32 +661,160 @@ async function openVideo(id) {
   }
 }
 
+// ============================================================================ tune sheet
+const PREFS = [
+  ['voice', 'Narration', [['on', 'On'], ['off', 'Off']]],
+  ['length', 'Length', [['quick', 'Quick'], ['standard', 'Standard'], ['deep', 'Deep']]],
+  ['visuals', 'Visuals', [['mixed', 'Mixed'], ['diagrams', 'Diagrams'], ['footage', 'Real footage']]],
+  ['difficulty', 'Difficulty', [['easier', 'Easier'], ['standard', 'Standard'], ['harder', 'Harder']]],
+];
+
+async function patchMe(body) {
+  const res = await api('PATCH', '/api/me', body);
+  me = res.user;
+  return res;
+}
+
+/** Topics, custom topics and lesson preferences. Changing a preference restarts the feed. */
+async function openTune() {
+  const lib = await api('GET', '/api/library').catch(() => null);
+  if (!lib) return toast("Couldn't load your settings.");
+  const prefsBefore = JSON.stringify(lib.prefs);
+  const prefs = { ...lib.prefs };
+  const interests = new Set(lib.interests);
+  const body = el('div', { class: 'tune' });
+
+  // Interests
+  body.append(el('h4', {}, 'Topics you follow'));
+  const chips = el('div', { class: 'chips' });
+  for (const t of cfg.topics) {
+    const b = el('button', { type: 'button', class: 'chip-btn', 'aria-pressed': String(interests.has(t.id)) }, `${t.emoji} ${t.label}`);
+    b.onclick = async () => {
+      interests.has(t.id) ? interests.delete(t.id) : interests.add(t.id);
+      b.setAttribute('aria-pressed', String(interests.has(t.id)));
+      await patchMe({ interests: [...interests] }).catch(() => toast("Couldn't save that."));
+    };
+    chips.append(b);
+  }
+  body.append(chips);
+
+  // Custom topics
+  body.append(el('h4', {}, 'Your own topics'));
+  const customList = el('div', { class: 'chips' });
+  body.append(customList);
+  const renderCustom = (units) => {
+    customList.replaceChildren(...units.filter((u) => u.custom && u.active).map((u) => el('span', { class: 'chip-btn on' }, u.title,
+      el('button', { type: 'button', class: 'chip-x', 'aria-label': `Remove ${u.title}`, onclick: async () => {
+        await patchMe({ removeUnit: u.id }).catch(() => toast("Couldn't remove that."));
+        renderCustom((await api('GET', '/api/library')).units);
+      } }, '×'))));
+    if (!customList.childElementCount) customList.append(el('span', { class: 'muted small' }, 'Anything you want to learn: "Python decorators", "The Ashanti Empire", "Chess openings"…'));
+  };
+  renderCustom(lib.units);
+  const input = el('input', { type: 'text', maxlength: '60', placeholder: 'Add a topic…', 'aria-label': 'Add a topic' });
+  const add = async () => {
+    const title = input.value.trim();
+    if (title.length < 2) return;
+    input.value = '';
+    const { added } = await patchMe({ addCustom: { title } }).catch(() => ({}));
+    if (!added) return toast("Couldn't add that topic.");
+    toast(`Added "${added.title}". Lessons are on their way.`);
+    renderCustom((await api('GET', '/api/library')).units);
+  };
+  input.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); add(); } });
+  body.append(el('div', { class: 'add-row' }, input, el('button', { type: 'button', class: 'btn small', onclick: add }, 'Add')));
+
+  // Preferences
+  body.append(el('h4', {}, 'How lessons are made'));
+  for (const [key, label, options] of PREFS) {
+    const seg = el('div', { class: 'segmented small', role: 'radiogroup', 'aria-label': label });
+    const draw = () => seg.replaceChildren(...options.map(([v, text]) => el('button', { type: 'button', role: 'radio', 'aria-checked': String(prefs[key] === v), 'aria-selected': String(prefs[key] === v), onclick: () => { prefs[key] = v; draw(); } }, text)));
+    draw();
+    body.append(el('div', { class: 'pref-row' }, el('span', {}, label), seg));
+  }
+  body.append(el('p', { class: 'fine' }, 'Narration and visuals change how videos are made. Length and difficulty change the lesson itself. New videos follow your settings; ones already made are kept.'));
+
+  openSheet('Tune your feed', body, async () => {
+    if (JSON.stringify(prefs) !== prefsBefore) {
+      await patchMe({ prefs }).catch(() => toast("Couldn't save your preferences."));
+      toast('Preferences saved. Loading lessons made your way…');
+      await restartFeed();
+    }
+  });
+}
+
+async function restartFeed() {
+  feed.items.splice(0).forEach((it) => { it.player?.destroy(); it.el.remove(); });
+  feed.active = -1;
+  showView('feed');
+  await loadMore(3);
+  goTo(0, { animate: false });
+}
+
 // ============================================================================ library
 async function showLibrary() {
   const lib = await api('GET', '/api/library');
   const byProgram = new Map();
   for (const u of lib.units) {
-    const key = u.programKey || 'course';
+    const key = u.programKey || 'custom';
     if (!byProgram.has(key)) byProgram.set(key, []);
     byProgram.get(key).push(u);
   }
   const course = $('#lib-course');
   course.replaceChildren();
   if (!lib.units.length) {
-    course.append(el('div', { class: 'empty' }, el('b', {}, 'No course yet'), 'Add your course or subjects in Profile, and your feed will follow your syllabus.'));
+    course.append(el('div', { class: 'empty' }, el('b', {}, 'No course yet'), 'Add your course or subjects in Profile, or add your own topics below.'));
   }
+  const activeIds = new Set(lib.units.filter((u) => u.active).map((u) => u.id));
+  const saveUnits = () => patchMe({ units: lib.units.filter((u) => activeIds.has(u.id)).map((u) => u.id) }).catch(() => toast("Couldn't save that."));
   for (const [key, units] of byProgram) {
     const program = lib.programs.find((p) => p.key === key);
-    const pct = Math.round((units.reduce((s, u) => s + u.mastery, 0) / units.length) * 100);
+    const on = units.filter((u) => u.active);
+    const pct = on.length ? Math.round((on.reduce((s, u) => s + u.mastery, 0) / on.length) * 100) : 0;
     const ring = el('div', { class: 'ring' }, el('span', {}, `${pct}%`));
     ring.style.setProperty('--p', String(pct));
-    course.append(el('div', { class: 'course-card' },
-      el('div', { class: 'course-head' }, ring, el('div', {}, el('h3', {}, program?.name || 'Your course'), el('p', {}, program?.basis || `${units.length} units`))),
-      ...units.map((u) => el('div', { class: 'unit-row' },
-        el('div', { class: 'unit-name' }, u.title, u.dueForReview ? el('span', { class: 'due' }, 'Review due') : null),
+    const rows = units.map((u) => {
+      const box = el('input', { type: 'checkbox', class: 'unit-on', 'aria-label': `Include ${u.title}` });
+      box.checked = u.active;
+      box.onchange = async () => { box.checked ? activeIds.add(u.id) : activeIds.delete(u.id); u.active = box.checked; row.classList.toggle('off', !u.active); await saveUnits(); };
+      const row = el('div', { class: `unit-row${u.active ? '' : ' off'}` },
+        el('label', { class: 'unit-name' }, box, el('span', {}, u.title), u.custom ? el('span', { class: 'tag' }, 'yours') : null, u.dueForReview && u.active ? el('span', { class: 'due' }, 'Review due') : null),
         el('div', { class: 'meter', role: 'meter', 'aria-valuemin': '0', 'aria-valuemax': '100', 'aria-valuenow': String(Math.round(u.mastery * 100)), 'aria-label': `${u.title} mastery` },
           el('i', { style: `width:${Math.round(u.mastery * 100)}%` })),
-        el('span', { class: 'pct' }, `${Math.round(u.mastery * 100)}%`)))));
+        u.custom
+          ? el('button', { type: 'button', class: 'chip-x', 'aria-label': `Remove ${u.title}`, onclick: async () => { await patchMe({ removeUnit: u.id }).catch(() => {}); showLibrary(); } }, '×')
+          : el('span', { class: 'pct' }, `${Math.round(u.mastery * 100)}%`));
+      return row;
+    });
+    const input = el('input', { type: 'text', maxlength: '60', placeholder: key === 'custom' ? 'Add a topic…' : `Add a topic to ${program?.name || 'this course'}…`, 'aria-label': 'Add a topic' });
+    const add = async () => {
+      const title = input.value.trim();
+      if (title.length < 2) return;
+      input.value = '';
+      const { added } = await patchMe({ addCustom: { title, programKey: key === 'custom' ? null : key } }).catch(() => ({}));
+      if (!added) return toast("Couldn't add that topic.");
+      toast(`Added "${added.title}". Lessons are on their way.`);
+      showLibrary();
+    };
+    input.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); add(); } });
+    course.append(el('div', { class: 'course-card' },
+      el('div', { class: 'course-head' }, ring, el('div', {}, el('h3', {}, program?.name || (key === 'custom' ? 'My topics' : 'Your course')), el('p', {}, program?.basis || (key === 'custom' ? 'Topics you added' : `${units.length} units`)))),
+      ...rows,
+      el('div', { class: 'add-row' }, input, el('button', { type: 'button', class: 'btn small', onclick: add }, 'Add'))));
+  }
+  if (!byProgram.has('custom')) {
+    const input = el('input', { type: 'text', maxlength: '60', placeholder: 'Add your own topic…', 'aria-label': 'Add a topic' });
+    const add = async () => {
+      const title = input.value.trim();
+      if (title.length < 2) return;
+      const { added } = await patchMe({ addCustom: { title } }).catch(() => ({}));
+      if (!added) return toast("Couldn't add that topic.");
+      toast(`Added "${added.title}". Lessons are on their way.`);
+      showLibrary();
+    };
+    input.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); add(); } });
+    course.append(el('div', { class: 'card' }, el('h3', {}, 'My topics'), el('p', { class: 'muted' }, 'Anything you want to learn, in your own words.'),
+      el('div', { class: 'add-row' }, input, el('button', { type: 'button', class: 'btn small', onclick: add }, 'Add'))));
   }
   if (lib.interests?.length) {
     course.append(el('div', { class: 'card' }, el('h3', {}, 'Also following'),
@@ -781,6 +920,7 @@ function wireChrome() {
     };
   });
   $('#edit-studies').onclick = editStudies;
+  $('#open-tune').onclick = openTune;
   $$('#sheet [data-close]').forEach((b) => { b.onclick = closeSheet; });
   document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !$('#sheet').hidden) closeSheet(); });
   $$('[data-signin]').forEach((b) => { b.onclick = () => { location.href = '/api/auth/vidmoat/start'; }; });
