@@ -79,3 +79,32 @@ test('first sign-in links the guest profile; a new device restores it', async ()
   const fresh = await linkVidmoat(null, { id: 'acct_3', name: 'New', email: 'new@example.com' });
   assert.equal(fresh.user.setupDone, false);
 });
+
+test('without configured credentials, StudyTok registers its own client once and reuses it', async () => {
+  const { config } = await import('../server/config.js');
+  const saved = { id: config.oauth.clientId, secret: config.oauth.clientSecret };
+  config.oauth.clientId = ''; config.oauth.clientSecret = '';
+  const realFetch = globalThis.fetch;
+  const registrations = [];
+  globalThis.fetch = async (url, opts = {}) => {
+    if (String(url).endsWith('/api/oauth/register')) {
+      registrations.push(JSON.parse(opts.body));
+      return new Response(JSON.stringify({ client_id: 'dyn_abc', client_secret: 'dyn_secret', client_secret_expires_at: 0 }), { status: 201 });
+    }
+    return new Response('{}', { status: 404 });
+  };
+  try {
+    const a = await startSignIn(req);
+    const b = await startSignIn(req);
+    assert.equal(registrations.length, 1, 'registered once, then reused');
+    assert.deepEqual(registrations[0], { client_name: 'StudyTok', redirect_uris: ['https://studytok.example/api/auth/vidmoat/callback'] });
+    for (const { url } of [a, b]) {
+      const u = new URL(url);
+      assert.equal(u.searchParams.get('client_id'), 'dyn_abc');
+      assert.equal(u.searchParams.get('scope'), 'account.read', 'always names the single read-only scope');
+    }
+  } finally {
+    globalThis.fetch = realFetch;
+    config.oauth.clientId = saved.id; config.oauth.clientSecret = saved.secret;
+  }
+});
