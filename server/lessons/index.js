@@ -11,6 +11,7 @@ import { topic as topicOf } from '../topics.js';
 import { BANK } from './bank.js';
 import { sanitizeLesson } from './schema.js';
 import { writeEpisodes } from './claude.js';
+import { pickFormats } from '../formats.js';
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -30,8 +31,12 @@ function fromBank(unit, covered) {
 }
 
 async function writeBatch(unit, audience, key, covered) {
+  // Every batch mixes formats, steering away from the ones this unit used most recently, so a
+  // student scrolling one unit never sees the same kind of video twice in a row.
+  const recent = ((await kv.lrange(`formats:${key}`, 0, 9)) || []).reverse();
+  const formats = pickFormats(unit.topic, config.anthropic.episodesPerCall, { recent });
   const raws = await writeEpisodes({
-    unit, audience, covered, count: config.anthropic.episodesPerCall, accent: topicOf(unit.topic).accent,
+    unit, audience, covered, formats, count: formats.length, accent: topicOf(unit.topic).accent,
   });
   const lessons = [];
   for (const raw of raws) {
@@ -40,6 +45,8 @@ async function writeBatch(unit, audience, key, covered) {
   if (!lessons.length) throw new Error('No usable episodes');
   await kv.lpush(`covered:${key}`, ...lessons.flatMap((l) => [l.title, l.subtopic]));
   await kv.ltrim(`covered:${key}`, 0, 199);
+  await kv.lpush(`formats:${key}`, ...lessons.map((l) => l.format).reverse());
+  await kv.ltrim(`formats:${key}`, 0, 19);
   if (lessons.length > 1) await kv.rpush(`lessons:${key}`, ...lessons.slice(1));
   return lessons[0];
 }

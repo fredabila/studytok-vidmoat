@@ -13,7 +13,8 @@ import { saveProfile, editProfile, prefetch, nextItems, recordEvent, publicVideo
 import { resolveProgram, getProgram } from './curriculum.js';
 import { queueStats } from './generator.js';
 import { getMe } from './vidmoat.js';
-import { signInEnabled, startSignIn, finishSignIn } from './auth.js';
+import { signInEnabled, signInRequired, startSignIn, finishSignIn } from './auth.js';
+import { FORMATS } from './formats.js';
 import { kv } from './kv.js';
 
 const EVENT_TYPES = new Set(['view', 'complete', 'like', 'unlike', 'save', 'unsave', 'skip', 'less', 'leave', 'quiz_answer']);
@@ -69,6 +70,7 @@ async function cookieUser(req) {
   const m = /(?:^|;\s*)st_uid=([0-9a-f-]{36})/.exec(req.headers.cookie || '');
   return m && (await db.getUser(m[1])) ? m[1] : null;
 }
+const signedIn = async (userId) => Boolean(userId && (await db.getUser(userId))?.vidmoat);
 const userCookie = (req, id) => `st_uid=${id}; Path=/; HttpOnly; SameSite=Lax; Max-Age=31536000${isHttps(req) ? '; Secure' : ''}`;
 const clearCookie = (req, name) => `${name}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0${isHttps(req) ? '; Secure' : ''}`;
 const stateCookie = (req, v) => `st_oauth=${v}; Path=/api/auth; HttpOnly; SameSite=Lax; Max-Age=600${isHttps(req) ? '; Secure' : ''}`;
@@ -126,6 +128,8 @@ async function route(req, res, url) {
       playerOrigin: config.vidmoat.playerOrigin,
       research: config.anthropic.enabled,
       vidmoatSignIn: signInEnabled(),
+      signInRequired: signInRequired(),
+      formats: Object.entries(FORMATS).map(([id, f]) => ({ id, name: f.name, tag: f.tag, blurb: f.blurb })),
       levels: LEVELS.map(({ id, label, emoji }) => ({ id, label, emoji })),
       topics: INTEREST_TOPICS.map(({ id, label, emoji, accent }) => ({ id, label, emoji, accent })),
     });
@@ -171,45 +175,49 @@ async function route(req, res, url) {
 
   // ---- Sign in with Vidmoat (identity only; see server/auth.js) ----
   if (key === 'GET /api/auth/vidmoat/start') {
-    if (!signInEnabled()) return redirect(res, '/?auth=unavailable#profile');
+    if (!signInEnabled()) return redirect(res, '/?auth=unavailable');
     try {
       const { url: to, state } = await startSignIn(req);
       return redirect(res, to, [stateCookie(req, state)]);
     } catch (err) {
       console.error('[auth] start failed:', err.message);
-      return redirect(res, '/?auth=error#profile');
+      return redirect(res, '/?auth=error');
     }
   }
   if (key === 'GET /api/auth/vidmoat/callback') {
     const state = url.searchParams.get('state');
     const code = url.searchParams.get('code');
-    if (url.searchParams.get('error') || !code) return redirect(res, '/?auth=cancelled#profile', [clearCookie(req, 'st_oauth')]);
-    if (!state || state !== cookieValue(req, 'st_oauth')) return redirect(res, '/?auth=error#profile', [clearCookie(req, 'st_oauth')]);
+    if (url.searchParams.get('error') || !code) return redirect(res, '/?auth=cancelled', [clearCookie(req, 'st_oauth')]);
+    if (!state || state !== cookieValue(req, 'st_oauth')) return redirect(res, '/?auth=error', [clearCookie(req, 'st_oauth')]);
     try {
       const identity = await finishSignIn({ code, state });
       const { user, restored } = await linkVidmoat(await cookieUser(req), identity);
-      return redirect(res, `/?auth=${restored ? 'restored' : 'linked'}#profile`, [userCookie(req, user.id), clearCookie(req, 'st_oauth')]);
+      return redirect(res, `/?auth=${restored ? 'restored' : 'linked'}`, [userCookie(req, user.id), clearCookie(req, 'st_oauth')]);
     } catch (err) {
       console.error('[auth]', err.message);
-      return redirect(res, '/?auth=error#profile', [clearCookie(req, 'st_oauth')]);
+      return redirect(res, '/?auth=error', [clearCookie(req, 'st_oauth')]);
     }
   }
   if (key === 'POST /api/auth/signout') {
     return send(res, 200, { ok: true }, { 'Set-Cookie': clearCookie(req, 'st_uid') });
   }
 
-  // Create or update the viewer's profile (sets the session cookie).
+  // Create or update the viewer's profile (sets the session cookie). With sign-in required, only
+  // a viewer who has signed in with Vidmoat (the callback created their user) can set one up.
   if (key === 'POST /api/profile' || key === 'POST /api/session') {
     const body = await readJson(req);
     if (key === 'POST /api/session' && !body.profile) body.profile = { level: 'lifelong' };
-    const user = await saveProfile(await cookieUser(req), body);
+    const current = await cookieUser(req);
+    if (signInRequired() && !(await signedIn(current))) return send(res, 401, { error: 'Sign in with Vidmoat to start', signin: true });
+    const user = await saveProfile(current, body);
     // Start the first videos now, so the feed opens without a wait.
     waitUntil(prefetch(user.id).then((pending) => Promise.allSettled(pending)).catch((err) => console.warn('[prefetch]', err.message)));
     return send(res, 200, { user }, { 'Set-Cookie': userCookie(req, user.id) });
   }
 
   const userId = await cookieUser(req);
-  if (!userId) return send(res, 401, { error: 'No session. POST /api/profile first.' });
+  if (!userId) return send(res, 401, { error: 'No session. Sign in with Vidmoat first.', signin: true });
+  if (signInRequired() && !(await signedIn(userId))) return send(res, 401, { error: 'Sign in with Vidmoat to continue', signin: true });
 
   if (key === 'GET /api/me') {
     const [u, seen, liked] = await Promise.all([db.getUser(userId), db.countSet(userId, 'seen'), db.countSet(userId, 'liked')]);

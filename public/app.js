@@ -50,7 +50,7 @@ let recovering = false;
 function sessionLost() {
   if (recovering) return;
   recovering = true;
-  toast("Your session expired. Let's set up your feed again.");
+  toast('Your session expired. Please sign in again.');
   setTimeout(() => location.replace('/'), 1200);
 }
 const sendEvent = (videoId, type, extra = {}) => api('POST', '/api/events', { videoId, type, ...extra }).catch(() => {});
@@ -425,6 +425,7 @@ function renderSlide(item) {
   $$('.making-steps li', node).forEach((li, i) => { li.classList.toggle('done', i < stage); li.classList.toggle('on', i === stage && d.status === 'generating'); });
   $('.unit-text', node).textContent = unitLabel(d) + (d.subtopic ? ` · ${d.subtopic}` : '');
   $('.title', node).textContent = d.title || '';
+  $('.fmt-badge', node).textContent = d.status === 'ready' && d.format?.tag ? d.format.tag : '';
   $('.like .count', node).textContent = String(d.likes || 0);
   $('.like', node).setAttribute('aria-pressed', String(!!d.liked));
   $('.save', node).setAttribute('aria-pressed', String(!!d.saved));
@@ -494,7 +495,7 @@ function syncPlayers() {
   feed.items.forEach((item, i) => {
     if (feed.active >= 0 && Math.abs(i - feed.active) <= 1) mountPlayer(item); else unmountPlayer(item);
     if (!item.player) return;
-    if (i === feed.active && !feed.paused && view === 'feed') item.player.play(); else item.player.pause();
+    if (i === feed.active && !feed.paused && view === 'feed' && !item.held) item.player.play(); else item.player.pause();
   });
 }
 function onState(item, time, playing, duration) {
@@ -503,6 +504,16 @@ function onState(item, time, playing, duration) {
   item.lastTime = time;
   $('.bar', item.el).style.transform = `scaleX(${duration ? Math.min(1, time / duration) : 0})`;
   updateQuiz(item, time);
+  // Hold at the end of the question until the viewer answers (or skips): the answer is never
+  // spoken before they have had the chance to try.
+  const q = item.data.quiz;
+  if (q?.hold != null && isActive && !item.answered && !item.held && time >= q.hold && time < q.reveal) {
+    item.held = true;
+    item.player.pause();
+    item.player.seek(q.hold);
+    $('.quiz', item.el).dataset.held = 'true';
+    return;
+  }
   if (duration && time >= duration - 0.15 && isActive) {
     if (!item.completed) { item.completed = true; sendEvent(item.data.id, 'complete'); }
     item.lastTime = 0;
@@ -549,12 +560,23 @@ function updateQuiz(item, time) {
   const open = time >= q.from && time < q.reveal + (item.answered ? 2.5 : 0);
   if (open && box.hidden) {
     box.hidden = false;
+    box.dataset.held = 'false';
     if (!$('.quiz-options', box).childElementCount) {
       $('.quiz-options', box).replaceChildren(...q.options.map((opt, i) =>
         el('button', { type: 'button', class: 'quiz-opt', onclick: () => answer(item, i) }, el('b', {}, 'ABC'[i]), opt)));
+      $('.quiz-skip', box).onclick = () => release(item);
     }
   }
   if (!open && !box.hidden) box.hidden = true;
+}
+/** Let the video continue after the question (answered or skipped). */
+function release(item) {
+  item.answered = true;
+  const wasHeld = item.held;
+  item.held = false;
+  const box = $('.quiz', item.el);
+  box.dataset.held = 'false';
+  if (wasHeld && feed.items[feed.active] === item && !feed.paused && view === 'feed') item.player?.play();
 }
 function answer(item, i) {
   if (item.answered) return;
@@ -569,6 +591,7 @@ function answer(item, i) {
   });
   $('.quiz-feedback', box).textContent = correct ? 'Correct! 🎉' : `Not quite: it's ${'ABC'[q.answerIndex]}. We'll bring this back for review.`;
   sendEvent(item.data.id, 'quiz_answer', { correct });
+  setTimeout(() => release(item), 700);
 }
 
 // ---------------------------------------------------------------------------- why sheet
@@ -935,6 +958,44 @@ function wireChrome() {
   });
 }
 
+// ============================================================================ landing
+// Sample cards: one per format, so a new visitor sees how varied the feed is before signing in.
+const SAMPLE_HOOKS = {
+  explain: { topic: 'Biology', accent: '#34d399', hook: 'Why your cells never <em>run out</em> of energy', card: ['Diagram', 'Mitochondrion · ATP cycle'] },
+  mythbust: { topic: 'Physics', accent: '#8fc1ff', hook: 'Drop a <em>hammer</em> and a feather', stamp: 'Myth', card: ['Everyone says', 'Heavier things fall faster'] },
+  rapid: { topic: 'Economics', accent: '#f5b971', hook: '5 things that move <em>exchange rates</em>', card: ['03 / 05', 'Interest rates'] },
+  examdrill: { topic: 'Maths', accent: '#f472b6', hook: 'This one costs <em>marks</em> every year', card: ['Exam question', 'Solve 2x² − 5x − 3 = 0'] },
+  story: { topic: 'History', accent: '#fbbf24', hook: 'In 1665 a university <em>closed its doors</em>', card: ['Chapter 2', '1666 · The year of wonders'] },
+  flashcards: { topic: 'Chemistry', accent: '#a78bfa', hook: 'Say it before it <em>appears</em>', card: ['Question 1 / 4', 'Unit of amount of substance?'] },
+  why: { topic: 'Geography', accent: '#60a5fa', hook: 'Why does it rain <em>more</em> near the equator?', card: ['Because', 'Hot air rises and cools'] },
+  chat: { topic: 'Computer science', accent: '#2dd4bf', hook: 'Is recursion just a <em>loop</em> in disguise?', card: ['Tutor Ama', 'Not quite. Every call gets its own frame…'] },
+};
+function renderLanding(notice) {
+  const wrap = $('#ld-samples');
+  wrap.replaceChildren(...(cfg.formats || []).map((f, i) => {
+    const s = SAMPLE_HOOKS[f.id] || { topic: 'Study', accent: '#ffd93d', hook: f.blurb, card: [f.tag, ''] };
+    const card = el('article', { class: 'sample', 'data-f': f.id, style: `--accent:${s.accent};animation-delay:${i * 60}ms`, 'aria-label': `${f.name} sample` },
+      el('span', { class: 's-chip' }, `${s.topic} · ${f.tag}`),
+      el('div', { class: 's-hook' }, el('span', {})),
+      s.stamp ? el('span', { class: 's-stamp' }, s.stamp) : null,
+      el('div', { class: 's-card' }, el('b', {}, s.card[0]), s.card[1]),
+      el('div', { class: 's-foot' }, el('span', {}, f.name), el('span', {}, '▶ 0:38')));
+    $('.s-hook span', card).innerHTML = s.hook; // trusted static copy above
+    return card;
+  }));
+  const install = $('#ld-install');
+  const standalone = matchMedia('(display-mode: standalone)').matches || navigator.standalone;
+  const ios = /iphone|ipad|ipod/i.test(navigator.userAgent);
+  install.hidden = Boolean(standalone) || (!installPrompt && !ios);
+  install.onclick = () => (installPrompt ? doInstall() : toast('On iPhone or iPad: tap Share in Safari, then "Add to Home Screen".'));
+  if (!cfg.vidmoatSignIn) $$('.ld-go, .ld-signin').forEach((a) => { a.setAttribute('aria-disabled', 'true'); a.onclick = (e) => { e.preventDefault(); toast('Sign-in is not configured on this server yet.'); }; });
+  $('#landing').hidden = false;
+  $('#onboard').hidden = true;
+  $('#app').hidden = true;
+  document.body.classList.add('landing-on');
+  if (notice) toast(notice);
+}
+
 // ============================================================================ boot
 function authNotice() {
   const auth = new URLSearchParams(location.search).get('auth');
@@ -951,7 +1012,7 @@ function authNotice() {
 
 async function boot() {
   if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(() => {});
-  window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); installPrompt = e; if (view === 'profile') renderProfile(); });
+  window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); installPrompt = e; if (view === 'profile') renderProfile(); if (!$('#landing').hidden) $('#ld-install').hidden = false; });
 
   cfg = await api('GET', '/api/config');
   wireChrome();
@@ -965,6 +1026,12 @@ async function boot() {
     me = (await api('GET', '/api/me')).user;
   } catch (err) {
     if (err.status !== 401) throw err;
+  }
+  // Sign in with Vidmoat is the way in: the landing page explains StudyTok and hands over to
+  // Vidmoat; the callback brings the viewer back here signed in.
+  if (cfg.signInRequired && !me?.vidmoat) {
+    renderLanding(notice);
+    return;
   }
   if (!me || !me.setupDone) {
     await runOnboarding(me);

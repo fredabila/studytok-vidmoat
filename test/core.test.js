@@ -14,6 +14,8 @@ const { INTEREST_TOPICS } = await import('../server/topics.js');
 const { rank } = await import('../server/media.js');
 const { sanitizeSvg, teachingVisual } = await import('../server/visuals.js');
 const { narrationParts, alignParts } = await import('../server/voice.js');
+const { scenesFor, FORMAT_IDS, pickFormats } = await import('../server/formats.js');
+const { SAMPLES } = await import('../server/lessons/samples.js');
 const { matchProgram, CATALOG } = await import('../server/catalog.js');
 
 const lesson = sanitizeLesson(BANK.biology[0], 'biology');
@@ -56,36 +58,93 @@ test('sanitizeLesson clamps, repairs the answer index and downgrades incomplete 
 });
 
 test('silent timeline: hook, beats, quiz, reveal, outro back to back', () => {
-  const { segments, duration } = planTimeline(lesson);
+  const { segments, duration } = planTimeline(scenesFor(lesson));
   assert.deepEqual(segments.map((s) => s.kind), ['hook', 'beat', 'beat', 'beat', 'quiz', 'reveal', 'outro']);
   for (let i = 1; i < segments.length; i++) assert.ok(Math.abs(segments[i].start - (segments[i - 1].start + segments[i - 1].duration)) < 0.02);
-  assert.ok(duration > 18 && duration < 50, `duration ${duration}`);
+  assert.ok(duration > 18 && duration < 60, `duration ${duration}`);
 });
 
 test('narrated timeline follows the audio and pauses before the answer', () => {
   const parts = narrationParts(lesson);
-  assert.deepEqual(parts.map((p) => p.kind), ['hook', 'beat', 'beat', 'beat', 'quizQ', 'reveal', 'outro']);
+  assert.deepEqual(parts.map((p) => p.kind), ['hook', 'beat', 'beat', 'beat', 'quiz', 'reveal', 'outro']);
   assert.ok(parts.reduce((n, p) => n + p.text.length + 1, 0) <= 1000);
+  assert.equal(parts.find((p) => p.kind === 'reveal').pauseBefore, 4, 'the think pause sits before the answer');
   const aligned = alignParts(parts, 30, []);
-  const reveal = aligned.parts.findIndex((p) => p.kind === 'reveal');
-  const voice = { src: 'https://x/v.mp3', duration: 30, split: aligned.cuts[reveal], parts: aligned.parts, words: [] };
-  const { segments, voiceClips, duration } = planTimeline(lesson, voice);
+  const voice = { src: 'https://x/v.mp3', duration: 30, parts: aligned.parts, words: [] };
+  const { segments, voiceClips, duration } = planTimeline(scenesFor(lesson), voice);
   assert.equal(voiceClips.length, 2);
-  assert.ok(Math.abs(voiceClips[1].start - (voiceClips[0].start + voiceClips[0].duration) - 3) < 0.02, 'three-second think pause');
+  assert.ok(Math.abs(voiceClips[1].start - (voiceClips[0].start + voiceClips[0].duration) - 4) < 0.02, 'four-second think pause');
   const quiz = segments.find((s) => s.kind === 'quiz'), rev = segments.find((s) => s.kind === 'reveal');
   assert.ok(Math.abs(rev.start - voiceClips[1].start) < 0.05, 'reveal starts with the second voice clip');
   assert.ok(quiz.start < rev.start && duration > 30);
+  const { quiz: timing } = composeLesson(lesson, { ...media, voice });
+  assert.ok(timing.from < timing.hold && timing.hold < timing.reveal && Math.abs(timing.reveal - rev.start) < 0.05, 'app holds the video before the answer');
+});
+
+test('silent scenes (recap) and several pauses (flashcards) fit between the narration parts', () => {
+  const rapid = sanitizeLesson({ format: 'rapid', title: 'Five things', hook: 'Five things about cells', hookTerm: 'Five', takeaway: 'Cells are busy.',
+    items: ['Membrane', 'Nucleus', 'Mitochondria', 'Ribosome'].map((t) => ({ title: t, text: `The ${t.toLowerCase()} does an important job in the cell.`, visual: t })),
+    quiz: { question: 'Which part holds DNA?', options: ['Membrane', 'Nucleus', 'Ribosome'], answerIndex: 1, explanation: 'DNA lives in the nucleus.' } }, 'biology');
+  const scenes = scenesFor(rapid);
+  const parts = narrationParts(rapid);
+  const recapIdx = scenes.findIndex((s) => s.kind === 'recap');
+  assert.ok(recapIdx > 0 && !parts.some((p) => p.id === 'recap'), 'recap is silent');
+  assert.equal(parts.find((p) => p.kind === 'quiz').pauseBefore, 3.2, 'the recap card gets its time before the quiz narration');
+  const aligned = alignParts(parts, 40, []);
+  const plan = planTimeline(scenes, { src: 'x', duration: 40, parts: aligned.parts, words: [] });
+  const recap = plan.segments.find((s) => s.kind === 'recap'), q = plan.segments.find((s) => s.kind === 'quiz');
+  assert.ok(Math.abs(recap.duration - 3.2) < 0.3 && q.start >= recap.start + recap.duration - 0.05);
+
+  const flash = sanitizeLesson({ format: 'flashcards', title: 'Flash', hook: 'Say it before it appears', hookTerm: 'Say it', takeaway: 'Four down.',
+    cards: [1, 2, 3, 4].map((i) => ({ q: `Question number ${i} about enzymes?`, a: `Answer ${i}` })) }, 'biology');
+  const fparts = narrationParts(flash);
+  assert.equal(fparts.filter((p) => p.pauseBefore === 2.5).length, 4, 'a pause after every question');
+  const fplan = planTimeline(scenesFor(flash), { src: 'x', duration: 35, parts: alignParts(fparts, 35, []).parts, words: [] });
+  assert.equal(fplan.voiceClips.length, 5);
+  assert.equal(flash.quiz, null);
 });
 
 test('alignParts snaps boundaries to pauses between words', () => {
-  const parts = [{ kind: 'hook', text: 'One two three.' }, { kind: 'beat', index: 0, text: 'Four five six seven.' }];
+  const parts = [{ id: 'hook', kind: 'hook', text: 'One two three.', pauseBefore: 0 }, { id: 'beat0', kind: 'beat', text: 'Four five six seven.', pauseBefore: 0 }];
   const words = [
     { text: 'One', start: 0, end: 0.3 }, { text: 'two', start: 0.35, end: 0.6 }, { text: 'three.', start: 0.65, end: 1.0 },
     { text: 'Four', start: 1.8, end: 2.1 }, { text: 'five', start: 2.15, end: 2.4 }, { text: 'six', start: 2.45, end: 2.7 }, { text: 'seven.', start: 2.75, end: 3.1 },
   ];
-  const { parts: out, cuts } = alignParts(parts, 3.2, words);
+  const { parts: out } = alignParts(parts, 3.2, words);
   assert.equal(out[1].start, 1.8);
-  assert.ok(cuts[1] > 1.0 && cuts[1] < 1.8);
+  assert.ok(out[1].cutBefore > 1.0 && out[1].cutBefore < 1.8);
+});
+
+test('every format composes cleanly, silent and narrated, with its own skin', () => {
+  const presets = new Set();
+  for (const id of FORMAT_IDS) {
+    const l = sanitizeLesson(SAMPLES[id], 'physics');
+    assert.equal(l.format, id, `sample for ${id} keeps its format`);
+    for (const voiced of [false, true]) {
+      const parts = narrationParts(l);
+      const voice = voiced ? { src: 'https://x/v.mp3', duration: 38, parts: alignParts(parts, 38, []).parts, words: [] } : null;
+      const { commands, duration, quiz } = composeLesson(l, { ...media, itemMedia: [media.ambient, media.ambient, media.ambient, media.ambient], voice });
+      const ids = new Set();
+      for (const c of commands) {
+        if (c.clipId && c.op.startsWith('add') && c.op !== 'addKeyframe') { assert.ok(!ids.has(c.clipId), `${id}: duplicate clipId ${c.clipId}`); ids.add(c.clipId); }
+        if (typeof c.start === 'number' && typeof c.duration === 'number') assert.ok(c.start >= -0.2 && c.start + c.duration <= duration + 0.6, `${id}: ${c.op} ${c.clipId} inside the timeline`);
+      }
+      assert.ok(duration > 15 && duration < 90, `${id}: duration ${duration}`);
+      if (l.quiz) assert.ok(quiz && quiz.from < quiz.hold && quiz.hold < quiz.reveal, `${id}: quiz timing`);
+      else assert.equal(quiz, null);
+      const cap = commands.find((c) => c.op === 'addCaptions');
+      if (cap) presets.add(cap.preset);
+      if (voiced) assert.ok(commands.filter((c) => c.trackIndex === 15).length >= 1, `${id}: voice clips`);
+    }
+  }
+  assert.ok(presets.size >= 5, 'formats use different caption presets');
+});
+
+test('pickFormats avoids what was just seen and favours the topic', () => {
+  const seq = Array.from({ length: 40 }, (_, i) => pickFormats('math', 1, { recent: ['examdrill'], rand: () => (i % 10) / 10 })[0]);
+  assert.ok(!seq.includes('examdrill') || seq.filter((f) => f === 'examdrill').length < 8, 'the last format is pushed down');
+  const picks = pickFormats('history', 3, { recent: [] });
+  assert.equal(new Set(picks).size, 3, 'three distinct formats');
 });
 
 test('composeLesson: 9:16, clips inside the timeline, sfx and music present, no top-level layout fields', () => {

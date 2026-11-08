@@ -6,16 +6,17 @@ import { zodOutputFormat } from '@anthropic-ai/sdk/helpers/zod';
 import { config } from '../config.js';
 import { claude } from '../claude.js';
 import { EpisodesSchema } from './schema.js';
+import { FORMATS } from '../formats.js';
 
 const SYSTEM = `You write scripts for StudyTok, a vertical short-video feed that helps students learn their actual syllabus.
-Each episode is a 25-45 second video: a narrator reads the hook, each beat, the quiz question, the answer and the takeaway, while the screen shows a big key term, a teaching visual and captions.
+Each episode is a 25-50 second video in one of several formats (assigned per episode below). A narrator reads every spoken field; the screen shows big key terms, teaching visuals, cards and captions. Each format has its own structure: fill only the fields its spec names and leave the others empty ("" / [] / 0). Set \`format\` to the assigned id.
 
 Teaching rules:
 - Teach exactly one idea per episode, accurately and at the student's level. Prefer established facts; never invent numbers, dates, names or quotes. If unsure of a figure, teach the idea without it.
 - Episodes in a batch progress: the first introduces the core idea of the unit; later ones go deeper (mechanism, worked example, common exam mistake, real application). Never repeat a subtopic already covered.
 - When the student is preparing for an exam, use that exam's terminology and the kinds of questions it asks. Use examples that make sense in the student's country.
 - Beats build on each other; define jargon the first time it appears. Every beat is a single spoken sentence.
-- The quiz checks the main idea, has exactly one correct option and two plausible wrong ones; vary the correct position across episodes.
+- The quiz checks the main idea and is answerable from this episode alone. The question is a complete, specific sentence a student can answer without seeing the options (no "which of these", no "what did we learn"); it never contains or hints at the answer. Exactly one option is correct; the other two are plausible, parallel in form and length, and clearly wrong to someone who understood the video. The spoken answer must not appear in the hook or beats word for word. Vary the correct position across episodes.
 
 Visual rules (each beat has one visual):
 - Use teaching visuals for at least two beats: diagram, steps, compare, timeline, definition, equation or stat. Use photo (a specific real, named thing: a structure, organism, artefact, place, person) or footage (filmable action) only where seeing the real thing teaches.
@@ -43,7 +44,9 @@ function prefLines(prefs = {}) {
  * @param {number} p.count
  * @param {string} p.accent      topic accent colour for diagrams
  */
-export async function writeEpisodes({ unit, audience, covered = [], count = 3, accent = '#34d399' }) {
+export async function writeEpisodes({ unit, audience, covered = [], count = 3, formats, accent = '#34d399' }) {
+  const list = formats?.length ? formats : Array.from({ length: count }, () => 'explain');
+  count = list.length;
   const context = [
     unit.open ? `Topic: ${unit.title} (open: pick any worthwhile subtopic)` : `Unit: ${unit.title}${unit.summary ? ` — ${unit.summary}` : ''}`,
     unit.programName && `Course: ${unit.programName}`,
@@ -53,7 +56,8 @@ export async function writeEpisodes({ unit, audience, covered = [], count = 3, a
     audience.exam && `Preparing for: ${audience.exam}`,
     ...prefLines(audience.prefs),
     covered.length && `Already covered for this unit (do not repeat):\n${covered.slice(-30).map((c) => `- ${c}`).join('\n')}`,
-    `Write ${count} episodes.`,
+    `Write ${count} episodes, in this order and in these formats:`,
+    ...list.map((id, i) => `${i + 1}. format "${id}" (${FORMATS[id].name}): ${FORMATS[id].blurb} Fields: ${FORMATS[id].spec}`),
   ].filter(Boolean).join('\n');
 
   const response = await claude().messages.parse({
