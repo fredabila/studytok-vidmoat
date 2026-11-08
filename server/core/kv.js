@@ -96,6 +96,10 @@ class LocalKV {
   }
   async zincrby(k, by, m) { if (!this.data.has(k)) this.data.set(k, new Map()); const z = this.data.get(k); z.set(m, (z.get(m) || 0) + by); this.persist(); return z.get(m); }
   async zrem(k, ...ms) { const z = this.data.get(k); let n = 0; for (const m of ms) n += z?.delete(m) ? 1 : 0; this.persist(); return n; }
+  async scan(cursor, opts = {}) {
+    const re = new RegExp('^' + String(opts.match || '*').replace(/[.+^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*').replace(/\?/g, '.') + '$');
+    return ['0', [...this.data.keys()].filter((k) => re.test(k))];
+  }
   async zcount(k, min, max) { let n = 0; for (const s of (this.data.get(k) || new Map()).values()) if (s >= min && s <= max) n++; return n; }
   async zrange(k, start, stop, opts = {}) {
     const z = this.data.get(k);
@@ -120,6 +124,18 @@ if (process.env.VERCEL && !usingRedis) {
 export const kv = usingRedis
   ? new Redis({ url: redisCreds.url, token: redisCreds.token })
   : new LocalKV(process.env.STUDYTOK_KV_FILE === 'memory' ? null : join(config.dataDir, 'kv.json'));
+
+/** Every key matching a glob pattern (SCAN; admin jobs only, never on a request path). */
+export async function scanKeys(pattern, limit = 10000) {
+  const out = [];
+  let cursor = '0';
+  do {
+    const [next, keys] = await kv.scan(cursor, { match: pattern, count: 1000 });
+    out.push(...keys);
+    cursor = String(next);
+  } while (cursor !== '0' && out.length < limit);
+  return out;
+}
 
 /** Write pending local changes to disk (no-op for Redis). */
 export function flushKv() { if (kv instanceof LocalKV) kv.flush(); }

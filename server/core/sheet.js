@@ -8,7 +8,7 @@
 // Nothing here is needed for the app to work: with no STUDYTOK_SHEET_URL every call is a no-op.
 // Rows carry the same personal data the app already holds (name and email from Vidmoat sign-in).
 
-import { kv } from './kv.js';
+import { kv, scanKeys } from './kv.js';
 import * as db from './db.js';
 import { getSignals, streakOf, studentStats } from '../feed/events.js';
 import { getProgress } from '../feed/index.js';
@@ -151,15 +151,20 @@ export async function syncDaily() {
   return post([{ op: 'upsert', tab: 'Daily', key: 'Date', rows: [await dailyRow(yesterday), await dailyRow(today)] }]);
 }
 
-/** Rebuilds the Users tab from every known student (the `users` index). Returns how many rows went. */
+/** Rebuilds the Users tab from every student in storage (and fills the `users` index). Returns how many rows went. */
 export async function resyncAll() {
   if (!enabled()) return { ok: false, error: 'sheet not configured' };
-  const ids = await kv.zrange('users', 0, -1);
+  const UUID = /^user:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+  const ids = new Set(await kv.zrange('users', 0, -1));
+  for (const k of await scanKeys('user:*')) if (UUID.test(k)) ids.add(k.slice(5));
   const rows = [];
   for (const id of ids) {
     const user = await db.getUser(id);
-    if (user) rows.push(await userRow(user));
+    if (!user) continue;
+    await db.indexUser(user);
+    rows.push(await userRow(user));
   }
+  rows.sort((a, b) => (a['Member #'] || 1e9) - (b['Member #'] || 1e9));
   let sent = 0;
   for (let i = 0; i < rows.length; i += 100) {
     const r = await post([{ op: 'upsert', tab: 'Users', key: 'User ID', rows: rows.slice(i, i + 100) }]);

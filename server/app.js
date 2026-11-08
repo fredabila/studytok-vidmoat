@@ -266,6 +266,7 @@ async function route(req, res, url) {
     const setupDone = u.setupDone ?? Boolean(u.units?.length || u.interests?.length);
     const [billing, stats] = await Promise.all([billingStatus(u, { fetchMe: getMeAs }), studentStats(userId, { watched: seen, progress: await getProgress(userId), masteryOf: mastery })]);
     const { vidmoatTokens, ...safe } = u; // sealed tokens never leave the server
+    waitUntil(syncUser(userId)); // keeps the admin sheet's row fresh (throttled)
     return send(res, 200, { user: { ...safe, setupDone, seen, liked, billing, stats } });
   }
 
