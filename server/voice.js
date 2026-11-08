@@ -3,8 +3,8 @@
 // timings for captions, and the point where the audio is cut to leave a pause before the
 // quiz answer.
 //
-// Cost per video: 8 credits (Grok speech) + 5 credits in 'exact' timing mode (transcription).
-// 'estimated' mode spends only the 8 and estimates timings from the text; it then ends the
+// Cost per video: the speech route (Grok 8 or OpenAI 15 credits, capped by maxCredits) + 5
+// credits in 'exact' timing mode (transcription). 'estimated' mode spends only the speech and estimates timings from the text; it then ends the
 // narration at the quiz question (no reliable cut point), and the answer is shown, not spoken.
 
 import { config } from './config.js';
@@ -96,7 +96,10 @@ export async function narrate(lesson) {
   const parts = narrationParts(lesson, { withAnswer: exact });
   const text = parts.map((p) => p.text).join(' ');
   try {
-    const speech = await createSpeech({ text, provider: config.voice.provider, voiceId: config.voice.voiceId, maxCredits: config.voice.maxCredits });
+    const { provider, voiceId, maxCredits } = config.voice;
+    // Delivery instructions only apply to OpenAI voices; send them when OpenAI can be chosen.
+    const instructions = provider === 'openai' || (provider === 'auto' && maxCredits >= 15) ? config.voice.instructions : undefined;
+    const speech = await createSpeech({ text, provider, voiceId, maxCredits, instructions });
     creditCache.remaining = speech.credits?.remaining ?? null;
     let duration, words = [];
     if (exact) {

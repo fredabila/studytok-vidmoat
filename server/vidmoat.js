@@ -85,8 +85,11 @@ export const previewFrame = async (id, at) =>
   Buffer.from(await vidmoat('GET', `/v1/projects/${encodeURIComponent(id)}/preview`, { query: { format: 'image', at } }));
 
 /** AI narration. Grok: 8 credits up to 1,000 characters. Returns { url, credits, route, truncated? }. */
-export const createSpeech = ({ text, provider, voiceId, maxCredits }) =>
-  vidmoat('POST', '/v1/ai/speech', { body: { text, provider, voiceId, maxCredits }, retries: 0, timeoutMs: 180_000 });
+export const createSpeech = ({ text, provider, voiceId, maxCredits, instructions, quoteOnly }) =>
+  vidmoat('POST', '/v1/ai/speech', {
+    body: { text, provider, maxCredits, ...(voiceId ? { voiceId } : {}), ...(instructions ? { instructions } : {}), ...(quoteOnly ? { quoteOnly } : {}) },
+    retries: 0, timeoutMs: 180_000,
+  });
 
 /** Word timings. With `src`: billed per 5 minutes of media. With `script` + `duration`: free. */
 export const transcribe = (body) => vidmoat('POST', '/v1/ai/transcriptions', { body, retries: 0, timeoutMs: 180_000 });

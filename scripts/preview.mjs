@@ -5,6 +5,7 @@
 // Usage: npm run preview -- <topicId> [lessonIndex=0] [--voice=<audio url> <seconds>] [times...]
 //   --voice   test the narrated timeline with any audio file standing in for speech
 //             (word timings are estimated; costs no speech credits)
+//   --narrate real narration through Vidmoat speech (spends credits: up to 20)
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { config } from '../server/config.js';
@@ -14,14 +15,14 @@ import { topic as topicOf } from '../server/topics.js';
 import { composeLesson } from '../server/compose.js';
 import { resolveLessonMedia, resolveMusic } from '../server/media.js';
 import { soundKit } from '../server/sfx.js';
-import { narrationParts, alignParts } from '../server/voice.js';
+import { narrationParts, alignParts, narrate } from '../server/voice.js';
 import { createProject, previewFrame } from '../server/vidmoat.js';
 import { flushKv } from '../server/kv.js';
 
 const args = process.argv.slice(2);
 const voiceArg = args.findIndex((a) => a.startsWith('--voice='));
 let voice = null;
-const rest = voiceArg >= 0 ? args.filter((_, i) => i !== voiceArg && i !== voiceArg + 1) : args;
+const rest = (voiceArg >= 0 ? args.filter((_, i) => i !== voiceArg && i !== voiceArg + 1) : args).filter((a) => a !== '--narrate');
 const [topicId = 'biology', idx = '0', ...times] = rest;
 const look = topicOf(topicId);
 const lesson = sanitizeLesson(BANK[look.id][Number(idx)], look.id);
@@ -38,6 +39,11 @@ if (voiceArg >= 0) {
   });
   const reveal = aligned.parts.findIndex((p) => p.kind === 'reveal');
   voice = { src, duration, split: reveal > 0 ? aligned.cuts[reveal] : null, parts: aligned.parts, words };
+}
+
+if (args.includes('--narrate')) {
+  voice = await narrate(lesson);
+  console.log('narration:', voice ? `${voice.mode}, ${voice.duration}s, ${voice.words.length} words, split at ${voice.split}s, ~${voice.credits} credits` : 'FAILED (see warning above)');
 }
 
 const [media, music, sfx] = await Promise.all([resolveLessonMedia(lesson, look.fallbackVisual), resolveMusic(), soundKit()]);

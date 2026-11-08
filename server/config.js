@@ -36,11 +36,16 @@ export const config = {
   },
 
   voice: {
-    // Narration via Vidmoat POST /v1/ai/speech (Grok: 8 credits per video, up to 1,000 chars).
+    // Narration via Vidmoat POST /v1/ai/speech (up to 1,000 characters per video).
+    // 'auto' picks the cheapest provider that is available right now (Grok 8 credits, OpenAI 15)
+    // within maxCredits; naming a voice pins its provider, so leave STUDYTOK_VOICE_ID empty
+    // with 'auto'. Cartesia (45) is excluded by the default cap.
     enabled: bool(process.env.STUDYTOK_VOICEOVER, true),
-    provider: process.env.STUDYTOK_VOICE_PROVIDER || 'grok',
-    voiceId: process.env.STUDYTOK_VOICE_ID || 'eve',
-    maxCredits: num(process.env.STUDYTOK_VOICE_MAX_CREDITS, 8),
+    provider: process.env.STUDYTOK_VOICE_PROVIDER || 'auto',
+    voiceId: process.env.STUDYTOK_VOICE_ID || '',
+    maxCredits: num(process.env.STUDYTOK_VOICE_MAX_CREDITS, 15),
+    // OpenAI voices only: how to deliver the narration.
+    instructions: process.env.STUDYTOK_VOICE_INSTRUCTIONS || 'A warm, clear teacher explaining to a student: upbeat but calm, natural pace, slight pauses between sentences.',
     // 'exact': transcribe the narration for word timings (5 more credits; precise captions and
     // a clean pause before the quiz answer). 'estimated': free, timings estimated from text.
     timing: process.env.STUDYTOK_VOICE_TIMING === 'estimated' ? 'estimated' : 'exact',
