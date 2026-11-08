@@ -4,14 +4,17 @@
 
 import { waitUntil } from '@vercel/functions';
 import { config } from './config.js';
-import { TOPICS } from './topics.js';
-import { usingRedis } from './kv.js';
+import { INTEREST_TOPICS } from './topics.js';
+import { LEVELS } from './levels.js';
+import { catalogNames } from './catalog.js';
+import { usingRedis, redisSource, redisLikeVarNames } from './kv.js';
 import * as db from './db.js';
-import { createUser, setInterests, nextItems, recordEvent, publicVideo } from './feed.js';
+import { saveProfile, nextItems, recordEvent, publicVideo, library, topUpLibrary, cleanProfile } from './feed.js';
+import { resolveProgram, getProgram } from './curriculum.js';
 import { queueStats } from './generator.js';
 import { getMe } from './vidmoat.js';
 
-const EVENT_TYPES = new Set(['view', 'complete', 'like', 'unlike', 'skip', 'less', 'leave', 'quiz_correct']);
+const EVENT_TYPES = new Set(['view', 'complete', 'like', 'unlike', 'save', 'unsave', 'skip', 'less', 'leave', 'quiz_answer']);
 
 export const SECURITY_HEADERS = {
   'X-Content-Type-Options': 'nosniff',
@@ -63,6 +66,16 @@ async function cookieUser(req) {
 }
 const userCookie = (req, id) => `st_uid=${id}; Path=/; HttpOnly; SameSite=Lax; Max-Age=31536000${isHttps(req) ? '; Secure' : ''}`;
 
+// Storage status for /api/health. Only variable NAMES are reported, never values.
+function storageInfo() {
+  if (usingRedis) return { storage: 'redis', storageVar: redisSource };
+  return {
+    storage: 'local',
+    storageWarning: process.env.VERCEL ? 'Upstash Redis not found: data is per-instance and will be lost. Connect Upstash for Redis to this project and redeploy.' : undefined,
+    redisLikeVars: redisLikeVarNames(),
+  };
+}
+
 /** Handles every /api/* route. */
 export async function handleApi(req, res) {
   const url = apiUrl(req);
@@ -100,7 +113,16 @@ async function route(req, res, url) {
   }
 
   if (key === 'GET /api/config') {
-    return send(res, 200, { playerOrigin: config.vidmoat.playerOrigin, topics: TOPICS.map(({ id, label, emoji, accent }) => ({ id, label, emoji, accent })) });
+    return send(res, 200, {
+      playerOrigin: config.vidmoat.playerOrigin,
+      research: config.anthropic.enabled,
+      levels: LEVELS.map(({ id, label, emoji }) => ({ id, label, emoji })),
+      topics: INTEREST_TOPICS.map(({ id, label, emoji, accent }) => ({ id, label, emoji, accent })),
+    });
+  }
+
+  if (key === 'GET /api/catalog') {
+    return send(res, 200, { programs: catalogNames(url.searchParams.get('level') || 'high-school') });
   }
 
   if (key === 'GET /api/health') {
@@ -108,36 +130,59 @@ async function route(req, res, url) {
       const me = await getMe();
       return send(res, 200, {
         ok: true, plan: me.account.plan.id, environment: me.credential.environment, credits: me.account.credits.remaining,
-        lessons: config.anthropic.enabled ? 'claude' : 'bank', storage: usingRedis ? 'redis' : 'local',
-        queue: queueStats(), library: await db.readyCount(TOPICS.map((t) => t.id)),
+        lessons: config.anthropic.enabled ? 'claude' : 'bank', voice: config.voice.enabled ? config.voice.timing : 'off', ...storageInfo(),
+        queue: queueStats(), library: await db.readyCount(),
       });
     } catch (err) {
-      return send(res, 503, { ok: false, storage: usingRedis ? 'redis' : 'local', error: err.code || err.message });
+      return send(res, 503, { ok: false, ...storageInfo(), error: err.code || err.message });
     }
   }
 
-  if (key === 'POST /api/session') {
+  // Cron top-up (Vercel Cron sends Authorization: Bearer $CRON_SECRET).
+  if (key === 'GET /api/cron/topup') {
+    if (!process.env.CRON_SECRET || req.headers.authorization !== `Bearer ${process.env.CRON_SECRET}`) return send(res, 401, { error: 'Unauthorized' });
+    const pending = await topUpLibrary();
+    if (pending.length) waitUntil(Promise.allSettled(pending));
+    return send(res, 200, { started: pending.length });
+  }
+
+  // Course lookup: catalog match, or start/poll research of the student's institution/course.
+  if (key === 'POST /api/programs/resolve') {
     const body = await readJson(req);
-    const interests = Array.isArray(body.interests) ? body.interests.map(String) : [];
-    const existing = await cookieUser(req);
-    const user = existing ? await setInterests(existing, interests) : await createUser(interests);
-    return send(res, 200, { user: { id: user.id, interests: user.interests } }, { 'Set-Cookie': userCookie(req, user.id) });
+    const { program, pending, researchUnavailable } = await resolveProgram(cleanProfile(body.profile), { tailor: Boolean(body.tailor) });
+    if (pending) waitUntil(pending);
+    return send(res, 200, { program, researchUnavailable: Boolean(researchUnavailable) });
+  }
+  const programMatch = /^\/api\/programs\/((?:cat|res):[a-z0-9-]{1,40})$/.exec(path);
+  if (req.method === 'GET' && programMatch) {
+    const program = await getProgram(programMatch[1]);
+    return program ? send(res, 200, { program }) : send(res, 404, { error: 'Not found' });
+  }
+
+  // Create or update the viewer's profile (sets the session cookie).
+  if (key === 'POST /api/profile' || key === 'POST /api/session') {
+    const body = await readJson(req);
+    if (key === 'POST /api/session' && !body.profile) body.profile = { level: 'lifelong' };
+    const user = await saveProfile(await cookieUser(req), body);
+    return send(res, 200, { user }, { 'Set-Cookie': userCookie(req, user.id) });
   }
 
   const userId = await cookieUser(req);
-  if (!userId) return send(res, 401, { error: 'No session. POST /api/session first.' });
+  if (!userId) return send(res, 401, { error: 'No session. POST /api/profile first.' });
 
   if (key === 'GET /api/me') {
     const [u, seen, liked] = await Promise.all([db.getUser(userId), db.countSet(userId, 'seen'), db.countSet(userId, 'liked')]);
-    return send(res, 200, { user: { id: u.id, interests: u.interests, seen, liked } });
+    return send(res, 200, { user: { ...u, seen, liked } });
   }
+
+  if (key === 'GET /api/library') return send(res, 200, await library(userId));
 
   if (key === 'GET /api/feed') {
     const count = Math.min(5, Math.max(1, Number(url.searchParams.get('count')) || 3));
     const { items, pending } = await nextItems(userId, count);
     // Keep generating after the response (serverless) / let it run (long-lived server).
     if (pending.length) waitUntil(Promise.allSettled(pending));
-    return send(res, 200, { items: await Promise.all(items.map((v) => publicVideo(v, userId))) });
+    return send(res, 200, { items: await Promise.all(items.map((x) => publicVideo(x.video, userId, { why: x.why }))) });
   }
 
   const videoMatch = /^\/api\/videos\/([0-9a-f-]{36})$/.exec(path);
@@ -149,7 +194,7 @@ async function route(req, res, url) {
   if (key === 'POST /api/events') {
     const body = await readJson(req);
     if (!EVENT_TYPES.has(body.type) || typeof body.videoId !== 'string') return send(res, 400, { error: 'Bad event' });
-    const ok = await recordEvent(userId, { videoId: body.videoId, type: body.type, watchedSec: Number(body.watchedSec) || 0 });
+    const ok = await recordEvent(userId, { videoId: body.videoId, type: body.type, watchedSec: Number(body.watchedSec) || 0, correct: body.correct === true });
     return ok ? send(res, 200, { ok: true }) : send(res, 404, { error: 'Unknown video' });
   }
 

@@ -28,6 +28,24 @@ export const config = {
     enabled: Boolean(process.env.ANTHROPIC_API_KEY || process.env.ANTHROPIC_AUTH_TOKEN),
     model: process.env.STUDYTOK_LESSON_MODEL || 'claude-opus-5-5',
     effort: process.env.STUDYTOK_LESSON_EFFORT || 'low',
+    // Researching an institution/course with web search (cached per program).
+    researchModel: process.env.STUDYTOK_RESEARCH_MODEL || process.env.STUDYTOK_LESSON_MODEL || 'claude-opus-5-5',
+    researchEffort: process.env.STUDYTOK_RESEARCH_EFFORT || 'medium',
+    // Episodes written per Claude call for a unit (more = fewer calls, longer first wait).
+    episodesPerCall: num(process.env.STUDYTOK_EPISODES_PER_CALL, 3),
+  },
+
+  voice: {
+    // Narration via Vidmoat POST /v1/ai/speech (Grok: 8 credits per video, up to 1,000 chars).
+    enabled: bool(process.env.STUDYTOK_VOICEOVER, true),
+    provider: process.env.STUDYTOK_VOICE_PROVIDER || 'grok',
+    voiceId: process.env.STUDYTOK_VOICE_ID || 'eve',
+    maxCredits: num(process.env.STUDYTOK_VOICE_MAX_CREDITS, 8),
+    // 'exact': transcribe the narration for word timings (5 more credits; precise captions and
+    // a clean pause before the quiz answer). 'estimated': free, timings estimated from text.
+    timing: process.env.STUDYTOK_VOICE_TIMING === 'estimated' ? 'estimated' : 'exact',
+    // Never let narration take the balance below this; videos are made silent instead.
+    minCredits: num(process.env.STUDYTOK_MIN_CREDITS, 40),
   },
 
   generation: {
@@ -35,8 +53,13 @@ export const config = {
     concurrency: num(process.env.STUDYTOK_GEN_CONCURRENCY, 2),
     // How many ready-or-generating videos to keep ahead of each viewer.
     prefetch: num(process.env.STUDYTOK_PREFETCH, 3),
-    // Add a CC0 stock music bed under each video.
+    // Add a CC0 stock music bed and sound effects under each video.
     music: bool(process.env.STUDYTOK_MUSIC, true),
+    sfx: bool(process.env.STUDYTOK_SFX, true),
+    // Ready videos to keep queued ahead of each viewer (generated in the background).
+    readyAhead: num(process.env.STUDYTOK_READY_AHEAD, 3),
+    // Automatic retries for a failed generation.
+    retries: num(process.env.STUDYTOK_GEN_RETRIES, 1),
     // Prefer reusing an unseen library video over generating a new one when one exists.
     reuseLibrary: bool(process.env.STUDYTOK_REUSE_LIBRARY, true),
   },

@@ -12,7 +12,14 @@ export const TOPICS = [
   { id: 'economics', label: 'Economics', emoji: '📈', bg: '#0a120a', accent: '#a3e635', fallbackVisual: 'city market' },
   { id: 'computer-science', label: 'Computer Science', emoji: '💻', bg: '#070d14', accent: '#38bdf8', fallbackVisual: 'computer code' },
   { id: 'earth', label: 'Earth & Climate', emoji: '🌍', bg: '#06110f', accent: '#4ade80', fallbackVisual: 'earth landscape' },
+  { id: 'health', label: 'Health & Medicine', emoji: '🩺', bg: '#140709', accent: '#f87171', fallbackVisual: 'hospital doctor' },
+  { id: 'law', label: 'Law & Government', emoji: '⚖️', bg: '#0e0c07', accent: '#facc15', fallbackVisual: 'courthouse' },
+  { id: 'business', label: 'Business', emoji: '💼', bg: '#08101a', accent: '#93c5fd', fallbackVisual: 'office team meeting' },
+  { id: 'language', label: 'Language & Literature', emoji: '📖', bg: '#120a14', accent: '#e879f9', fallbackVisual: 'old books library' },
 ];
+
+// Topics offered as "interests" in onboarding (the extra style topics above are used by courses).
+export const INTEREST_TOPICS = TOPICS.slice(0, 10);
 
 export const TOPIC_BY_ID = Object.fromEntries(TOPICS.map((t) => [t.id, t]));
 
