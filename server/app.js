@@ -9,7 +9,7 @@ import { LEVELS } from './curriculum/levels.js';
 import { catalogNames } from './curriculum/catalog.js';
 import { usingRedis, redisSource, redisLikeVarNames } from './core/kv.js';
 import * as db from './core/db.js';
-import { saveProfile, editProfile, prefetch, nextItems, publicVideo, library, topUpLibrary, cleanProfile, linkVidmoat, recordReferral } from './feed/index.js';
+import { saveProfile, editProfile, prefetch, nextItems, publicVideo, library, topUpLibrary, cleanProfile, linkVidmoat, recordReferral, resetStudent } from './feed/index.js';
 import { extraMoments, setExtraMoments } from './feed/moments.js';
 import { resolveProgram, getProgram } from './curriculum/index.js';
 import { queueStats } from './video/generator.js';
@@ -366,6 +366,18 @@ async function route(req, res, url) {
     const { user, added } = await editProfile(userId, body);
     waitUntil(prefetch(userId).then((pending) => Promise.allSettled(pending)).catch(() => {}));
     return send(res, 200, { user, added });
+  }
+
+  // Start over: { scope: 'feed' | 'everything' } (see resetStudent).
+  if (key === 'POST /api/me/reset') {
+    const body = await readJson(req);
+    const scope = body.scope === 'everything' ? 'everything' : 'feed';
+    const user = await resetStudent(userId, scope);
+    if (!user) return send(res, 404, { error: 'No profile' });
+    waitUntil(kv.hincrby(`events:day:${new Date().toISOString().slice(0, 10)}`, `reset_${scope}`, 1));
+    waitUntil(syncUser(userId, { event: scope === 'everything' ? 'reset everything' : 'reset feed', force: true }));
+    if (scope === 'feed') waitUntil(prefetch(userId).then((pending) => Promise.allSettled(pending)).catch(() => {}));
+    return send(res, 200, { ok: true, scope });
   }
 
   if (key === 'GET /api/feed') {

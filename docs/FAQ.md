@@ -107,6 +107,13 @@ Yes. Add the date when you set up (or edit) your studies. From 45 days out your 
 towards revision of the units you have started, more lessons become retrieval practice
 (flashcards, true or false, drills), and a countdown appears on your Library and Profile.
 
+**Can I start over?**
+Yes, from your Profile under *Start fresh*. *Reset my feed* clears your progress, streak,
+history, missed questions and everything the algorithm learned about your tastes; your course,
+saved lessons, settings and member number stay, and new lessons start from the beginning of
+your syllabus. *Reset everything* also clears your course, saved lessons and settings, and you
+set up again. Your account, member number, invites and free-lesson count always stay.
+
 **What are the cards from Noti between videos?**
 *Moments*: a tip about StudyTok, a piece of news or an offer, shown at most every six lessons and
 three times a day. Tap anywhere on one (or swipe) to carry on. Each appears once, then not again

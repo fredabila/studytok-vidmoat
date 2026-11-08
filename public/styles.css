@@ -714,3 +714,10 @@ body.landing-on { background: var(--paper); }
 .hero .exam-chip { margin: 6px 0 2px; }
 .fix-strip { border-color: #9b7bff; box-shadow: 4px 4px 0 #9b7bff; }
 .field input[type="date"] { font: inherit; font-size: 16px; color: var(--ink); background: #fff; border: 1.5px solid var(--line-2); border-radius: 10px; padding: 12px 15px; outline: none; }
+
+
+/* ============================================================================ start fresh */
+.reset-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.btn.danger { color: #b42318; border-color: #b42318; }
+.btn.danger:hover { background: #fff1f0; }
+.reset-fine { margin: 10px 0 0; }
