@@ -81,6 +81,26 @@ tastes (`signals`) and the current `session`, plus a capped raw log. Those feed 
 into step 3 and into the format rotation of step 4. See [EVENTS.md](EVENTS.md) and
 [ALGORITHM.md](ALGORITHM.md).
 
+## Playback performance
+
+The embed player composites the whole document live in the viewer's browser: every video layer
+is decoded, every filter is a shader, every HTML card is rasterised. Phones notice. What keeps
+it smooth:
+
+* **One live player.** `public/app.js syncPlayers` mounts a player only for the active lesson;
+  the next one is mounted (paused, loading) when the viewer passes the halfway point, and the
+  previous one is unmounted at once.
+* **One decoding video at a time.** `compose.js` cuts the ambient clip out wherever a
+  full-bleed clip covers it, and applies the colour grade to the ambient layer only.
+* **720p footage by default.** `media.js` picks the Pixabay variant that fits
+  `STUDYTOK_FOOTAGE_MAX` (1280 = 720p); images stay full resolution. `STUDYTOK_FPS` (24) sets
+  the project frame rate.
+* **No blur filters** in HTML cards (`backdrop-filter` is expensive on mobile GPUs).
+
+If a device is still too slow, the remaining lever is rendering popular library videos to MP4
+with `POST /v1/projects/{id}/render` and playing the file instead of the document (costs a
+render per video and a plan with exports); StudyTok does not do that today.
+
 ## Who pays (`core/billing.js`)
 
 Each student's first videos are made on StudyTok's key; then they connect their own Vidmoat

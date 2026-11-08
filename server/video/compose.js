@@ -11,6 +11,7 @@
 // The app overlays its own header (top ~8%) and title block (bottom ~18%), so content stays
 // between roughly y = -760 and y = +560.
 
+import { config } from '../core/config.js';
 import { topic as topicOf } from '../curriculum/topics.js';
 import { format as formatOf, scenesFor } from './formats.js';
 import { teachingVisual, stampCard, numberCard, recapCard, questionCard, answerSteps, calloutCard, flashCard, chatThread } from './visuals.js';
@@ -194,12 +195,23 @@ export function composeLesson(lesson, media = {}) {
   const uid = (p) => `${p}${n++}`;
 
   // The project name is set at creation ("StudyTok · <title>") so generated projects are easy to find.
-  cmds.push({ op: 'setProjectSettings', aspectRatio: '9:16', background: look.bg });
+  cmds.push({ op: 'setProjectSettings', aspectRatio: '9:16', fps: config.generation.fps, background: look.bg });
 
   // ---- Ambient footage under everything, graded by the format and darkened by the scrim.
+  // Playback performance: the live player decodes every video layer, so the ambient clip is cut
+  // out wherever a full-bleed clip covers it (one decoding video at a time, not two), and the
+  // colour grade is applied to the ambient layer only.
   if (media.ambient) {
-    cmds.push(...mediaClip('ambient', media.ambient, 0, duration, T.ambient));
-    if (skin.filter) cmds.push({ op: 'applyFilterPreset', clipId: 'ambient', preset: skin.filter });
+    const covered = segments.filter((s) => (s.kind === 'beat' && !isTeachingVisual(s.beat?.visual?.kind) && media.beatMedia?.[s.index]) || (s.kind === 'item' && media.itemMedia?.[s.index]))
+      .map((s) => [s.start, s.start + s.duration]).sort((a, b) => a[0] - b[0]);
+    const gaps = [];
+    let t = 0;
+    for (const [a, b] of covered) { if (a - t > 0.6) gaps.push([t, a]); t = Math.max(t, b); }
+    if (duration - t > 0.6) gaps.push([t, duration]);
+    gaps.forEach(([a, b], k) => {
+      cmds.push(...mediaClip(k === 0 ? 'ambient' : `ambient${k}`, media.ambient, a, b - a, T.ambient));
+      if (skin.filter) cmds.push({ op: 'applyFilterPreset', clipId: k === 0 ? 'ambient' : `ambient${k}`, preset: skin.filter });
+    });
   }
   cmds.push(dim('scrim', 0, duration, T.scrim, '#000000', media.ambient ? skin.scrim ?? 0.62 : 0.2));
   // Tracks are created in the order they are first used and composite in that order, so pin the
@@ -261,7 +273,6 @@ export function composeLesson(lesson, media = {}) {
       if (fullBleed) {
         cmds.push(...mediaClip(`media${i}`, m, start, d + 0.4, T.media));
         cmds.push({ op: 'setTransition', clipId: `media${i}`, type: skin.transition || 'dissolve', duration: 0.4 });
-        if (skin.filter) cmds.push({ op: 'applyFilterPreset', clipId: `media${i}`, preset: skin.filter });
       }
       cmds.push(...teaching);
       // Story chapters and why/myth kickers sit above the key term, under the chip (chip bottom ≈ -694, card top ≈ -490).
@@ -297,7 +308,6 @@ export function composeLesson(lesson, media = {}) {
       if (m) {
         cmds.push(...mediaClip(`item${i}`, m, start, d + 0.3, T.media, { zoom: 1.04 }));
         cmds.push({ op: 'setTransition', clipId: `item${i}`, type: skin.transition || 'whip-pan', duration: 0.35 });
-        if (skin.filter) cmds.push({ op: 'applyFilterPreset', clipId: `item${i}`, preset: skin.filter });
       }
       cmds.push(...numberCard(card(`num${i}`, start, d), { index: i, total: seg.total, title: seg.item.title }));
       cmds.push(...sfxClip(uid('pop'), sfx.pop, start + 0.05, 0.5));

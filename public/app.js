@@ -513,9 +513,16 @@ function unmountPlayer(item) {
   item.player = null;
   delete item.el.dataset.loaded;
 }
+// Playback performance: the embed player decodes every video layer of a document in the
+// browser, so only the active lesson has a live player. The next one is mounted (paused, loading
+// its document) once the viewer is halfway through the current lesson, or at once when the
+// current slide has nothing to play; the previous one is unmounted immediately.
 function syncPlayers() {
+  const active = feed.items[feed.active];
+  const preloadNext = !active || active.data.status !== 'ready' || active.preloadNext || !active.player;
   feed.items.forEach((item, i) => {
-    if (feed.active >= 0 && Math.abs(i - feed.active) <= 1) mountPlayer(item); else unmountPlayer(item);
+    const keep = feed.active >= 0 && (i === feed.active || (i === feed.active + 1 && preloadNext));
+    if (keep) mountPlayer(item); else unmountPlayer(item);
     if (!item.player) return;
     if (i === feed.active && !feed.paused && view === 'feed' && !item.held) item.player.play(); else item.player.pause();
   });
@@ -530,6 +537,7 @@ function onState(item, time, playing, duration) {
   }
   $('.bar', item.el).style.transform = `scaleX(${duration ? Math.min(1, time / duration) : 0})`;
   updateQuiz(item, time);
+  if (isActive && !item.preloadNext && duration && time >= duration * 0.5) { item.preloadNext = true; syncPlayers(); }
   // Hold at the end of the question until the viewer answers (or skips): the answer is never
   // spoken before they have had the chance to try.
   const q = item.data.quiz;
@@ -680,7 +688,7 @@ function activate(index) {
   feed.paused = false;
   const item = feed.items[index];
   if (item) {
-    item.watched = 0; item.lastTime = 0; item.completed = false;
+    item.watched = 0; item.lastTime = 0; item.completed = false; item.preloadNext = false;
     item.shownAt = Date.now();
     if (dir === 'prev' && item.viewSent) sendEvent(item.data.id, 'rewatch');
     if (item.player?.loaded) item.player.seek(0);

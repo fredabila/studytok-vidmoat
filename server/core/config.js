@@ -80,6 +80,11 @@ export const config = {
     concurrency: num(process.env.STUDYTOK_GEN_CONCURRENCY, 2),
     // How many ready-or-generating videos to keep ahead of each viewer.
     prefetch: num(process.env.STUDYTOK_PREFETCH, 3),
+    // Playback performance (docs/ARCHITECTURE.md, "Playback performance"): the live player decodes
+    // every video layer in the viewer's browser, so footage is capped at this many pixels on its
+    // long edge (1280 = 720p; 1920 allows 1080p and looks sharper but plays slower on phones).
+    footageMax: num(process.env.STUDYTOK_FOOTAGE_MAX, 1280),
+    fps: num(process.env.STUDYTOK_FPS, 24),
     // Add a CC0 stock music bed and sound effects under each video.
     music: bool(process.env.STUDYTOK_MUSIC, true),
     sfx: bool(process.env.STUDYTOK_SFX, true),
