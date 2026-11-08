@@ -130,9 +130,8 @@ route (`vercel.json`). Generation and research keep running after the response v
    prefix works; `/api/health` shows which variable it found.
 3. **Environment variables**: `VIDMOAT_API_KEY` (required), `ANTHROPIC_API_KEY` (recommended),
    `CRON_SECRET` (any random string, for the daily top-up), and any tuning from `.env.example`.
-   For **Sign in with Vidmoat**, create an OAuth client for your app in the Vidmoat developer
-   console with the redirect URI `https://<your domain>/api/auth/vidmoat/callback`, then set
-   `VIDMOAT_OAUTH_CLIENT_ID` and `VIDMOAT_OAUTH_CLIENT_SECRET`.
+   **Sign in with Vidmoat** needs no setup: on the first sign-in StudyTok registers its own OAuth
+   client with Vidmoat (`POST /api/oauth/register`, once per domain) and keeps it in Redis.
 4. **Deploy**, then open `/api/health`: `"ok": true`, `"storage": "redis"`, `"lessons": "claude"`.
 
 ## Files
@@ -149,7 +148,7 @@ route (`vercel.json`). Generation and research keep running after the response v
 | `server/recommend.js`, `server/feed.js` | The algorithm; profiles, feed pages, generate-ahead, events → progress, library, cron top-up. |
 | `server/generator.js` | The build pipeline with retries. |
 | `server/kv.js`, `server/db.js` | Upstash Redis (or a local file with the same commands) and the data model. |
-| `server/auth.js` | Sign in with Vidmoat: OAuth code + PKCE, `account.read` only, no stored tokens. |
+| `server/auth.js` | Sign in with Vidmoat: self-registered OAuth client, code + PKCE, `account.read` only, no stored tokens. |
 | `server/app.js`, `api/index.js`, `server/index.js` | The API, the Vercel Function, the local server. |
 | `public/` | Onboarding, the paging feed with live players and tap-to-answer quizzes, Library, Profile; `sw.js` + `manifest.webmanifest` + `icons/` for the PWA. |
 

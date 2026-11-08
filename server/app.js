@@ -171,9 +171,14 @@ async function route(req, res, url) {
 
   // ---- Sign in with Vidmoat (identity only; see server/auth.js) ----
   if (key === 'GET /api/auth/vidmoat/start') {
-    if (!signInEnabled()) return redirect(res, '/?auth=unavailable');
-    const { url: to, state } = await startSignIn(req);
-    return redirect(res, to, [stateCookie(req, state)]);
+    if (!signInEnabled()) return redirect(res, '/?auth=unavailable#profile');
+    try {
+      const { url: to, state } = await startSignIn(req);
+      return redirect(res, to, [stateCookie(req, state)]);
+    } catch (err) {
+      console.error('[auth] start failed:', err.message);
+      return redirect(res, '/?auth=error#profile');
+    }
   }
   if (key === 'GET /api/auth/vidmoat/callback') {
     const state = url.searchParams.get('state');

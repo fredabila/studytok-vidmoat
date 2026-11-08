@@ -23,10 +23,12 @@ export const config = {
     workspaceId: process.env.VIDMOAT_WORKSPACE_ID || '',
   },
 
-  // Sign in with Vidmoat (identity only: scope account.read, never credits). Create an OAuth
-  // client for your app in the Vidmoat developer console with the redirect URI
-  // https://<your domain>/api/auth/vidmoat/callback
+  // Sign in with Vidmoat (identity only: scope account.read, never credits).
   oauth: {
+    // On by default: without client credentials StudyTok registers its own client with Vidmoat
+    // (dynamic client registration). Set STUDYTOK_VIDMOAT_SIGNIN=false to hide sign-in.
+    enabled: bool(process.env.STUDYTOK_VIDMOAT_SIGNIN, true),
+    clientName: process.env.STUDYTOK_OAUTH_CLIENT_NAME || 'StudyTok',
     clientId: process.env.VIDMOAT_OAUTH_CLIENT_ID || '',
     clientSecret: process.env.VIDMOAT_OAUTH_CLIENT_SECRET || '',
     publicUrl: (process.env.STUDYTOK_PUBLIC_URL || '').replace(/\/$/, ''),
