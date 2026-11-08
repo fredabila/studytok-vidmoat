@@ -5,6 +5,7 @@
 import { randomUUID } from 'node:crypto';
 import { config } from './config.js';
 import { INTEREST_TOPICS, TOPIC_BY_ID } from './topics.js';
+import { format as formatOf } from './formats.js';
 import { level as levelOf, LEVEL_BY_ID } from './levels.js';
 import { getUnit, getProgram, interestUnit, customUnit } from './curriculum.js';
 import { lessonKey } from './lessons/index.js';
@@ -127,17 +128,22 @@ async function candidatesFor(user) {
 }
 
 // ---------------------------------------------------------------- choosing videos
-/** Best ready video for this unit+level the viewer has not seen or been served. */
-async function reusable(userId, readyKey, taken) {
+/**
+ * Best ready video for this unit+level the viewer has not seen or been served. Among them, a
+ * video in a different format from the one just served wins, so the feed keeps changing shape.
+ */
+async function reusable(userId, readyKey, taken, lastFormat = null) {
   const ids = (await db.readyIds(readyKey, 60)).filter((id) => !taken.has(id));
   if (!ids.length) return null;
   const blocked = await db.inAnySet(userId, ['seen', 'served'], ids);
   const candidates = ids.filter((_, i) => !blocked[i]).slice(0, 12);
   if (!candidates.length) return null;
+  const videos = await Promise.all(candidates.map((id) => db.getVideo(id)));
   const stats = await Promise.all(candidates.map((id) => db.getStats(id)));
+  const score = (i) => videoQuality(stats[i]) + (lastFormat && (videos[i]?.format || 'explain') === lastFormat ? -0.35 : 0);
   let best = 0;
-  for (let i = 1; i < candidates.length; i++) if (videoQuality(stats[i]) > videoQuality(stats[best])) best = i;
-  return db.getVideo(candidates[best]);
+  for (let i = 1; i < candidates.length; i++) if (score(i) > score(best)) best = i;
+  return videos[best];
 }
 
 /** Videos this viewer already has generating (so prefetch does not pile up). */
@@ -186,9 +192,10 @@ export async function nextItems(userId, count = 3) {
 
   const ready = [];
   const unready = [];
+  let lastFormat = await kv.get(`user:${userId}:lastFormat`);
   for (const pick of picks) {
-    const video = await reusable(userId, readyKeyFor(pick.unit.id, audience), taken);
-    if (video) { taken.add(video.id); ready.push({ pick, video }); } else unready.push(pick);
+    const video = await reusable(userId, readyKeyFor(pick.unit.id, audience), taken, lastFormat);
+    if (video) { taken.add(video.id); ready.push({ pick, video }); lastFormat = video.format || 'explain'; } else unready.push(pick);
   }
 
   const items = ready.slice(0, count).map(({ pick, video }) => ({ video, unit: pick.unit, why: { ...pick.parts, kind: pick.kind }, pos: pick.pos || null }));
@@ -221,6 +228,8 @@ export async function nextItems(userId, count = 3) {
     await updateProgress(userId, x.unit.id, 'served');
   }
   await kv.ltrim(`user:${userId}:recentUnits`, 0, 19);
+  const lastReady = page.filter((x) => x.video.status === 'ready').at(-1);
+  if (lastReady) await kv.set(`user:${userId}:lastFormat`, lastReady.video.format || 'explain');
   return { items: page, pending };
 }
 
@@ -298,6 +307,7 @@ export async function publicVideo(v, userId, { withDocument = true, why, pos, qu
     status: v.status,
     error: v.status === 'failed' ? 'This video could not be generated.' : undefined,
     topic: { id: look.id, label: look.label, emoji: look.emoji, accent: look.accent },
+    format: { id: v.format || 'explain', tag: formatOf(v.format).tag, name: formatOf(v.format).name },
     unit: v.unitId ? { id: v.unitId, title: v.unitTitle || null } : null,
     title: v.lesson?.title || null,
     hook: v.lesson?.hook || null,

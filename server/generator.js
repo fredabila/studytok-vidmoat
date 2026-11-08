@@ -19,6 +19,7 @@ import { resolveLessonMedia, resolveMusic } from './media.js';
 import { soundKit } from './sfx.js';
 import { narrate } from './voice.js';
 import { composeLesson } from './compose.js';
+import { format as formatOf } from './formats.js';
 import { createProject, getDocument as fetchDocument, deleteProject, fileProject } from './vidmoat.js';
 import { saveVideo, updateVideo, setDocument, markReady } from './db.js';
 
@@ -80,8 +81,7 @@ async function buildVideo(video, unit, audience) {
   const started = Date.now();
   const look = topicOf(unit.topic);
 
-  // Music and sound effects do not depend on the lesson: start them now.
-  const musicP = config.generation.music ? resolveMusic().catch(() => null) : Promise.resolve(null);
+  // Sound effects do not depend on the lesson: start them now (music does: its mood follows the format).
   const sfxP = config.generation.sfx ? soundKit().catch(() => ({})) : Promise.resolve({});
 
   const { lesson, source } = await nextLesson(unit, audience);
@@ -94,18 +94,19 @@ async function buildVideo(video, unit, audience) {
       await updateVideo(video.id, { unitId: unit.id, unitTitle: unit.title, readyKey: readyKeyFor(unit.id, audience) });
     }
   }
-  await updateVideo(video.id, { lesson, lessonSource: source });
+  await updateVideo(video.id, { lesson, lessonSource: source, format: lesson.format });
   const lessonMs = Date.now() - started;
+  const skin = formatOf(lesson.format).skin;
 
   const [voice, media, music, sfx] = await Promise.all([
     audience.prefs?.voice === 'off' ? Promise.resolve(null) : narrate(lesson),
     resolveLessonMedia(lesson, look.fallbackVisual),
-    musicP,
+    config.generation.music ? resolveMusic(skin.music).catch(() => null) : null,
     sfxP,
   ]);
 
   const chip = unit.open ? look.label : unit.title;
-  const { commands, duration } = composeLesson({ ...lesson, topic: unit.topic, chip }, { ...media, music, sfx, voice });
+  const { commands, duration, quiz } = composeLesson({ ...lesson, topic: unit.topic, chip }, { ...media, music, sfx, voice });
   const created = await createProject(`StudyTok · ${lesson.title}`, commands);
   const projectId = created.project.id;
   const failed = (created.results || []).filter((r) => !r.ok);
@@ -120,16 +121,17 @@ async function buildVideo(video, unit, audience) {
 
   if (config.vidmoat.deleteProjectsAfterCache) await deleteProject(projectId).catch((e) => console.warn('[generator] delete failed', e.message));
 
-  const credits = [media.ambient, ...media.beatMedia, music].filter(Boolean).map((m) => ({ by: m.credit, source: m.sourceUrl, provider: m.provider }));
+  const credits = [media.ambient, ...media.beatMedia, ...(media.itemMedia || []), music].filter(Boolean).map((m) => ({ by: m.credit, source: m.sourceUrl, provider: m.provider }));
   const ready = await updateVideo(video.id, {
     status: 'ready',
     projectId: config.vidmoat.deleteProjectsAfterCache ? null : projectId,
     duration,
     poster: media.ambient?.thumbnailUrl || media.beatMedia.find(Boolean)?.thumbnailUrl || null,
     credits,
+    format: lesson.format,
     narrated: Boolean(voice),
-    voice: voice ? { mode: voice.mode, credits: voice.credits } : null,
-    quiz: lesson.quiz ? quizTiming(lesson, commands) : null,
+    voice: voice ? { mode: voice.mode, credits: voice.credits, voiceId: voice.voiceId } : null,
+    quiz: lesson.quiz && quiz ? { ...lesson.quiz, ...quiz } : null,
     lint: (created.verification?.layout || []).filter((l) => l.severity === 'warn'),
     timings: { lessonMs, totalMs: Date.now() - started },
     readyAt: new Date().toISOString(),
@@ -137,13 +139,6 @@ async function buildVideo(video, unit, audience) {
   await markReady(ready);
 }
 
-
-/** Quiz options and when they are on screen, so the app can let viewers answer by tapping. */
-function quizTiming(lesson, commands) {
-  const opt = commands.find((c) => c.clipId === 'opt0');
-  const ok = commands.find((c) => c.clipId === 'optOk');
-  return { question: lesson.quiz.question, options: lesson.quiz.options, answerIndex: lesson.quiz.answerIndex, from: opt?.start ?? null, reveal: ok?.start ?? null };
-}
 
 // The embed player only sees the document we send it: every media URL must be absolute and
 // reachable from the viewer's browser, and the document must stay under the 8 MB player limit.

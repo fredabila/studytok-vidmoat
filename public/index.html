@@ -187,9 +187,10 @@
         <div class="paused-badge" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg></div>
 
         <div class="quiz" hidden>
-          <p class="quiz-label">Quick check</p>
+          <p class="quiz-label">Quick check <span class="quiz-hint">· tap an answer to continue</span></p>
           <div class="quiz-options"></div>
           <p class="quiz-feedback" aria-live="polite"></p>
+          <button type="button" class="quiz-skip">Skip</button>
         </div>
 
         <aside class="rail">
@@ -216,7 +217,7 @@
         </aside>
 
         <footer class="meta">
-          <div class="unit-pill"><span class="dot"></span><span class="unit-text"></span></div>
+          <div class="pills"><div class="unit-pill"><span class="dot"></span><span class="unit-text"></span></div><span class="fmt-badge"></span></div>
           <h2 class="title"></h2>
           <p class="credits"></p>
           <p class="next-note" hidden></p>

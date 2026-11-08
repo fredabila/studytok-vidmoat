@@ -127,37 +127,44 @@ export async function resolveLessonMedia(lesson, fallbackQuery) {
   });
   // Ambient: sharp video when the library has one, otherwise a high-resolution photo with a slow
   // push-in beats an upscaled 720p clip behind the cards.
-  const [ambient, ...beatMedia] = await Promise.all([
+  // Rapid-fire items each get their own full-bleed footage.
+  const itemJobs = (lesson.items || []).map((it) => [[it.visual, 'video', SHARP], [it.visual, 'image'], [it.visual, 'video']]);
+  const [ambient, ...rest] = await Promise.all([
     resolveOne([[lesson.ambient, 'video', SHARP], [lesson.ambient, 'image'], [fallbackQuery, 'video', SHARP], [fallbackQuery, 'image'], [lesson.ambient, 'video']], used),
     ...beatJobs.map((attempts) => (attempts ? resolveOne([...attempts, [fallbackQuery, 'video']], used) : null)),
+    ...itemJobs.map((attempts) => resolveOne([...attempts, [fallbackQuery, 'video']], used)),
   ]);
-  return { ambient, beatMedia };
+  return { ambient, beatMedia: rest.slice(0, beatJobs.length), itemMedia: rest.slice(beatJobs.length) };
 }
 
 // Freesound tag search is literal and noisy, so use queries that return actual music and drop
 // anything tagged as an effect or unsettling. Set STUDYTOK_MUSIC=0 to turn the bed off.
-const MUSIC_QUERIES = ['lofi piano', 'calm piano', 'slow cinematic music', 'piano loop', 'acoustic guitar loop'];
+export const MUSIC_QUERIES = ['lofi piano', 'calm piano', 'slow cinematic music', 'piano loop', 'acoustic guitar loop'];
 const BAD_TAGS = /creepy|horror|hell|drone|distortion|noise|scream|glitch|8-bit|chiptune|field-recording|radio/i;
 
 /**
- * A CC0 music bed. Imported tracks go into a shared pool that later videos draw from, so most
- * videos need no music import at all; a new track is added now and then to keep variety.
+ * A CC0 music bed in one of the given moods (a format's `skin.music` queries). Imported tracks
+ * go into a shared pool tagged with their mood, so most videos need no music import at all; a
+ * new track is added now and then to keep variety.
  */
-export async function resolveMusic() {
-  const pool = (await kv.lrange('music:pool', 0, 49)) || [];
-  if (pool.length >= 6 && Math.random() > 0.15) return pool[Math.floor(Math.random() * pool.length)];
-  const query = MUSIC_QUERIES[Math.floor(Math.random() * MUSIC_QUERIES.length)];
-  const results = (await search(query, 'audio'))
+export async function resolveMusic(queries = MUSIC_QUERIES) {
+  const want = new Set(queries.map((q) => q.toLowerCase()));
+  const pool = (await kv.lrange('music:pool', 0, 79)) || [];
+  const fitting = pool.filter((t) => want.has((t.query || 'lofi piano').toLowerCase()));
+  const pick = (list) => list[Math.floor(Math.random() * list.length)];
+  if (fitting.length >= 3 && Math.random() > 0.2) return pick(fitting);
+  const query = pick(queries);
+  const results = (await search(`${query} music`, 'audio'))
     .filter((r) => r.duration >= 20 && r.duration <= 400 && !BAD_TAGS.test(`${r.name} ${(r.tags || []).join(' ')}`))
     .sort(() => Math.random() - 0.5);
-  for (const pick of results.slice(0, 3)) {
+  for (const candidate of results.slice(0, 3)) {
     try {
-      const track = await importOnce({ ...pick, width: null, height: null, photographer: pick.username });
-      if (!pool.some((t) => t.src === track.src)) { await kv.lpush('music:pool', track); await kv.ltrim('music:pool', 0, 49); }
+      const track = { ...(await importOnce({ ...candidate, width: null, height: null, photographer: candidate.username })), query };
+      if (!pool.some((t) => t.src === track.src)) { await kv.lpush('music:pool', track); await kv.ltrim('music:pool', 0, 79); }
       return track;
     } catch (err) {
       console.warn(`[media] music import failed: ${err.code || err.message}`);
     }
   }
-  return pool.length ? pool[Math.floor(Math.random() * pool.length)] : null;
+  return fitting.length ? pick(fitting) : pool.length ? pick(pool) : null;
 }

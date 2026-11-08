@@ -425,6 +425,7 @@ function renderSlide(item) {
   $$('.making-steps li', node).forEach((li, i) => { li.classList.toggle('done', i < stage); li.classList.toggle('on', i === stage && d.status === 'generating'); });
   $('.unit-text', node).textContent = unitLabel(d) + (d.subtopic ? ` · ${d.subtopic}` : '');
   $('.title', node).textContent = d.title || '';
+  $('.fmt-badge', node).textContent = d.status === 'ready' && d.format?.tag ? d.format.tag : '';
   $('.like .count', node).textContent = String(d.likes || 0);
   $('.like', node).setAttribute('aria-pressed', String(!!d.liked));
   $('.save', node).setAttribute('aria-pressed', String(!!d.saved));
@@ -494,7 +495,7 @@ function syncPlayers() {
   feed.items.forEach((item, i) => {
     if (feed.active >= 0 && Math.abs(i - feed.active) <= 1) mountPlayer(item); else unmountPlayer(item);
     if (!item.player) return;
-    if (i === feed.active && !feed.paused && view === 'feed') item.player.play(); else item.player.pause();
+    if (i === feed.active && !feed.paused && view === 'feed' && !item.held) item.player.play(); else item.player.pause();
   });
 }
 function onState(item, time, playing, duration) {
@@ -503,6 +504,16 @@ function onState(item, time, playing, duration) {
   item.lastTime = time;
   $('.bar', item.el).style.transform = `scaleX(${duration ? Math.min(1, time / duration) : 0})`;
   updateQuiz(item, time);
+  // Hold at the end of the question until the viewer answers (or skips): the answer is never
+  // spoken before they have had the chance to try.
+  const q = item.data.quiz;
+  if (q?.hold != null && isActive && !item.answered && !item.held && time >= q.hold && time < q.reveal) {
+    item.held = true;
+    item.player.pause();
+    item.player.seek(q.hold);
+    $('.quiz', item.el).dataset.held = 'true';
+    return;
+  }
   if (duration && time >= duration - 0.15 && isActive) {
     if (!item.completed) { item.completed = true; sendEvent(item.data.id, 'complete'); }
     item.lastTime = 0;
@@ -549,12 +560,23 @@ function updateQuiz(item, time) {
   const open = time >= q.from && time < q.reveal + (item.answered ? 2.5 : 0);
   if (open && box.hidden) {
     box.hidden = false;
+    box.dataset.held = 'false';
     if (!$('.quiz-options', box).childElementCount) {
       $('.quiz-options', box).replaceChildren(...q.options.map((opt, i) =>
         el('button', { type: 'button', class: 'quiz-opt', onclick: () => answer(item, i) }, el('b', {}, 'ABC'[i]), opt)));
+      $('.quiz-skip', box).onclick = () => release(item);
     }
   }
   if (!open && !box.hidden) box.hidden = true;
+}
+/** Let the video continue after the question (answered or skipped). */
+function release(item) {
+  item.answered = true;
+  const wasHeld = item.held;
+  item.held = false;
+  const box = $('.quiz', item.el);
+  box.dataset.held = 'false';
+  if (wasHeld && feed.items[feed.active] === item && !feed.paused && view === 'feed') item.player?.play();
 }
 function answer(item, i) {
   if (item.answered) return;
@@ -569,6 +591,7 @@ function answer(item, i) {
   });
   $('.quiz-feedback', box).textContent = correct ? 'Correct! 🎉' : `Not quite: it's ${'ABC'[q.answerIndex]}. We'll bring this back for review.`;
   sendEvent(item.data.id, 'quiz_answer', { correct });
+  setTimeout(() => release(item), 700);
 }
 
 // ---------------------------------------------------------------------------- why sheet
