@@ -400,30 +400,7 @@ async function startSensors() {
     if (item?.player && !feed.paused) { feed.paused = true; item.player.pause(); item.el.dataset.paused = 'true'; toast('Paused. Tap to continue.'); }
   } });
   track('sensors', { motion: ok, permission: sensors.status().permission });
-  if (view === 'profile') renderSensorCard();
 }
-/** Profile: what the motion sensing sees right now, and a switch to turn it off. */
-function renderSensorCard() {
-  const card = $('#sensor-card');
-  if (!card) return;
-  const st = sensors.status();
-  const on = motionAllowed();
-  const label = { hand: 'held in your hand', flat: 'lying flat', moving: 'on the move', unknown: 'no reading yet' }[st.posture] || st.posture;
-  card.replaceChildren(el('h3', {}, 'Motion sensing'),
-    el('p', { class: 'muted' }, !on ? 'Off. Turn it on and the feed can tell when you are walking (lighter, narration-led lessons) or lying down late at night (calmer ones), and pause if the phone is dropped.'
-      : st.motion ? `On · right now the phone is ${label}. Only this one word ever leaves your phone, never the sensor data.`
-      : st.permission === 'denied' ? 'Blocked by your browser. Allow motion sensors for this site in its settings to turn it on.'
-      : sensorsStarted ? 'On, waiting for the first reading. Tap a video in the feed if nothing arrives.' : 'Starts on your first tap in the feed.'),
-    el('button', { type: 'button', class: 'btn ghost', onclick: () => {
-      store.set('st_motion', on ? 'off' : 'on');
-      track('pref_change', { key: 'motion', value: on ? 'off' : 'on' });
-      if (on) { sensors.stop(); sensorsStarted = false; } else startSensors();
-      renderSensorCard();
-    } }, on ? 'Turn off' : 'Turn on'));
-  clearTimeout(renderSensorCard.timer);
-  if (view === 'profile' && on) renderSensorCard.timer = setTimeout(renderSensorCard, 2000);
-}
-
 // ============================================================================ feed: navigation
 function go(delta) { goTo(feed.active + delta); }
 function goTo(index, { animate = true } = {}) {
@@ -990,7 +967,7 @@ function nextBurst() {
       if (how === 'saved') toast('Card saved to your device.');
     } catch { toast("Couldn't make the card."); }
     close();
-  } }, '↗ Share');
+  } }, svgEl(svg_share), 'Share');
   const card = el('div', { class: 'burst-card' }, ...confetti, svgEl(mascot('cheer', 110)), el('b', {}, 'Unit mastered!'), el('span', {}, item.title), sbadge('🏅 level up', { hot: true, r: 2 }),
     el('div', { class: 'burst-actions' }, shareBtn, el('button', { type: 'button', class: 'btn ghost small', onclick: close }, 'Nice')));
   host.replaceChildren(card);
@@ -1022,7 +999,7 @@ function recapCard(stats) {
       if (how === 'saved') toast('Card saved to your device and the text copied.');
     } catch { toast("Couldn't make the card."); }
     share.disabled = false;
-  } }, '↗ Share recap');
+  } }, svgEl(svg_share), 'Share recap');
   return el('div', { class: `recap${past ? ' past' : ''}` },
     el('h3', {}, past ? 'Last week with Noti' : 'Your week with Noti'),
     svgEl(mascot(r.mastered.length || r.days >= 4 ? 'cheer' : 'happy', 64)),
@@ -1055,6 +1032,7 @@ function mascot(mood = 'happy', size = 96) {
     </g>
   </svg>`;
 }
+const svg_share = '<svg viewBox="0 0 24 24" aria-hidden="true" class="btn-ic"><path d="M12 2v13"/><path d="m16 6-4-4-4 4"/><path d="M4 14v6a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-6"/></svg>';
 const svgEl = (markup) => { const t = document.createElement('template'); t.innerHTML = markup.trim(); return t.content.firstElementChild; };
 const sbadge = (text, { hot = false, r = -1 } = {}) => el('span', { class: `sbadge${hot ? ' hot' : ''}`, style: `--r:${r}deg` }, text);
 
@@ -1186,14 +1164,13 @@ function renderProfile() {
       const how = await shareCard(blob, { text: `I'm member #${me?.memberNo} on StudyTok, short study videos made for my syllabus. studytok.vidmoat.com`, filename: 'studytok-member.png' });
       if (how === 'saved') toast('Card saved to your device.');
     } catch { toast("Couldn't make the card."); }
-  } }, '↗ Share my card');
+  } }, svgEl(svg_share), 'Share my card');
   $('#profile-card').replaceChildren(svgEl(mascot(stats?.streak >= 3 ? 'cheer' : 'happy')),
     el('div', {}, el('h3', {}, me?.vidmoat?.name || 'Guest learner'), el('p', {}, [me?.memberNo ? `Member #${me.memberNo}` : null, lvl?.label, p.institution, p.age ? `age ${p.age}` : null].filter(Boolean).join(' · ') || 'Exploring'),
       el('div', { class: 'bubble' }, buddyLine(stats)),
       badges.length ? el('div', { class: 'badges' }, ...badges) : null,
       el('div', { class: 'badges' }, shareMe)));
   $('#profile-tiles').replaceChildren(...[statTiles(stats), recapCard(stats)].filter(Boolean));
-  renderSensorCard();
 
   renderCredits();
   const account = $('#account-card');

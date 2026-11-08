@@ -255,6 +255,10 @@ See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for a request walkthrough and
 * **Sound**: browsers allow sound only after a tap; onboarding counts as one, and returning
   viewers get a single "Tap to start" screen.
 
+## Help and FAQ
+
+Plain-language answers for students and parents (what StudyTok is, how the feed chooses, quiz holds, credits, installing, privacy and data deletion) are in [docs/FAQ.md](docs/FAQ.md).
+
 ## Contributing and license
 
 StudyTok is open source under the [MIT license](LICENSE). Issues and pull requests are

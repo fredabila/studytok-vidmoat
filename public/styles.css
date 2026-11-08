@@ -156,7 +156,7 @@ body[data-view="feed"] .tabbtn[aria-current="page"] span { color: var(--ink); }
 body[data-view="feed"] .tabbtn[aria-current="page"] { color: var(--ink); }
 body[data-view="library"] .tabbar, body[data-view="profile"] .tabbar { background: var(--paper); border-top-color: var(--line-2); color: var(--ink); }
 .tabbtn { position: relative; z-index: 1; flex: 1 1 0; max-width: 150px; display: grid; place-items: center; align-content: center; gap: 2px; border: 0; background: none; cursor: pointer; opacity: .55; font-size: 11px; font-weight: 600; color: inherit; transition: opacity .2s; }
-.tabbtn svg { width: 23px; height: 23px; fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linejoin: round; stroke-linecap: round; transition: transform .25s var(--ease); }
+.tabbtn svg { width: 23px; height: 23px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; transition: transform .25s var(--ease); }
 .tabbtn[aria-current="page"] { opacity: 1; }
 .tabbtn[aria-current="page"] svg { transform: translateY(-1px) scale(1.08); animation: bop .35s var(--ease); }
 .tabbtn[aria-current="page"] span { color: var(--ink); }
@@ -214,10 +214,10 @@ body[data-view="feed"] .tabbtn[aria-current="page"] span { color: var(--ink); }
 
 .paused-badge { position: absolute; z-index: 4; left: 50%; top: 45%; width: 76px; height: 76px; margin: -38px 0 0 -38px; display: grid; place-items: center; border-radius: 50%;
   background: var(--paper); color: var(--ink); box-shadow: 3px 3px 0 var(--hl); opacity: 0; transform: scale(.8); transition: opacity .15s, transform .15s; pointer-events: none; }
-.paused-badge svg { width: 36px; height: 36px; fill: var(--ink); margin-left: 5px; }
+.paused-badge svg { width: 34px; height: 34px; fill: var(--ink); stroke: var(--ink); stroke-width: 2; stroke-linejoin: round; margin-left: 4px; }
 .slide[data-paused="true"] .paused-badge { opacity: 1; transform: scale(1); }
 .heart-burst { position: absolute; z-index: 5; width: 110px; height: 110px; margin: -55px 0 0 -55px; pointer-events: none; opacity: 0; }
-.heart-burst svg { width: 100%; height: 100%; fill: var(--hl); stroke: var(--ink); stroke-width: .8; }
+.heart-burst svg { width: 100%; height: 100%; fill: var(--hl); stroke: var(--ink); stroke-width: 1.2; stroke-linejoin: round; }
 .heart-burst.go { animation: burst .8s var(--ease) forwards; }
 @keyframes burst { 0% { opacity: 0; transform: scale(.3) rotate(-12deg); } 20% { opacity: 1; transform: scale(1.15) rotate(6deg); } 60% { opacity: 1; transform: scale(1) rotate(0); } 100% { opacity: 0; transform: translateY(-60px) scale(.9); } }
 
@@ -225,7 +225,9 @@ body[data-view="feed"] .tabbtn[aria-current="page"] span { color: var(--ink); }
 .rail-btn { display: grid; justify-items: center; gap: 5px; border: 0; background: none; padding: 0; cursor: pointer; color: #fff; }
 .rail-btn .ic { width: 46px; height: 46px; border-radius: 50%; display: grid; place-items: center; background: rgba(13, 13, 14, .55); border: 1.5px solid rgba(255, 255, 255, .85); transition: transform .12s var(--ease), background .15s; }
 .rail-btn:active .ic { transform: scale(.88); }
-.rail-btn svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.rail-btn svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; transition: fill .2s, transform .2s; }
+.rail-btn.like[aria-pressed="true"] svg { fill: #ff5a5f; stroke: #ff5a5f; transform: scale(1.1); }
+.rail-btn.save[aria-pressed="true"] svg { fill: var(--hl); stroke: var(--hl); }
 .rail-btn .count { font-family: var(--mono); font-size: 11px; font-weight: 600; text-shadow: 0 1px 4px #000; }
 .like[aria-pressed="true"] .ic, .save[aria-pressed="true"] .ic { background: var(--hl); border-color: var(--hl); color: var(--ink); }
 .like[aria-pressed="true"] svg { fill: var(--ink); }
@@ -366,6 +368,7 @@ body[data-view="feed"] .tabbtn[aria-current="page"] span { color: var(--ink); }
 .burst-card.leaving { animation: burst-out .4s var(--ease) both; }
 .burst-actions { display: flex; gap: 8px; margin-top: 10px; }
 .btn.small { min-height: 40px; padding: 0 16px; font-size: 14px; }
+.btn .btn-ic { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 @keyframes burst-in { 0% { transform: scale(.4) rotate(-12deg); opacity: 0; } 70% { transform: scale(1.06) rotate(-2deg); opacity: 1; } 100% { transform: scale(1) rotate(-3deg); opacity: 1; } }
 @keyframes burst-out { to { transform: scale(.6) rotate(6deg); opacity: 0; } }
 @keyframes wiggle { 0%, 100% { transform: rotate(-6deg); } 50% { transform: rotate(6deg); } }
