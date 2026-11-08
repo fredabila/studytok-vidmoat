@@ -39,9 +39,10 @@ export const setDocument = (id, doc) => kv.set(`video:${id}:doc`, doc);
 
 export async function markReady(v) {
   const entry = { score: Date.parse(v.createdAt), member: v.id };
-  await kv.zadd(`ready:${v.readyKey}`, entry);
   if (v.level) await kv.zadd(`ready:any:${v.level}`, entry);
   await kv.zadd('ready:any', entry);
+  if (v._poolOnly) return; // backfill: already filed under its unit and counted
+  await kv.zadd(`ready:${v.readyKey}`, entry);
   await kv.hincrby('stats:library', 'ready', 1);
 }
 

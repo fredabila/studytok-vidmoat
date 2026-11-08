@@ -213,6 +213,13 @@ async function buildSyllabus() {
   await Promise.all(parts.map((part) => resolvePart(part)));
   if (!ob.selected.size && !ob.interests.size) cfg.topics.slice(0, 4).forEach((t) => ob.interests.add(t.id));
   updateStart();
+  // Save a draft now so the first videos start generating while the student reads the list.
+  api('POST', '/api/profile', { ...profileBody(), draft: true }).catch(() => {});
+}
+
+function profileBody() {
+  const units = ob.programs.flatMap((p) => p.program.units.map((u) => u.id)).filter((id) => ob.selected.has(id));
+  return { profile: { ...ob.profile, level: ob.level }, programKeys: ob.programs.map((p) => p.program.key), units, interests: [...ob.interests] };
 }
 
 async function runOnboarding(prefill) {
@@ -243,10 +250,7 @@ async function runOnboarding(prefill) {
   };
 
   await new Promise((resolve) => { $('#start').onclick = resolve; });
-  const units = ob.programs.flatMap((p) => p.program.units.map((u) => u.id)).filter((id) => ob.selected.has(id));
-  const { user } = await api('POST', '/api/profile', {
-    profile: { ...ob.profile, level: ob.level }, programKeys: ob.programs.map((p) => p.program.key), units, interests: [...ob.interests],
-  });
+  const { user } = await api('POST', '/api/profile', profileBody());
   me = user;
   $('#onboard').hidden = true;
   $('#app').hidden = false;
