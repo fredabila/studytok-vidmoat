@@ -11,8 +11,8 @@ import { topic as topicOf } from '../curriculum/topics.js';
 import { BANK } from './bank.js';
 import { sanitizeLesson } from './schema.js';
 import { writeEpisodes } from './claude.js';
-import { pickFormats, FORMAT_IDS, BREATHER_FORMATS } from '../video/formats.js';
-import { formatPerformance, hookGuidance } from '../feed/events.js';
+import { pickFormats, FORMAT_IDS, BREATHER_FORMATS, RETRIEVAL_FORMATS } from '../video/formats.js';
+import { formatPerformance, hookGuidance, quizGuidance } from '../feed/events.js';
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -38,12 +38,14 @@ async function writeBatch(unit, audience, key, covered) {
   // Formats that students on this topic actually watch through get written more often.
   const performance = await formatPerformance(unit.topic, FORMAT_IDS).catch(() => ({}));
   // Children under 13 do not get the opinion-led formats.
-  const base = unit.fun ? BREATHER_FORMATS : FORMAT_IDS; // a breather is always light (feed/breathers.js)
+  // A breather is always light (feed/breathers.js); a review session is always retrieval practice.
+  const base = unit.fun ? BREATHER_FORMATS : audience.review ? RETRIEVAL_FORMATS : FORMAT_IDS;
   const allowed = audience.child ? base.filter((f) => !['hottake', 'wyr'].includes(f)) : base;
   const formats = pickFormats(unit.topic, config.anthropic.episodesPerCall, { recent, performance, allowed });
   const hooks = await hookGuidance(unit.topic).catch(() => null);
+  const quizNote = await quizGuidance(unit.topic).catch(() => null);
   const raws = await writeEpisodes({
-    unit, audience, covered, formats, count: formats.length, accent: topicOf(unit.topic).accent, hooks,
+    unit, audience, covered, formats, count: formats.length, accent: topicOf(unit.topic).accent, hooks, quizNote,
   });
   const lessons = [];
   for (const raw of raws) {

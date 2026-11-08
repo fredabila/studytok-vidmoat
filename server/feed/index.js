@@ -179,7 +179,10 @@ async function candidatesFor(user) {
  * student right now (ranking.js scoreVideo: quality × taste × diversity × fatigue × difficulty).
  * @returns {Promise<null | { video, parts }>}
  */
-async function reusable(userId, readyKey, taken, { signals, session } = {}) {
+/** A due unit's lessons are retrieval practice, written and filed separately from its first explanations. */
+export const reviewAudience = (audience) => ({ ...audience, lessonStyle: `${audience.lessonStyle || ''}|review`, review: true });
+
+async function reusable(userId, readyKey, taken, { signals, session, review = false } = {}) {
   const ids = (await db.readyIds(readyKey, 60)).filter((id) => !taken.has(id));
   if (!ids.length) return null;
   const blocked = await db.inAnySet(userId, ['seen', 'served'], ids);
@@ -189,7 +192,7 @@ async function reusable(userId, readyKey, taken, { signals, session } = {}) {
   const stats = await Promise.all(videos.map((v) => db.getStats(v.id)));
   let best = null;
   videos.forEach((v, i) => {
-    const r = scoreVideo(v, stats[i], signals, session);
+    const r = scoreVideo(v, stats[i], signals, session, { review });
     if (!best || r.score > best.score) best = { video: v, ...r };
   });
   return best;
@@ -253,7 +256,10 @@ export async function nextItems(userId, count = 3) {
   // As videos are chosen for this page, treat them as the session's most recent for diversity.
   const pageSession = { ...session, lastFormats: [...(session.lastFormats || [])], lastTopics: [...(session.lastTopics || [])] };
   for (const pick of picks) {
-    const best = await reusable(userId, readyKeyFor(pick.unit.id, audience), taken, { signals, session: pageSession });
+    // A unit due for review: its retrieval-practice pool first, else its ordinary pool scored for review.
+    const review = (pick.parts?.review || 0) > 0;
+    const best = (review && await reusable(userId, readyKeyFor(pick.unit.id, reviewAudience(audience)), taken, { signals, session: pageSession, review }))
+      || await reusable(userId, readyKeyFor(pick.unit.id, audience), taken, { signals, session: pageSession, review });
     if (best) {
       taken.add(best.video.id);
       ready.push({ pick, video: best.video, videoParts: best.parts });
@@ -299,8 +305,9 @@ export async function nextItems(userId, count = 3) {
     const needed = items.length < count;
     if (!needed && started > 0 && generating >= config.generation.readyAhead) break;
     // A video for this unit may already be on its way (prefetch): show that rather than start another.
-    const existing = inFlight.find((v) => v.readyKey === readyKeyFor(pick.unit.id, audience) && !taken.has(v.id));
-    const result = existing ? { video: existing, existing: true } : credits ? { blocked: credits.reason } : await startFor(userId, pick.unit, audience, pending);
+    const forUnit = (pick.parts?.review || 0) > 0 ? reviewAudience(audience) : audience; // due units get retrieval practice written
+    const existing = inFlight.find((v) => (v.readyKey === readyKeyFor(pick.unit.id, forUnit) || v.readyKey === readyKeyFor(pick.unit.id, audience)) && !taken.has(v.id));
+    const result = existing ? { video: existing, existing: true } : credits ? { blocked: credits.reason } : await startFor(userId, pick.unit, forUnit, pending);
     if (result.blocked) {
       credits ||= { needed: true, reason: result.blocked, unit: pick.unit.title };
       if (needed) {

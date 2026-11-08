@@ -26,7 +26,8 @@ async function serveStatic(req, res, url) {
 
 const server = createServer(async (req, res) => {
   const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
-  if (url.pathname.startsWith('/api/')) return handleApi(req, res);
+  // /v/:id (public lesson pages) is an API route too; on Vercel the rewrite in vercel.json does this.
+  if (url.pathname.startsWith('/api/') || /^\/v\/[0-9a-f-]{36}$/.test(url.pathname)) return handleApi(req, res);
   if (req.method !== 'GET' && req.method !== 'HEAD') return send(res, 405, 'Method not allowed');
   return serveStatic(req, res, url);
 });

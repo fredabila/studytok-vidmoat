@@ -77,6 +77,16 @@ you share.
 Day streak (days in a row with at least one lesson), lessons watched, quick-check score and units
 mastered. Badges appear for a 3-day streak, 80%+ on quizzes, mastered units and 25+ lessons.
 
+**Why do old units come back as flashcards and quizzes instead of lessons?**
+That is review. When spaced repetition brings a unit back, StudyTok serves retrieval practice
+(flashcards, true or false, a ten-second challenge, an exam drill) rather than explaining it
+again, because recalling an answer yourself is what makes it stick. Tap **Why** on the video to
+see "due for review".
+
+**What is the ring on my Profile?**
+Your daily goal: three lessons a day. It fills as you watch and turns green when done. Noti
+will also tell you when your streak is about to lapse and when units are due.
+
 **What does "unit mastered" mean?**
 Enough lessons completed and quick checks answered correctly on that unit (mastery ≥ 70%). You
 get a burst with Noti, and the unit comes back later only for review.
@@ -85,6 +95,12 @@ get a burst with Noti, and the unit comes back later only for review.
 *Share recap* (Profile and Library, every week), *Share* on a level-up, and *Share my card* on
 your Profile make an image card you can post anywhere. On a phone it opens the share sheet; on a
 computer the image downloads and the caption is copied.
+
+**Can I share a video with someone who doesn't have StudyTok?**
+Yes. *Share lesson* on any video copies a public link (`studytok.vidmoat.com/v/…`) that opens
+without an account: the lesson plays in the browser, with the quick check, and the page says it
+was shared by your member number (never your name). Whoever taps "Get lessons for your own
+syllabus" from it counts as your invite.
 
 **Who is Noti?**
 The sticky-note study buddy on your Profile and Library. Noti cheers on streaks, thinks when
@@ -111,6 +127,14 @@ renders, exports, or touches your Speech Lab voices or Cast. You can disconnect 
 Yes. On Android/Chrome and desktop, tap *Install the app* on the landing page or Profile. On
 iPhone, open it in Safari, tap Share, then *Add to Home Screen*. It opens full screen and keeps
 your sign-in.
+
+**Can StudyTok remind me?**
+Yes, if you want it to. Install the app, open your Profile and tap *Enable reminders*. You get at
+most one notification a day, and only when it matters: your streak is about to end and you have
+not studied yet today (sent in the early evening, your time), or two or more units are due for a
+review. On iPhone this needs iOS 16.4 or later and the app added to your Home Screen; in a
+browser tab Safari cannot deliver notifications. Turn it off again from the same card, or in your
+phone's notification settings.
 
 **Videos are stuttering.**
 Close other heavy apps and make sure you are on a recent browser. Only one video plays at a

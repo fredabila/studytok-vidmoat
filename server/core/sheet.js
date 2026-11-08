@@ -138,7 +138,8 @@ export async function dailyRow(date, { now = Date.now() } = {}) {
     'Quiz accuracy': right + wrong ? `${Math.round((right / (right + wrong)) * 100)}%` : '',
     'Likes': n('like'),
     'Saves': n('save'),
-    'Shares': n('recap_share') + n('levelup_share') + n('profile_share'),
+    'Shares': n('recap_share') + n('levelup_share') + n('profile_share') + n('lesson_share'),
+    'Shared lesson views': n('share_page_view'),
     'Drops': n('drop'),
     'Breathers': n('breather_view'),
     'Landing views': n('funnel_landing'),
@@ -151,6 +152,7 @@ export async function dailyRow(date, { now = Date.now() } = {}) {
     'Installs': n('funnel_installed'),
     'Videos made': n('gen_ready'),
     'Videos failed': n('gen_failed'),
+    'Reminders sent': n('push_sent'),
     'Library size': await db.readyCount(),
     'Updated': iso(now),
   };

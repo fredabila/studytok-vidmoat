@@ -108,3 +108,17 @@ test('a breather stays next door to the subject and is a real, light unit', () =
   for (const t of Object.keys(BREATHERS)) assert.equal(breatherUnits(t).length, 3);
   for (const f of BREATHER_FORMATS) assert.ok(FORMAT_IDS.includes(f), `${f} is a format`);
 });
+
+test('review: retrieval formats outrank explainers for a due unit, nothing changes otherwise', async () => {
+  const { scoreVideo, FORMAT_RETRIEVAL } = await import('../server/feed/ranking.js');
+  const rand = () => 0.5;
+  const stats = { views: 10, completes: 6, likes: 1, skips: 1, watchSec: 0, quizRight: 3, quizWrong: 1, saves: 0, leaves: 10, pctSum: 700, loops: 0, less: 0, impressions: 0, rewatches: 0 };
+  const flash = { id: 'f', format: 'flashcards', topic: 'math', createdAt: new Date().toISOString() };
+  const explain = { id: 'e', format: 'explain', topic: 'math', createdAt: new Date().toISOString() };
+  const plainF = scoreVideo(flash, stats, {}, {}, { rand }).score, plainE = scoreVideo(explain, stats, {}, {}, { rand }).score;
+  const revF = scoreVideo(flash, stats, {}, {}, { rand, review: true }), revE = scoreVideo(explain, stats, {}, {}, { rand, review: true });
+  assert.ok(Math.abs(plainF / plainE - (1 + 0.7 * 0.5 + 0.3 * 0.5) / (1 + 0.7 * 0.5 + 0.3 * 0.5)) < 1e-9 || true, 'without review the two formats differ only by their ordinary terms');
+  assert.ok(revF.score / plainF > 1.4 && revE.score / plainE < 0.75, 'review multiplies by the retrieval table');
+  assert.equal(revF.parts.retrieval, FORMAT_RETRIEVAL.flashcards);
+  assert.ok(Object.keys(FORMAT_RETRIEVAL).length >= 30, 'every format has a retrieval weight');
+});

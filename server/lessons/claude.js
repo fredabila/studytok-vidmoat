@@ -50,7 +50,7 @@ function prefLines(prefs = {}) {
  * @param {number} p.count
  * @param {string} p.accent      topic accent colour for diagrams
  */
-export async function writeEpisodes({ unit, audience, covered = [], count = 3, formats, accent = '#34d399', hooks = null }) {
+export async function writeEpisodes({ unit, audience, covered = [], count = 3, formats, accent = '#34d399', hooks = null, quizNote = null }) {
   const list = formats?.length ? formats : Array.from({ length: count }, () => 'explain');
   count = list.length;
   const context = [
@@ -66,6 +66,8 @@ export async function writeEpisodes({ unit, audience, covered = [], count = 3, f
     hooks?.hold?.length && `Hook styles that hold attention on this topic (use these more): ${hooks.hold.join(', ')}.`,
     hooks?.lose?.length && `Hook styles students skip on this topic (avoid): ${hooks.lose.join(', ')}.`,
     hooks?.student?.length && `This student watches longest after: ${hooks.student.join(', ')} hooks.`,
+    quizNote,
+    audience.review && 'REVIEW SESSION: this student learned this unit days ago and it is due again (spaced repetition). Write retrieval practice, not a first explanation: open with a question or a recall prompt, make the student produce the answer before it appears, cover the two or three facts most likely to be forgotten, and keep each explanation to one sentence after the answer.',
     covered.length && `Already covered for this unit (do not repeat):\n${covered.slice(-30).map((c) => `- ${c}`).join('\n')}`,
     `Write ${count} episodes, in this order and in these formats:`,
     ...list.map((id, i) => `${i + 1}. format "${id}" (${FORMATS[id].name}): ${FORMATS[id].blurb} Fields: ${FORMATS[id].spec}`),

@@ -202,3 +202,25 @@ test('context: on the move narration-led formats win; late at night lying down, 
   assert.ok(nightDrill.parts.context < nightExplain.parts.context);
   assert.equal(scoreVideo({ format: 'explain', topic: 'math' }, good, {}, {}, { rand }).parts.context, 1);
 });
+
+test('quizGuidance speaks only with evidence: too easy, too hard, or nothing; studentStats counts today and what is due', async () => {
+  const { quizGuidance } = await import('../server/feed/events.js');
+  assert.equal(await quizGuidance('law'), null, 'no data, no note');
+  await kv.hincrby('stats:format:explain:law', 'quizRight', 18); await kv.hincrby('stats:format:flashcards:law', 'quizRight', 10); await kv.hincrby('stats:format:explain:law', 'quizWrong', 2);
+  assert.match(await quizGuidance('law'), /make them harder/);
+  await kv.hincrby('stats:format:explain:economics', 'quizRight', 6); await kv.hincrby('stats:format:explain:economics', 'quizWrong', 16);
+  assert.match(await quizGuidance('economics'), /make them clearer/);
+  await kv.hincrby('stats:format:explain:space', 'quizRight', 14); await kv.hincrby('stats:format:explain:space', 'quizWrong', 8);
+  assert.equal(await quizGuidance('space'), null, 'a healthy mix needs no note');
+
+  const user = await saveProfile(null, { profile: { level: 'high-school', program: 'Biology' }, units: ['hs-biology-1'] });
+  const v1 = await video('explain'), v2 = await video('rapid');
+  const now = Date.now();
+  await ingest(user.id, { ctx: { sid: 'g' }, events: [{ type: 'view', videoId: v1.id, at: now }, { type: 'view', videoId: v2.id, at: now + 500 }, { type: 'quiz_answer', videoId: v1.id, correct: false, choice: 0, ms: 500, at: now + 900 }] });
+  const st = await studentStats(user.id, { progress: await getProgress(user.id), now: now + 1000 });
+  assert.equal(st.today, 2); assert.equal(st.goal, 3);
+  assert.equal(st.due, 0, 'a wrong answer comes back in 20 minutes, not yet');
+  const later = await studentStats(user.id, { progress: await getProgress(user.id), now: now + 25 * 60 * 1000 });
+  assert.equal(later.due, 1, 'and then it is due');
+  assert.equal(later.today, 2, 'same day');
+});

@@ -60,6 +60,7 @@ acceleration samples never leave the device, and nothing is recorded when permis
 | `like` / `unlike` / `save` / `unsave` | `t`, `by` button/double-tap | reactions |
 | `less` | `t` | "show me less" |
 | `why_open` | | opened the *Why* sheet |
+| `lesson_share` | `by` sheet/copy | shared the public link to a lesson (`/v/:id`) |
 | `quiz_shown` / `quiz_hold` | `t` | options appeared / the video was held at the question |
 | `quiz_answer` | `choice`, `correct`, `ms` (time to answer) | tapped an option |
 | `quiz_skip` | `ms` | tapped Skip |
@@ -70,6 +71,7 @@ acceleration samples never leave the device, and nothing is recorded when permis
 | `unit_toggle` | `unitId`, `on` | ticked / unticked a unit in the Library |
 | `library_open` | `tab` course/saved/history | Library tab |
 | `profile_open`, `studies_edit` | | Profile |
+| `push_enabled` / `push_disabled` | | reminders turned on / off from the Profile card (`public/push.js`) |
 | `player_error` | `msg` | the embed player failed |
 | `gen_wait` | `ms`, `outcome` ready/failed/gave_up | how long a viewer waited on a generating slide |
 | `skip` | | legacy: an early leave (the app now sends `leave` with `early: true`) |
@@ -104,7 +106,8 @@ the Google Sheet's Daily tab: `funnel_landing` (and `funnel_landing_ref` when th
 with an invite link), `funnel_signin_click`, `funnel_joined` / `funnel_signed_in` (the OAuth
 callback), `funnel_setup` (first profile save with units), `funnel_install_prompt` /
 `funnel_installed`, `referred` (a sign-up credited to an invite), `gen_ready` / `gen_failed`
-(video generation outcomes) and `breather_view`. The landing steps arrive through
+(video generation outcomes), `breather_view` and `push_sent` (Web Push reminders delivered by
+`core/push.js remindDue()`; the sheet's *Reminders sent*). The landing steps arrive through
 `POST /api/funnel` before there is a session; they carry no identifier.
 
 ## Invite links

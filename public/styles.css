@@ -249,6 +249,8 @@ body.sound-gated .swipe-hint { display: none; }
 .rail-btn.like[aria-pressed="true"] svg { fill: #ff5a5f; stroke: #ff5a5f; transform: scale(1.1); }
 .rail-btn.save[aria-pressed="true"] svg { fill: var(--hl); stroke: var(--hl); }
 .rail-btn .count { font-family: var(--mono); font-size: 11px; font-weight: 600; text-shadow: 0 1px 4px #000; }
+/* six buttons on a short phone: tighter rail so it stays clear of the top bar */
+@media (max-width: 899px) and (max-height: 700px) { .rail { gap: 9px; bottom: 104px; } .rail-btn .ic { width: 40px; height: 40px; } .rail-btn svg { width: 19px; height: 19px; } .rail-btn .count { font-size: 10px; } }
 .like[aria-pressed="true"] .ic, .save[aria-pressed="true"] .ic { background: var(--hl); border-color: var(--hl); color: var(--ink); }
 .like[aria-pressed="true"] svg { fill: var(--ink); }
 .like[aria-pressed="true"] .ic { animation: pop .35s var(--ease); }
@@ -336,6 +338,13 @@ body.sound-gated .swipe-hint { display: none; }
   background: #fff; border: 1.5px solid var(--line-2); overflow: hidden; }
 .hero::before { content: ''; position: absolute; inset: 0; background: radial-gradient(60% 90% at 100% 0%, var(--hl-2) 0%, transparent 60%); opacity: .8; pointer-events: none; }
 .hero > * { position: relative; }
+.goal { display: grid; justify-items: center; gap: 2px; font-family: var(--mono); font-size: 10.5px; font-weight: 600; color: var(--ink-3); }
+.hero { padding-right: 84px; }
+.hero .goal { position: absolute; right: 12px; top: 10px; }
+.goal-ring { display: block; }
+.goal.done span { color: var(--ok); }
+.profile-card { position: relative; padding-right: 80px; }
+.profile-card .goal { position: absolute; right: 14px; top: 14px; }
 .hero .mascot { width: 96px; height: 96px; animation: float 4s ease-in-out infinite; }
 .hero h3 { margin: 0; font-size: 24px; }
 .hero p { margin: 2px 0 0; color: var(--ink-2); font-size: 13.5px; line-height: 1.4; }

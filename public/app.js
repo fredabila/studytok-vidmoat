@@ -287,6 +287,11 @@ async function runOnboarding(prefill) {
     return runOnboarding({ ...(prefill || {}), profile: profileBody().profile, interests: [...ob.interests] });
   }
   me = (await api('GET', '/api/me')).user;
+  // Once per visit, after five in the afternoon: a streak about to lapse gets one gentle nudge.
+  try {
+    const s = me?.stats;
+    if (s && s.streak >= 2 && !s.today && new Date().getHours() >= 17 && !sessionStorage.getItem('st_nudged')) { sessionStorage.setItem('st_nudged', '1'); setTimeout(() => toast(`Your ${s.streak}-day streak ends tonight. One lesson keeps it.`), 1500); }
+  } catch { /* fine */ }
   $('#onboard').hidden = true;
   $('#app').hidden = false;
   document.body.classList.remove('onboarding');
@@ -510,6 +515,7 @@ function addSlide(data, { at } = {}) {
   renderSlide(item);
   $('.like', node).onclick = () => toggleFlag(item, 'liked', 'like', 'unlike');
   $('.save', node).onclick = () => toggleFlag(item, 'saved', 'save', 'unsave');
+  $('.share', node).onclick = () => shareLesson(item);
   $('.why', node).onclick = () => { sendEvent(item.data.id, 'why_open'); openWhy(item); };
   $('.tune', node).onclick = () => { track('tune_open'); openTune(); };
   $('.less', node).onclick = () => {
@@ -1090,6 +1096,11 @@ const sbadge = (text, { hot = false, r = -1 } = {}) => el('span', { class: `sbad
 /** A line from Noti for the student's current state. */
 function buddyLine(stats) {
   if (!stats) return "Let's learn something today.";
+  const hour = new Date().getHours();
+  if (stats.streak >= 2 && !stats.today && hour >= 17) return `Your ${stats.streak}-day streak ends tonight. One lesson keeps it.`;
+  if (stats.due >= 2 && !stats.today) return `${stats.due} units are due for review. Five minutes brings them back.`;
+  if (stats.today && stats.today < stats.goal) return `${stats.today} of ${stats.goal} today. ${stats.goal - stats.today} more and the day is done.`;
+  if (stats.today >= stats.goal && stats.streak < 3) return "Today's goal done. Anything more is a bonus.";
   if (stats.streak >= 7) return `${stats.streak} days in a row. You're unstoppable.`;
   if (stats.streak >= 3) return `${stats.streak}-day streak. Keep it going!`;
   if (stats.quizN >= 5 && stats.quizRight / stats.quizN >= 0.8) return `${Math.round((stats.quizRight / stats.quizN) * 100)}% on quick checks. Show-off.`;
@@ -1097,6 +1108,12 @@ function buddyLine(stats) {
   if (stats.watched >= 5) return `${stats.watched} lessons in. It's sticking.`;
   if (stats.watched >= 1) return 'First lessons done. Swipe for more.';
   return "Your feed is ready. Let's go.";
+}
+/** The daily goal as a small ring: lessons watched today out of the goal. */
+function goalRing(stats) {
+  const goal = stats?.goal || 3, n = Math.min(goal, stats?.today || 0), r = 22, c = 2 * Math.PI * r;
+  const ring = svgEl(`<svg class="goal-ring" viewBox="0 0 56 56" width="56" height="56" aria-hidden="true"><circle cx="28" cy="28" r="${r}" fill="none" stroke="rgba(0,0,0,.12)" stroke-width="6"/><circle cx="28" cy="28" r="${r}" fill="none" stroke="var(--hl)" stroke-width="6" stroke-linecap="round" stroke-dasharray="${c}" stroke-dashoffset="${c * (1 - n / goal)}" transform="rotate(-90 28 28)"/><text x="28" y="33" text-anchor="middle" font-family="var(--mono)" font-size="14" font-weight="700" fill="var(--ink)">${n}/${goal}</text></svg>`);
+  return el('div', { class: `goal${n >= goal ? ' done' : ''}`, title: `Today: ${n} of ${goal} lessons` }, ring, el('span', {}, n >= goal ? 'Done today' : 'Today'));
 }
 function statTiles(stats) {
   const acc = stats?.quizN ? `${Math.round((stats.quizRight / stats.quizN) * 100)}%` : '—';
@@ -1120,7 +1137,7 @@ async function showLibrary() {
   course.replaceChildren();
   const stats = me?.stats;
   const due = lib.units.filter((u) => u.active && u.dueForReview).length;
-  course.append(el('div', { class: 'hero' }, svgEl(mascot(due ? 'think' : stats?.streak >= 3 ? 'cheer' : 'happy')),
+  course.append(el('div', { class: 'hero' }, svgEl(mascot(due ? 'think' : stats?.streak >= 3 ? 'cheer' : 'happy')), goalRing(stats),
     el('div', {}, el('h3', {}, due ? `${due} unit${due > 1 ? 's' : ''} due for review` : 'Your syllabus'),
       el('p', {}, due ? 'Spaced repetition says now is the moment. They are first in your feed.' : 'Untick what you have mastered; your feed follows what stays ticked.'),
       el('div', { class: 'bubble' }, buddyLine(stats)))));
@@ -1220,11 +1237,13 @@ function renderProfile() {
     el('div', {}, el('h3', {}, me?.vidmoat?.name || 'Guest learner'), el('p', {}, [me?.memberNo ? `Member #${me.memberNo}` : null, lvl?.label, p.institution, p.age ? `age ${p.age}` : null].filter(Boolean).join(' · ') || 'Exploring'),
       el('div', { class: 'bubble' }, buddyLine(stats)),
       badges.length ? el('div', { class: 'badges' }, ...badges) : null,
-      el('div', { class: 'badges' }, shareMe)));
+      el('div', { class: 'badges' }, shareMe)),
+    goalRing(stats));
   $('#profile-tiles').replaceChildren(...[statTiles(stats), recapCard(stats)].filter(Boolean));
 
   renderCredits();
   renderInvite();
+  renderPushCard();
   const account = $('#account-card');
   if (me?.vidmoat) {
     account.replaceChildren(el('h3', {}, 'Vidmoat account'),
@@ -1443,9 +1462,57 @@ function captureRef() {
   try { return localStorage.getItem('st_ref'); } catch { return null; }
 }
 const inviteLink = () => `${location.origin}/?ref=${me?.memberNo}`;
+
+/**
+ * Shares a public link to a lesson (/v/:id plays it without an account). The viewer's member
+ * number rides along as ?ref=, so anyone who joins from it counts as their invite.
+ */
+async function shareLesson(item) {
+  if (item.data.status !== 'ready') { toast('This lesson is still being made. Try again in a moment.'); return; }
+  const url = `${location.origin}/v/${item.data.id}${me?.memberNo ? `?ref=${me.memberNo}` : ''}`;
+  const title = item.data.title || item.data.unit?.title || 'A StudyTok lesson';
+  const text = `${title}: a ${Math.round(item.data.duration || 30)}-second lesson on StudyTok. Watch it free:`;
+  if (item.player && !feed.paused) { item.player.pause(); feed.paused = true; }
+  try {
+    if (navigator.share) { await navigator.share({ title, text, url }); sendEvent(item.data.id, 'lesson_share', { by: 'sheet' }); return; }
+  } catch (err) { if (err?.name === 'AbortError') return; }
+  try { await navigator.clipboard.writeText(`${text} ${url}`); toast('Link copied. Anyone can watch it, no account needed.'); } catch { toast(url); }
+  sendEvent(item.data.id, 'lesson_share', { by: 'copy' });
+}
 const inviteText = () => `I'm member #${me?.memberNo} on StudyTok: short study videos made for your syllabus. Join me: ${inviteLink()}`;
 /** A funnel step counted on the server by day (landing seen, sign-in tapped, install). */
 const funnel = (step, extra = {}) => { try { navigator.sendBeacon?.('/api/funnel', new Blob([JSON.stringify({ step, ...extra })], { type: 'text/plain' })) || fetch('/api/funnel', { method: 'POST', body: JSON.stringify({ step, ...extra }), keepalive: true }); } catch { /* fine */ } };
+
+/** Reminders (public/push.js): one nudge a day at most, when a streak is about to end or reviews are due. */
+async function renderPushCard() {
+  const card = $('#push-card');
+  try {
+    const { enabled } = await api('GET', '/api/push/key');
+    if (!enabled) { card.hidden = true; return; }
+    const push = await import('/push.js');
+    const state = await push.pushState();
+    if (state === 'unsupported') { card.hidden = true; return; }
+    const copyFor = (s) => ({
+      'install-first': 'Add StudyTok to your Home Screen (Share, then Add to Home Screen) and reminders become available.',
+      denied: 'Notifications are blocked for StudyTok in your browser settings.',
+      subscribed: 'Reminders are on for this device: a streak about to end, units due for review. One a day at most.',
+    }[s] || 'Get one nudge when your streak is about to end or a review is due. Never more than one a day.');
+    const copy = el('p', { class: 'muted' }, copyFor(state));
+    const btn = el('button', { type: 'button', class: `btn ${state === 'subscribed' ? 'ghost' : 'primary'}` }, state === 'subscribed' ? 'Turn off reminders' : 'Enable reminders');
+    btn.hidden = state === 'denied' || state === 'install-first';
+    btn.onclick = async () => {
+      btn.disabled = true;
+      try {
+        const next = state === 'subscribed' ? await push.disablePush() : await push.enablePush();
+        track(next === 'subscribed' ? 'push_enabled' : 'push_disabled', {});
+        if (next === 'off' && state !== 'subscribed') toast('Reminders are not available on this server yet.');
+        renderPushCard();
+      } finally { btn.disabled = false; }
+    };
+    card.hidden = false;
+    card.replaceChildren(el('h3', {}, 'Reminders'), copy, btn);
+  } catch { card.hidden = true; }
+}
 
 function renderInvite() {
   const card = $('#invite-card');
