@@ -120,6 +120,7 @@ function applyOp_(ss, op) {
   if (!rows.length) return { tab: op.tab, n: 0 };
   var sheet = tab_(ss, String(op.tab || 'Sheet1'));
   var header = header_(sheet, rows);
+  textColumns_(sheet, header);
   if (op.op === 'append') {
     sheet.getRange(sheet.getLastRow() + 1, 1, rows.length, header.length).setValues(rows.map(function (r) { return toValues_(header, r); }));
     return { tab: op.tab, appended: rows.length };
@@ -180,6 +181,12 @@ function styleTab_(sheet, header) {
   if (name === 'Joins') sheet.setFrozenColumns(2);
 }
 
+/** Timestamps and ids stay plain text, so Sheets never turns "2026-11-08 17:44:33" into a date serial. */
+var TEXT_COLUMNS = ['Joined', 'Last seen', 'Updated', 'When', 'Date', 'User ID', 'Vidmoat ID', 'Own account', 'Quiz accuracy'];
+function textColumns_(sheet, header) {
+  header.forEach(function (k, i) { if (TEXT_COLUMNS.indexOf(k) !== -1) sheet.getRange(1, i + 1, sheet.getMaxRows(), 1).setNumberFormat('@'); });
+}
+
 function columnLetter_(c) { var s = ''; while (c > 0) { var m = (c - 1) % 26; s = String.fromCharCode(65 + m) + s; c = (c - m - 1) / 26; } return s; }
 
 // ---------------------------------------------------------------- the dashboard
@@ -216,9 +223,9 @@ function buildDashboard_(ss) {
   var tiles = [
     ['Students', '=COUNTA(' + ur('User ID') + ')'],
     ['Signed in with Vidmoat', '=COUNTA(' + ur('Email') + ')'],
-    ['Active today', '=COUNTIF(' + ur('Last seen') + ',">="&' + today + ')'],
-    ['Active this week', '=COUNTIF(' + ur('Last seen') + ',">="&' + weekAgo + ')'],
-    ['Joined this week', '=COUNTIF(' + ur('Joined') + ',">="&' + weekAgo + ')'],
+    ['Active today', '=SUMPRODUCT(LEFT(' + ur('Last seen') + ',10)>=' + today + ')'],
+    ['Active this week', '=SUMPRODUCT(LEFT(' + ur('Last seen') + ',10)>=' + weekAgo + ')'],
+    ['Joined this week', '=SUMPRODUCT(LEFT(' + ur('Joined') + ',10)>=' + weekAgo + ')'],
     ['On their own credits', '=COUNTIF(' + ur('Billing mode') + ',"own account")'],
     ['Lessons watched', '=SUM(' + ur('Lessons watched') + ')'],
     ['Minutes watched', '=SUM(' + ur('Minutes watched') + ')'],
@@ -239,8 +246,8 @@ function buildDashboard_(ss) {
   // Latest joins (left) and top students (right)
   section_(d, 'A11', 'Latest joins and milestones');
   d.getRange('A12').setFormula('=IFERROR(QUERY(Joins!A:H,"select A,B,D,G,H where A is not null order by A desc limit 14 label A \'When (UTC)\', B \'What\', D \'Who\', G \'Course\', H \'Detail\'",1),"Nothing yet. Joins appear here as they happen.")');
-  section_(d, 'H11', 'Most active students');
-  d.getRange('H12').setFormula('=IFERROR(QUERY(Users!A:' + U('Updated') + ',"select A,C,L,' + U('Lessons watched') + ',' + U('Day streak') + ',' + U('Units mastered') + ',' + U('Billing mode') + ' where ' + U('Lessons watched') + ' > 0 order by ' + U('Lessons watched') + ' desc limit 14 label A \'#\', C \'Name\', L \'Course\', ' + U('Lessons watched') + ' \'Lessons\', ' + U('Day streak') + ' \'Streak\', ' + U('Units mastered') + ' \'Mastered\', ' + U('Billing mode') + ' \'Credits\'",1),"No activity yet.")');
+  section_(d, 'H11', 'Most active students (signed in)');
+  d.getRange('H12').setFormula('=IFERROR(QUERY(Users!A:' + U('Updated') + ',"select A,C,L,' + U('Lessons watched') + ',' + U('Day streak') + ',' + U('Units mastered') + ',' + U('Billing mode') + ' where C is not null and ' + U('Lessons watched') + ' > 0 order by ' + U('Lessons watched') + ' desc limit 14 label A \'#\', C \'Name\', L \'Course\', ' + U('Lessons watched') + ' \'Lessons\', ' + U('Day streak') + ' \'Streak\', ' + U('Units mastered') + ' \'Mastered\', ' + U('Billing mode') + ' \'Credits\'",1),"No activity yet.")');
   tableStyle_(d, 'A12:F26'); tableStyle_(d, 'H12:N26');
 
   // Breakdowns
