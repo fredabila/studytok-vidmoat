@@ -44,6 +44,12 @@ time zone, language, and when the row was last updated. New columns added to the
 the secret and the script refuses without it. The script runs as you and can only touch the one
 spreadsheet it is bound to.
 
+## If rows duplicate instead of updating
+
+The key column (User ID, Date) must stay plain text. The script formats it as text itself; if an
+older version of the script was used, delete the affected tab (it is recreated on the next write)
+and update the script to the current `Code.gs`.
+
 ## Changing the script
 
 After editing `Code.gs` in the Apps Script editor choose **Deploy → Manage deployments → Edit →
