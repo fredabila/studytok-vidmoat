@@ -205,6 +205,8 @@ export async function ingest(userId, batch) {
       if (e.type === 'quiz_answer' && !(await db.inSet(userId, 'answered', v.id))) { week.quizN++; if (e.correct) week.quizRight++; }
     }
     writes.push(kv.hincrby(`events:day:${day(e.at)}`, e.type, 1));
+    if (e.type === 'quiz_answer') writes.push(kv.hincrby(`events:day:${day(e.at)}`, e.correct ? 'quiz_answer_right' : 'quiz_answer_wrong', 1));
+    if (e.type.endsWith('_share')) signals.shares = (signals.shares || 0) + 1;
     log.push(JSON.stringify({ u: userId.slice(0, 8), ...e, f: v ? format : undefined, tp: v ? topic : undefined }));
 
     switch (e.type) {
@@ -320,6 +322,9 @@ export async function ingest(userId, batch) {
     }
   }
 
+  // The device the student last used (for the admin sheet; the ranking does not read it).
+  if (ctx.platform || ctx.tz) signals.device = { platform: ctx.platform, standalone: ctx.standalone, tz: ctx.tz, lang: ctx.lang };
+  writes.push(kv.zadd('users:active', { score: signals.lastSeenAt || Date.now(), member: userId }));
   // Keep the last 8 weeks of recaps.
   for (const k of Object.keys(signals.weeks || {}).sort().slice(0, -8)) delete signals.weeks[k];
   writes.push(

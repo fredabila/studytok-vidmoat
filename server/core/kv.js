@@ -96,6 +96,7 @@ class LocalKV {
   }
   async zincrby(k, by, m) { if (!this.data.has(k)) this.data.set(k, new Map()); const z = this.data.get(k); z.set(m, (z.get(m) || 0) + by); this.persist(); return z.get(m); }
   async zrem(k, ...ms) { const z = this.data.get(k); let n = 0; for (const m of ms) n += z?.delete(m) ? 1 : 0; this.persist(); return n; }
+  async zcount(k, min, max) { let n = 0; for (const s of (this.data.get(k) || new Map()).values()) if (s >= min && s <= max) n++; return n; }
   async zrange(k, start, stop, opts = {}) {
     const z = this.data.get(k);
     if (!z) return [];

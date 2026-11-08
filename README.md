@@ -228,6 +228,9 @@ route (`vercel.json`). Generation and research keep running after the response v
    **Sign in with Vidmoat** needs no setup: on the first sign-in StudyTok registers its own OAuth
    client with Vidmoat (`POST /api/oauth/register`, once per domain) and keeps it in Redis.
 4. **Deploy**, then open `/api/health`: `"ok": true`, `"storage": "redis"`, `"lessons": "claude"`.
+5. **Optional: a Google Sheet of your students.** StudyTok can mirror every student, every join
+   and a daily summary into a spreadsheet you own, written through a tiny Apps Script, so there
+   is no database or admin panel to run. Setup in [scripts/sheet/README.md](scripts/sheet/README.md).
 
 ## Files
 
