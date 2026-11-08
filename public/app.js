@@ -633,9 +633,15 @@ function mountPlayer(item) {
       item.el.dataset.loaded = 'true';
       if (feed.items[feed.active] === item && !feed.paused && view === 'feed') item.player.play();
       soundGate(item);
+      if (feed.items[feed.active] === item) syncPlayers(); // phones: the next lesson may start loading now
     },
     onState: ({ time, playing }) => onState(item, time, playing, duration),
-    onError: (msg) => { item.el.dataset.status = 'failed'; $('.making-hook', item.el).textContent = msg; sendEvent(item.data.id, 'player_error', { msg: String(msg).slice(0, 80) }); },
+    onRetry: (n) => { $('.making-note', item.el).textContent = n === 1 ? 'Slow connection. Loading once more…' : 'Still loading. One more try…'; sendEvent(item.data.id, 'player_retry', { n }); },
+    onError: (msg) => {
+      item.el.dataset.status = 'failed';
+      $('.making-hook', item.el).textContent = /taking too long|could not load/i.test(msg) ? 'This one is slow to load. Swipe on, or come back to it.' : msg;
+      sendEvent(item.data.id, 'player_error', { msg: String(msg).slice(0, 80) });
+    },
   });
   item.player.load(item.data.document, 0);
 }
@@ -651,7 +657,11 @@ function unmountPlayer(item) {
 // current slide has nothing to play; the previous one is unmounted immediately.
 function syncPlayers() {
   const active = feed.items[feed.active];
-  const preloadNext = !active || active.data.status !== 'ready' || active.preloadNext || !active.player;
+  // Phones (iOS in particular) load media slowly and the player gives up after 15 s, so the next
+  // lesson is only preloaded once the active one has actually loaded; on desktop it starts at once.
+  const phone = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+  const activeLoaded = Boolean(active?.player) && active.el.dataset.loaded === 'true';
+  const preloadNext = !active || active.data.status !== 'ready' || active.preloadNext || (!phone && !active.player) || (phone && activeLoaded);
   feed.items.forEach((item, i) => {
     const keep = feed.active >= 0 && (i === feed.active || (i === feed.active + 1 && preloadNext));
     if (keep) mountPlayer(item); else unmountPlayer(item);

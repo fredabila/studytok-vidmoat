@@ -19,6 +19,8 @@ export class VidmoatPlayer {
     this.loaded = false;
     this.revision = 0;
     this.pending = null; // document waiting for 'ready'
+    this.doc = null;     // the document last sent, for retries
+    this.retries = 0;
     this.wantPlay = false;
     this.time = 0;
     this.playing = false;
@@ -50,7 +52,18 @@ export class VidmoatPlayer {
         this.playing = !!m.playing;
         this.handlers.onState?.({ time: m.time, playing: !!m.playing });
       } else if (m.type === 'error') {
-        this.handlers.onError?.(String(m.message || 'The player could not load this video.'));
+        const message = String(m.message || 'The player could not load this video.');
+        // "The media is taking too long to load": the player waited 15 s for every clip at the
+        // current time to have a decoded frame. Phones (iOS especially) can take longer than that
+        // while other media is downloading, and the fetched media stays in the frame, so re-sending
+        // the document is usually enough. Two tries before giving up.
+        if (/taking too long/i.test(message) && this.doc && this.retries < 2) {
+          this.retries++;
+          this.handlers.onRetry?.(this.retries);
+          setTimeout(() => this.load(this.doc, this.time || 0), 800);
+          return;
+        }
+        this.handlers.onError?.(message);
       }
     };
     window.addEventListener('message', this.onMessage);
@@ -70,6 +83,7 @@ export class VidmoatPlayer {
   }
 
   load(doc, time = 0) {
+    this.doc = doc;
     if (!this.ready) { this.pending = doc; return; }
     this.pending = null;
     this.loaded = false;
