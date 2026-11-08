@@ -53,6 +53,8 @@ export const EVENT_SPECS = {
   sound_unlock: { video: true, fields: { t: 'n' } },
   player_retry: { video: true, fields: { n: 'i' } },
   lesson_share: { video: true, fields: { by: 's' } },
+  moment_view: { fields: { id: 's', kind: 's' } },
+  moment_cta: { fields: { id: 's', action: 's' } },
   invite_share: { fields: {} },
   refresh: { fields: { where: 's' } },
   skip: { video: true, fields: {} }, // legacy: an early leave
@@ -232,7 +234,7 @@ export async function ingest(userId, batch) {
           const user = await db.getUser(userId);
           if (user) writes.push(kv.set(`popular:audience:${v.readyKey}`, { unitId: v.unitId, audience: audienceFor(user) }));
         }
-        writes.push(kv.lpush(`user:${userId}:history`, v.id), kv.ltrim(`user:${userId}:history`, 0, 199));
+        writes.push(kv.lpush(`user:${userId}:history`, `${v.id}|${e.at}`), kv.ltrim(`user:${userId}:history`, 0, 199));
         unitEvent('view');
         break;
       }
@@ -300,6 +302,7 @@ export async function ingest(userId, batch) {
       case 'save': {
         if (await db.inSet(userId, 'saved', v.id)) break;
         writes.push(db.addToSet(userId, 'saved', v.id), stat(v.id, 'saves'), fstat(v, 'saves'));
+        writes.push(kv.get(`user:${userId}:savedAt`).then((m) => kv.set(`user:${userId}:savedAt`, { ...(m || {}), [v.id]: e.at })));
         bump(signals.formats, format, 'saves'); bump(signals.topics, topic, 'saves');
         break;
       }

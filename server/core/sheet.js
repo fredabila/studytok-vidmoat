@@ -142,6 +142,7 @@ export async function dailyRow(date, { now = Date.now() } = {}) {
     'Shared lesson views': n('share_page_view'),
     'Drops': n('drop'),
     'Breathers': n('breather_view'),
+    'Moments shown': n('moment_view'),
     'Landing views': n('funnel_landing'),
     'From invite links': n('funnel_landing_ref'),
     'Sign-in taps': n('funnel_signin_click'),

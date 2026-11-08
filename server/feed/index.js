@@ -14,6 +14,8 @@ import { startVideo, readyKeyFor } from '../video/generator.js';
 import { pickUnits, mastery, scoreVideo, exploreRate, applyEvent, emptyState } from './ranking.js';
 import { ingest, getSignals, getSession, noteServed, noteBreather } from './events.js';
 import { needsBreather, pickBreather, isBreatherUnit, BREATHER_REASONS } from './breathers.js';
+import { pickMoment, noteMoment, momentContext, momentItem } from './moments.js';
+import * as push from '../core/push.js';
 import { credentialFor } from '../core/billing.js';
 import { kv } from '../core/kv.js';
 import * as db from '../core/db.js';
@@ -329,15 +331,24 @@ export async function nextItems(userId, count = 3) {
   items.sort((a, b) => Number(a.video.status !== 'ready') - Number(b.video.status !== 'ready') || Number(b.why?.kind === 'breather') - Number(a.why?.kind === 'breather'));
   const page = items.slice(0, count + 1);
 
+  // A moment: a tip, a piece of news or an offer rendered by the app (feed/moments.js), paced so
+  // the feed stays a feed. It takes the second slot of the page so a lesson always comes first.
+  if (page.length) {
+    const ctx = momentContext({ user, signals, saved: await db.countSet(userId, 'saved'), watched: await db.countSet(userId, 'seen'),
+      invites: user.memberNo ? await db.referralCount(user.memberNo) : 0, pushEnabled: push.enabled(), pushSubscribed: push.enabled() && (await push.subscriptions(userId)).length > 0 });
+    const moment = await pickMoment(userId, { session, ctx, hasBreather: page.some((x) => x.why?.kind === 'breather') });
+    if (moment) { page.splice(1, 0, { moment: momentItem(moment, ctx) }); await noteMoment(userId, moment, session.viewed || 0); }
+  }
+
   await kv.ltrim(`user:${userId}:generating`, 0, 19);
-  await db.addToSet(userId, 'served', ...page.map((x) => x.video.id));
+  await db.addToSet(userId, 'served', ...page.filter((x) => x.video).map((x) => x.video.id));
   for (const x of page) {
     if (!x.unit) continue;
     await kv.lpush(`user:${userId}:recentUnits`, x.unit.id);
     if (!isBreatherUnit(x.unit.id)) await updateProgress(userId, x.unit.id, 'served');
   }
   await kv.ltrim(`user:${userId}:recentUnits`, 0, 19);
-  await noteServed(userId, page.map((x) => x.video));
+  await noteServed(userId, page.filter((x) => x.video).map((x) => x.video));
   return { items: page, pending, credits };
 }
 
@@ -420,17 +431,21 @@ export async function publicVideo(v, userId, { withDocument = true, why, pos, qu
 /** Saved videos, watch history and course progress for the Library screen. */
 export async function library(userId) {
   const user = await db.getUser(userId);
-  const [savedIds, historyIds, states] = await Promise.all([
+  const [savedIds, historyRaw, states, savedAt] = await Promise.all([
     kv.smembers(`user:${userId}:saved`),
-    kv.lrange(`user:${userId}:history`, 0, 59),
+    kv.lrange(`user:${userId}:history`, 0, 79),
     getProgress(userId),
+    kv.get(`user:${userId}:savedAt`),
   ]);
-  const summarize = async (id) => {
+  const summarize = async (id, at) => {
     const v = await db.getVideo(id);
-    return v && v.status === 'ready' ? { id: v.id, title: v.lesson?.title, unit: v.unitTitle, topic: v.topic, poster: v.poster, duration: v.duration } : null;
+    return v && v.status === 'ready' ? { id: v.id, title: v.lesson?.title, unit: v.unitTitle, topic: v.topic, poster: v.poster, duration: v.duration, format: v.format || 'explain', at: at || null } : null;
   };
-  const saved = (await Promise.all((savedIds || []).map(summarize))).filter(Boolean);
-  const history = (await Promise.all([...new Set(historyIds)].map(summarize))).filter(Boolean);
+  const saved = (await Promise.all((savedIds || []).map((id) => summarize(id, savedAt?.[id])))).filter(Boolean).sort((a, b) => (b.at || 0) - (a.at || 0));
+  // History entries are "id|timestamp" (older ones are a bare id); one row per video, most recent first.
+  const seenAt = new Map();
+  for (const raw of historyRaw || []) { const [id, ts] = String(raw).split('|'); if (!seenAt.has(id)) seenAt.set(id, Number(ts) || null); }
+  const history = (await Promise.all([...seenAt].map(([id, at]) => summarize(id, at)))).filter(Boolean);
   const programs = (await Promise.all((user.programKeys || []).map((k) => getProgram(k)))).filter(Boolean);
   const active = new Set(user.units);
   const row = (u, programKey) => {

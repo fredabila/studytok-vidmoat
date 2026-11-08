@@ -527,6 +527,52 @@ function addSlide(data, { at } = {}) {
   return item;
 }
 
+// ---------------------------------------------------------------------------- moments
+// A moment is a card between lessons (a tip, news or an offer) that the server paces
+// (server/feed/moments.js). It is rendered here, has no player, and sits in the feed like a slide.
+const MOMENT_KICKER = { tip: 'Tip', news: 'News', offer: 'Offer' };
+function addMomentSlide(data) {
+  const m = data.moment;
+  const node = el('article', { class: 'slide moment-slide', 'data-theme': m.theme || 'sun', 'data-kind': m.type });
+  const lines = el('ul', { class: 'm-lines' }, ...m.lines.map((l, i) => el('li', { style: `--i:${i}` }, l)));
+  const cta = el('button', { type: 'button', class: 'btn primary m-cta' }, m.cta?.label || 'Keep swiping');
+  const stage = el('div', { class: 'stage m-stage' },
+    el('div', { class: 'm-bg', 'aria-hidden': 'true' }, el('i'), el('i'), el('i')),
+    m.type === 'offer' ? el('div', { class: 'm-confetti', 'aria-hidden': 'true' }, ...Array.from({ length: 14 }, (_, i) => el('i', { style: `--n:${i}` }))) : null,
+    el('div', { class: 'm-card' },
+      el('div', { class: 'm-kicker' }, el('span', { class: 'm-emoji' }, m.emoji || '✨'), el('span', {}, MOMENT_KICKER[m.type] || 'Tip'), el('span', { class: 'm-from' }, '· from Noti')),
+      el('div', { class: 'm-mascot' }, svgEl(mascot(m.mood || 'happy', 88))),
+      el('h2', { class: 'm-title' }, m.title),
+      lines, cta),
+    el('div', { class: 'm-swipe' }, el('span', {}, 'Tap anywhere or swipe up to continue'), svgEl('<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m18 15-6-6-6 6"/></svg>')));
+  node.append(stage);
+  const item = { data, el: node, moment: true, player: null, polling: false, viewSent: false, completed: false, watched: 0, lastTime: 0, answered: false, watch: null, shownAt: 0 };
+  cta.onclick = (e) => { e.stopPropagation(); momentAction(item, m.cta || { action: 'feed' }); };
+  stage.onclick = (e) => { if (!e.target.closest('button')) go(1); };
+  ensureEndSlide();
+  feed.items.push(item);
+  trackEl().insertBefore(node, feed.endEl);
+  return item;
+}
+/** Where a moment's button takes the student. */
+function momentAction(item, cta) {
+  const m = item.data.moment;
+  track('moment_cta', { id: m.id, action: cta.action || 'feed' });
+  const seg = (name) => $(`.segmented [data-seg="${name}"]`)?.click();
+  const reveal = (sel) => setTimeout(() => $(sel)?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 150);
+  switch (cta.action) {
+    case 'library': showView('library'); seg('course'); break;
+    case 'saved': showView('library'); seg('saved'); break;
+    case 'profile': showView('profile'); break;
+    case 'invite': showView('profile'); reveal('#invite-card'); break;
+    case 'install': showView('profile'); reveal('#install-card'); break;
+    case 'reminders': showView('profile'); reveal('#push-card'); break;
+    case 'tune': openTune(); break;
+    case 'url': if (/^https?:\/\//.test(cta.href || '')) window.open(cta.href, '_blank', 'noopener'); break;
+    default: go(1);
+  }
+}
+
 function unitLabel(d) {
   const name = d.unit?.title || d.topic.label;
   if (d.breather) return `☕ Breather · ${name}`;
@@ -632,7 +678,7 @@ function soundGate(item) {
 }
 
 function mountPlayer(item) {
-  if (item.player || item.data.status !== 'ready') return;
+  if (item.player || item.moment || item.data.status !== 'ready') return;
   const duration = item.data.duration || 0;
   item.player = new VidmoatPlayer($('.player-host', item.el), cfg.playerOrigin, {
     onLoaded: () => {
@@ -730,7 +776,7 @@ function doubleTapLike(e) {
 }
 
 function toggleFlag(item, field, onType, offType, by = 'button') {
-  if (!item) return;
+  if (!item || item.moment) return;
   const on = !item.data[field];
   item.data[field] = on;
   if (field === 'liked') item.data.likes = Math.max(0, (item.data.likes || 0) + (on ? 1 : -1));
@@ -833,6 +879,7 @@ function activate(index) {
     if (prev.watch) prev.watch.leave(dir); else if (prev.data.status === 'generating' && prev.shownAt) track('gen_wait', { videoId: prev.data.id, ms: Date.now() - prev.shownAt, outcome: 'gave_up' });
     prev.watch = null;
     prev.el.dataset.paused = 'false';
+    if (prev.moment) prev.el.classList.remove('on');
   }
   feed.active = index;
   feed.paused = false;
@@ -842,7 +889,8 @@ function activate(index) {
     item.shownAt = Date.now();
     if (dir === 'prev' && item.viewSent) sendEvent(item.data.id, 'rewatch');
     if (item.player?.loaded) item.player.seek(0);
-    if (view === 'feed') history.replaceState(null, '', `#v=${item.data.id}`);
+    if (view === 'feed' && !item.moment) history.replaceState(null, '', `#v=${item.data.id}`);
+    if (item.moment) requestAnimationFrame(() => item.el.classList.add('on')); // (re)start its animation
     clearTimeout(activate.viewTimer);
     activate.viewTimer = setTimeout(() => {
       markViewed(item);
@@ -857,6 +905,7 @@ function activate(index) {
 function markViewed(item) {
   if (feed.items[feed.active] !== item || item.viewSent || item.data.status !== 'ready') return;
   item.viewSent = true;
+  if (item.moment) { track('moment_view', { id: item.data.moment.id, kind: item.data.moment.type }); return; }
   nthVideo++;
   sendEvent(item.data.id, 'view', { nth: nthVideo, format: item.data.format?.id, source: item.source || 'feed' });
 }
@@ -871,7 +920,7 @@ async function loadMore(count = 3) {
     const t0 = Date.now();
     const { items, credits } = await api('GET', `/api/feed?count=${count}`);
     track('load_more', { count: items.length, ms: Date.now() - t0, ready: items.filter((d) => d.status === 'ready').length, generating: items.filter((d) => d.status === 'generating').length });
-    items.filter((d) => !feed.items.some((it) => it.data.id === d.id)).forEach((d) => addSlide(d));
+    items.filter((d) => !feed.items.some((it) => it.data.id === d.id)).forEach((d) => (d.kind === 'moment' ? addMomentSlide(d) : addSlide(d)));
     noteCredits(credits);
     if (wasOnEnd && feed.items.length > before) { feed.active = -1; activate(before); }
     layout(false);
@@ -1203,10 +1252,92 @@ async function showLibrary() {
     course.append(el('div', { class: 'card' }, el('h3', {}, 'Also following'),
       el('div', { class: 'chips' }, ...lib.interests.map((t) => { const topic = cfg.topics.find((x) => x.id === t); return topic ? el('span', { class: 'chip-btn' }, `${topic.emoji} ${topic.label}`) : null; }))));
   }
-  const card = (v) => el('button', { type: 'button', class: 'vcard', onclick: () => openVideo(v.id) },
-    v.poster ? el('img', { src: v.poster, alt: '', loading: 'lazy' }) : el('div', { class: 'ph' }), el('span', {}, v.title || 'Untitled'), el('small', {}, v.unit || ''));
-  $('#lib-saved').replaceChildren(...(lib.saved.length ? lib.saved.map(card) : [el('div', { class: 'empty' }, svgEl(mascot('think', 110)), el('b', {}, 'Nothing saved yet'), 'Tap the bookmark on any lesson to keep it here for revision.')]));
-  $('#lib-history').replaceChildren(...(lib.history.length ? lib.history.slice(0, 30).map(card) : [el('div', { class: 'empty' }, svgEl(mascot('sleepy', 110)), el('b', {}, 'No history yet'), 'Lessons you watch show up here.')]));
+  renderSaved(lib.saved);
+  renderHistory(lib.history);
+}
+
+// ---- Saved and History ---------------------------------------------------------------------------
+const topicOf = (id) => cfg.topics.find((t) => t.id === id);
+const fmtTag = (id) => cfg.formats?.find((f) => f.id === id)?.tag || '';
+const minsOf = (sec) => (sec >= 90 ? `${Math.round(sec / 60)} min` : `${Math.round(sec || 0)} s`);
+function agoText(t) {
+  if (!t) return '';
+  const d = Date.now() - t;
+  if (d < 60e3) return 'just now';
+  if (d < 3600e3) return `${Math.round(d / 60e3)} min ago`;
+  if (d < 86400e3) return `${Math.round(d / 3600e3)} h ago`;
+  return new Date(t).toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
+}
+function dayLabel(t) {
+  if (!t) return 'Earlier';
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const diff = Math.floor((today - new Date(t).setHours(0, 0, 0, 0)) / 86400e3);
+  if (diff <= 0) return 'Today';
+  if (diff === 1) return 'Yesterday';
+  if (diff < 7) return new Date(t).toLocaleDateString(undefined, { weekday: 'long' });
+  return 'Earlier';
+}
+/** A poster tile for a lesson in the Library (Saved). */
+function lessonTile(v, { onRemove } = {}) {
+  const topic = topicOf(v.topic);
+  const open = el('button', { type: 'button', class: 'ltile', style: `--accent:${topic?.accent || '#ffd93d'}`, onclick: () => openVideo(v.id) },
+    v.poster ? el('img', { src: v.poster, alt: '', loading: 'lazy' }) : el('div', { class: 'ph' }, topic?.emoji || '📚'),
+    el('span', { class: 'lt-top' }, el('span', { class: 'lt-topic' }, `${topic?.emoji || ''} ${topic?.label || 'Lesson'}`.trim()), v.duration ? el('span', { class: 'lt-dur' }, minsOf(v.duration)) : null),
+    el('span', { class: 'lt-play', 'aria-hidden': 'true' }, svgEl('<svg viewBox="0 0 24 24"><polygon points="6 3 20 12 6 21 6 3"/></svg>')),
+    el('span', { class: 'lt-body' }, el('b', {}, v.title || 'Untitled'), el('small', {}, [v.unit, fmtTag(v.format)].filter(Boolean).join(' · '))));
+  const wrap = el('div', { class: 'ltile-wrap' }, open);
+  if (onRemove) wrap.append(el('button', { type: 'button', class: 'lt-x', 'aria-label': 'Remove from Saved', title: 'Remove from Saved', onclick: onRemove }, '×'));
+  return wrap;
+}
+function renderSaved(list) {
+  const box = $('#lib-saved');
+  box.classList.remove('grid');
+  if (!list.length) { box.replaceChildren(el('div', { class: 'empty' }, svgEl(mascot('think', 110)), el('b', {}, 'Nothing saved yet'), 'Tap the bookmark on any lesson to keep it here for revision.')); return; }
+  const total = list.reduce((s, v) => s + (v.duration || 0), 0);
+  const strip = el('div', { class: 'lib-strip' }, svgEl(mascot('cheer', 64)),
+    el('div', {}, el('h3', {}, `${list.length} saved lesson${list.length > 1 ? 's' : ''}`), el('p', {}, `${minsOf(total)} of revision, ready when you are.`)),
+    el('button', { type: 'button', class: 'btn small primary', onclick: () => queueLessons(list, 'saved') }, 'Revise all'));
+  const tiles = list.map((v) => lessonTile(v, { onRemove: () => {
+    sendEvent(v.id, 'unsave');
+    const slide = feed.items.find((it) => it.data.id === v.id); if (slide) { slide.data.saved = false; renderSlide(slide); }
+    toast('Removed from Saved');
+    renderSaved(list.filter((x) => x.id !== v.id));
+  } }));
+  box.replaceChildren(strip, el('div', { class: 'grid tiles-grid' }, ...tiles));
+}
+function renderHistory(list) {
+  const box = $('#lib-history');
+  box.classList.remove('grid');
+  if (!list.length) { box.replaceChildren(el('div', { class: 'empty' }, svgEl(mascot('sleepy', 110)), el('b', {}, 'No history yet'), 'Lessons you watch show up here.')); return; }
+  const stats = me?.stats;
+  const strip = el('div', { class: 'lib-strip' }, svgEl(mascot('happy', 64)),
+    el('div', {}, el('h3', {}, `${stats?.watched || list.length} lesson${(stats?.watched || list.length) === 1 ? '' : 's'} watched`), el('p', {}, stats?.streak >= 2 ? `${stats.streak}-day streak. Tap any lesson to watch it again.` : 'Tap any lesson to watch it again.')),
+    el('button', { type: 'button', class: 'btn small', onclick: () => queueLessons(list.slice(0, 8), 'history') }, 'Replay recent'));
+  const groups = new Map();
+  for (const v of list.slice(0, 40)) { const k = dayLabel(v.at); if (!groups.has(k)) groups.set(k, []); groups.get(k).push(v); }
+  const sections = [];
+  for (const [label, items] of groups) {
+    sections.push(el('h4', { class: 'lib-day' }, label, el('span', {}, `${items.length}`)));
+    sections.push(el('div', { class: 'hlist' }, ...items.map((v) => {
+      const topic = topicOf(v.topic);
+      return el('button', { type: 'button', class: 'hrow', style: `--accent:${topic?.accent || '#ffd93d'}`, onclick: () => openVideo(v.id) },
+        v.poster ? el('img', { src: v.poster, alt: '', loading: 'lazy' }) : el('span', { class: 'ph' }, topic?.emoji || '📚'),
+        el('span', { class: 'h-body' }, el('b', {}, v.title || 'Untitled'), el('small', {}, [v.unit, fmtTag(v.format), v.duration ? minsOf(v.duration) : null].filter(Boolean).join(' · '))),
+        el('span', { class: 'h-when' }, agoText(v.at) || '', svgEl('<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 3v5h5"/></svg>')));
+    })));
+  }
+  box.replaceChildren(strip, ...sections);
+}
+/** Queues several Library lessons right after the current slide and jumps to the first. */
+async function queueLessons(list, source) {
+  showView('feed');
+  const fresh = list.filter((v) => !feed.items.some((it) => it.data.id === v.id)).slice(0, 12);
+  const got = (await Promise.all(fresh.map((v) => api('GET', `/api/videos/${v.id}`).then((r) => r.item).catch(() => null)))).filter(Boolean);
+  const at = feed.active < 0 ? 0 : feed.active + 1;
+  got.forEach((item, i) => { addSlide(item, { at: at + i }).source = source; });
+  layout(false);
+  if (got.length) { goTo(at); toast(`${got.length} lesson${got.length > 1 ? 's' : ''} queued. Swipe through them.`); }
+  else if (list.length) { const i = feed.items.findIndex((it) => it.data.id === list[0].id); if (i >= 0) goTo(i); }
 }
 
 // ============================================================================ profile

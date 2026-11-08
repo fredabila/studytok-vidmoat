@@ -96,6 +96,11 @@ get a burst with Noti, and the unit comes back later only for review.
 your Profile make an image card you can post anywhere. On a phone it opens the share sheet; on a
 computer the image downloads and the caption is copied.
 
+**What are the cards from Noti between videos?**
+*Moments*: a tip about StudyTok, a piece of news or an offer, shown at most every six lessons and
+three times a day. Tap anywhere on one (or swipe) to carry on. Each appears once, then not again
+for weeks.
+
 **Can I share a video with someone who doesn't have StudyTok?**
 Yes. *Share lesson* on any video copies a public link (`studytok.vidmoat.com/v/…`) that opens
 without an account: the lesson plays in the browser, with the quick check, and the page says it
