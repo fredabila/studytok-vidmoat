@@ -78,6 +78,25 @@ The document is handed to Vidmoat's `/embed/player` over `postMessage`
 (`vidmoat.player.v1`: hello → document → loaded → state). The app mounts players only for
 the active slide ±1, holds the video at the quiz until the viewer answers, and loops.
 
+**Live document edits.** The player only ever sees the document the app hands it, so the app
+edits the lesson before it plays and can re-send it at the current time (`prepareDocument`,
+`reloadDocument` in `public/app.js`). No new video is made for any of this:
+
+* *Playback choices* (Tune › Playback, kept on the device): captions (text clips on track 6),
+  music (the `music` clip) and narration audio (the `voice*` clips) on or off. Changing one
+  re-sends the lesson on screen at the same second.
+* *Recall mode* ("fill the gaps"): the server lists the lesson's key terms (`terms` on the
+  public video: beat terms, item titles, card answers, the quiz answer) and the app replaces
+  them in the on-screen text with blanks and drops the narration, turning any explainer into
+  retrieval practice. A chip over the video says so; tapping it re-sends the full document at the
+  same time (and shows the terms). Default: on for lessons served for review; also "every
+  lesson" or off.
+* *Chapters*: scene markers from `scenes` on the progress bar; tapping one seeks there.
+* *Answer stamp*: while the video is held at the quick check, the student's answer is added as
+  a text clip over the reveal ("You said B ✓ Correct") and the document re-sent from the hold.
+
+Events: `play_pref`, `gaps_on`, `gaps_reveal`, `chapter_seek`, `quiz_stamp`.
+
 **Sound on iOS.** The player's audio runs through a Web Audio context that iOS keeps suspended
 until a user gesture happens *inside the player's own frame*. The app's gesture layer sits over
 the frame, so on iOS the first ready slide opens a hole in it ("Tap here for sound"); when the

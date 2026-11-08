@@ -62,6 +62,12 @@ framing, then straight back to the syllabus. Never two within six videos, never 
 mastery, and switched off for anyone who says "less" to them. See
 [docs/ALGORITHM.md](docs/ALGORITHM.md#breathers).
 
+**An interactive player.** The app edits the lesson document before Vidmoat's player gets it,
+and re-sends it live: recall mode blanks the key terms out of the on-screen text and mutes the
+narration until you tap to reveal (retrieval practice from any explainer, no new video made),
+chapter marks on the progress bar jump between scenes, your quiz answer is stamped into the video
+over the reveal, and captions, music and narration audio switch on or off in Tune.
+
 **Recall cards.** A quick check answered wrong comes back as a card in the feed: after 30
 minutes, then two days later; right twice and it is retired, wrong and it returns sooner. The
 Library lists the questions to fix. See [docs/ALGORITHM.md](docs/ALGORITHM.md#recall-cards-your-mistakes-come-back).

@@ -266,7 +266,10 @@ body.sound-gated .swipe-hint { display: none; }
 .title { margin: 9px 0 3px; font-size: 19px; font-weight: 600; line-height: 1.22; text-shadow: 0 1px 8px #000; }
 .title:empty { display: none; }
 .credits { margin: 0; font-size: 11px; color: rgba(255, 255, 255, .6); text-shadow: 0 1px 4px #000; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.progress { position: absolute; z-index: 7; left: 0; right: 0; bottom: 0; height: 3px; background: rgba(255, 255, 255, .18); }
+.progress { position: absolute; z-index: 7; left: 0; right: 0; bottom: 0; height: 3px; background: rgba(255, 255, 255, .18); cursor: pointer; }
+.progress::before { content: ''; position: absolute; left: 0; right: 0; bottom: -2px; height: 22px; } /* a finger-sized hit area for the chapters */
+.progress .chap { position: absolute; top: -3px; width: 3px; height: 9px; margin-left: -1px; border-radius: 2px; background: rgba(255, 255, 255, .85); box-shadow: 0 0 0 1px rgba(0,0,0,.4); pointer-events: none; }
+.progress:hover { height: 5px; }
 .bar { height: 100%; background: var(--hl); transform-origin: left; transform: scaleX(0); }
 
 /* quiz: an exam slip */
@@ -721,3 +724,17 @@ body.landing-on { background: var(--paper); }
 .btn.danger { color: #b42318; border-color: #b42318; }
 .btn.danger:hover { background: #fff1f0; }
 .reset-fine { margin: 10px 0 0; }
+
+
+/* ============================================================================ recall mode chip, playback prefs */
+.gaps-chip { position: absolute; z-index: 7; left: 12px; right: 82px; bottom: 112px; display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-radius: 12px; border: 1.5px solid rgba(255,255,255,.7); background: rgba(13, 13, 14, .78); color: #fff; font-family: var(--mono); font-size: 11.5px; line-height: 1.3; text-align: left; cursor: pointer; backdrop-filter: blur(6px); }
+.gaps-chip i { font-style: normal; font-size: 16px; }
+.gaps-chip[data-revealed="true"] { background: var(--hl); color: var(--ink); border-color: var(--ink); }
+.gaps-chip[data-revealed="true"] i::before { content: '👁️'; }
+.gaps-chip[data-revealed="true"] i { font-size: 0; }
+.gaps-chip[data-revealed="true"] i::before { font-size: 16px; }
+.pref-row { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 10px; margin: 6px 0; }
+.pref-label { font-weight: 600; font-size: 14px; }
+.segmented.small button { padding: 6px 10px; font-size: 12.5px; min-height: 0; }
+.pref-hint { margin: -2px 0 10px; font-size: 12.5px; color: var(--ink-3); line-height: 1.4; }
+@media (min-width: 900px) { .gaps-chip { right: 12px; } }
