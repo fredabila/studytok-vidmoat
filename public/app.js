@@ -9,6 +9,7 @@
 import { VidmoatPlayer } from './player.js';
 import { track, flush, WatchTracker } from './telemetry.js';
 import * as sensors from './sensors.js';
+import { renderCard, shareCard } from './share.js';
 
 const $ = (s, el = document) => el.querySelector(s);
 const $$ = (s, el = document) => [...el.querySelectorAll(s)];
@@ -976,11 +977,26 @@ function nextBurst() {
     const a = (i / 26) * Math.PI * 2, r = 140 + Math.random() * 160;
     return el('i', { class: 'confetti', style: `background:${colors[i % colors.length]};--x:${Math.cos(a) * r}px;--y:${Math.sin(a) * r + 80}px;--r:${Math.round(Math.random() * 720)}deg;--d:${(Math.random() * 0.25).toFixed(2)}s` });
   });
-  const card = el('div', { class: 'burst-card' }, ...confetti, svgEl(mascot('cheer', 110)), el('b', {}, 'Unit mastered!'), el('span', {}, item.title), sbadge('🏅 level up', { hot: true, r: 2 }));
+  let timer;
+  const close = () => { clearTimeout(timer); card.classList.add('leaving'); setTimeout(() => { host.hidden = true; nextBurst(); }, 420); };
+  const shareBtn = el('button', { type: 'button', class: 'btn primary small', onclick: async () => {
+    clearTimeout(timer);
+    track('levelup_share', { unitId: item.unitId });
+    try {
+      const blob = await renderCard({ kind: 'levelup', kicker: 'Level up', title: `I just mastered ${item.title}`, mark: item.title, subtitle: 'Quick checks passed, unit learned.',
+        stats: [{ value: me?.stats?.mastered ?? 1, label: 'mastered', hl: true }, { value: me?.stats?.streak ?? 0, label: 'day streak' }, { value: me?.stats?.watched ?? 0, label: 'lessons' }],
+        line: 'Another one down. Who is next?', mascot: mascot('cheer', 300), memberNo: me?.memberNo, accent: '#34d399', chips: [item.title], chipsLabel: 'Mastered' });
+      const how = await shareCard(blob, { text: `I just mastered ${item.title} on StudyTok. studytok.vidmoat.com`, filename: 'studytok-level-up.png' });
+      if (how === 'saved') toast('Card saved to your device.');
+    } catch { toast("Couldn't make the card."); }
+    close();
+  } }, '↗ Share');
+  const card = el('div', { class: 'burst-card' }, ...confetti, svgEl(mascot('cheer', 110)), el('b', {}, 'Unit mastered!'), el('span', {}, item.title), sbadge('🏅 level up', { hot: true, r: 2 }),
+    el('div', { class: 'burst-actions' }, shareBtn, el('button', { type: 'button', class: 'btn ghost small', onclick: close }, 'Nice')));
   host.replaceChildren(card);
   host.hidden = false;
   if (navigator.vibrate) navigator.vibrate([30, 40, 60]);
-  setTimeout(() => { card.classList.add('leaving'); setTimeout(() => { host.hidden = true; nextBurst(); }, 420); }, 2600);
+  timer = setTimeout(close, 6000);
 }
 window.addEventListener('studytok:levelup', (e) => levelUp(e.detail));
 
@@ -996,7 +1012,16 @@ function recapCard(stats) {
   const text = `My StudyTok week: ${r.watched} lessons, ${r.minutes} min${acc ? `, ${acc} on quick checks` : ''}${r.mastered.length ? `, ${r.mastered.length} unit${r.mastered.length > 1 ? 's' : ''} mastered` : ''}. studytok.vidmoat.com`;
   const share = el('button', { type: 'button', class: 'btn ghost', onclick: async () => {
     track('recap_share', { week: r.week });
-    try { if (navigator.share) await navigator.share({ text }); else { await navigator.clipboard.writeText(text); toast('Copied your recap.'); } } catch { /* cancelled */ }
+    share.disabled = true;
+    try {
+      const blob = await renderCard({ kind: 'recap', kicker: past ? 'Last week with Noti' : 'My week with Noti', title: `${r.watched} lesson${r.watched === 1 ? '' : 's'} this week`, mark: `${r.watched} lesson${r.watched === 1 ? '' : 's'}`,
+        subtitle: me?.vidmoat?.name ? `${me.vidmoat.name.split(' ')[0]} is learning on StudyTok` : 'Learning on StudyTok',
+        stats: [{ value: r.minutes, label: 'minutes' }, { value: acc || '—', label: 'quizzes' }, { value: r.days, label: 'days', hl: r.days >= 4 }, { value: r.mastered.length, label: 'mastered', hl: r.mastered.length > 0 }],
+        line, mascot: mascot(r.mastered.length || r.days >= 4 ? 'cheer' : 'happy', 300), memberNo: me?.memberNo, chips: r.units, chipsLabel: 'Units this week' });
+      const how = await shareCard(blob, { text, filename: `studytok-week-${r.week}.png` });
+      if (how === 'saved') toast('Card saved to your device and the text copied.');
+    } catch { toast("Couldn't make the card."); }
+    share.disabled = false;
   } }, '↗ Share recap');
   return el('div', { class: `recap${past ? ' past' : ''}` },
     el('h3', {}, past ? 'Last week with Noti' : 'Your week with Noti'),
@@ -1150,10 +1175,23 @@ function renderProfile() {
   if (stats?.watched >= 25) badges.push(sbadge('🎬 binge learner', { r: 1 }));
   if (me?.vidmoat) badges.push(sbadge(p.managedBy === 'guardian' ? '👪 set up by a guardian' : '✓ Vidmoat', { r: -1 }));
   $('#profile-card').className = 'hero';
+  if (me?.memberNo) badges.unshift(sbadge(`#${me.memberNo} member`, { hot: me.memberNo <= 100, r: -3 }));
+  const shareMe = el('button', { type: 'button', class: 'btn ghost small', onclick: async () => {
+    track('profile_share', {});
+    try {
+      const blob = await renderCard({ kind: 'profile', kicker: 'StudyTok member', title: `Member #${me?.memberNo || '?'}`, mark: `#${me?.memberNo || '?'}`,
+        subtitle: `${me?.vidmoat?.name || 'A student'} · ${[lvl?.label, p.program].filter(Boolean).join(' · ') || 'learning every day'}`,
+        stats: [{ value: stats?.streak ?? 0, label: 'day streak', hl: (stats?.streak ?? 0) >= 3 }, { value: stats?.watched ?? 0, label: 'lessons' }, { value: stats?.quizN ? `${Math.round((stats.quizRight / stats.quizN) * 100)}%` : '—', label: 'quizzes' }, { value: stats?.mastered ?? 0, label: 'mastered' }],
+        line: buddyLine(stats), mascot: mascot(stats?.streak >= 3 ? 'cheer' : 'happy', 300), memberNo: me?.memberNo, chips: [p.program, p.exam ? `Preparing for ${p.exam}` : null, ...(me?.interests || []).slice(0, 3).map((t) => cfg.topics.find((x) => x.id === t)?.label)].filter(Boolean), chipsLabel: 'Studying' });
+      const how = await shareCard(blob, { text: `I'm member #${me?.memberNo} on StudyTok, short study videos made for my syllabus. studytok.vidmoat.com`, filename: 'studytok-member.png' });
+      if (how === 'saved') toast('Card saved to your device.');
+    } catch { toast("Couldn't make the card."); }
+  } }, '↗ Share my card');
   $('#profile-card').replaceChildren(svgEl(mascot(stats?.streak >= 3 ? 'cheer' : 'happy')),
-    el('div', {}, el('h3', {}, me?.vidmoat?.name || 'Guest learner'), el('p', {}, [lvl?.label, p.institution, p.age ? `age ${p.age}` : null].filter(Boolean).join(' · ') || 'Exploring'),
+    el('div', {}, el('h3', {}, me?.vidmoat?.name || 'Guest learner'), el('p', {}, [me?.memberNo ? `Member #${me.memberNo}` : null, lvl?.label, p.institution, p.age ? `age ${p.age}` : null].filter(Boolean).join(' · ') || 'Exploring'),
       el('div', { class: 'bubble' }, buddyLine(stats)),
-      badges.length ? el('div', { class: 'badges' }, ...badges) : null));
+      badges.length ? el('div', { class: 'badges' }, ...badges) : null,
+      el('div', { class: 'badges' }, shareMe)));
   $('#profile-tiles').replaceChildren(...[statTiles(stats), recapCard(stats)].filter(Boolean));
   renderSensorCard();
 

@@ -75,6 +75,8 @@ export const EVENT_SPECS = {
   studies_edit: { fields: {} },
   level_up: { fields: { unitId: 's' } },
   recap_share: { fields: { week: 's' } },
+  levelup_share: { fields: { unitId: 's' } },
+  profile_share: { fields: {} },
 };
 export const EVENT_TYPES = new Set(Object.keys(EVENT_SPECS));
 

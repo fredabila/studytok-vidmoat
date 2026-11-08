@@ -364,6 +364,8 @@ body[data-view="feed"] .tabbtn[aria-current="page"] span { color: var(--ink); }
 .burst-card span { font-size: 14px; color: var(--ink-2); }
 .burst-card .sbadge { margin-top: 6px; }
 .burst-card.leaving { animation: burst-out .4s var(--ease) both; }
+.burst-actions { display: flex; gap: 8px; margin-top: 10px; }
+.btn.small { min-height: 40px; padding: 0 16px; font-size: 14px; }
 @keyframes burst-in { 0% { transform: scale(.4) rotate(-12deg); opacity: 0; } 70% { transform: scale(1.06) rotate(-2deg); opacity: 1; } 100% { transform: scale(1) rotate(-3deg); opacity: 1; } }
 @keyframes burst-out { to { transform: scale(.6) rotate(6deg); opacity: 0; } }
 @keyframes wiggle { 0%, 100% { transform: rotate(-6deg); } 50% { transform: rotate(6deg); } }
