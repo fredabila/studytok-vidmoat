@@ -389,15 +389,38 @@ document.addEventListener('visibilitychange', () => {
 // ============================================================================ sensors
 // Motion data flows only after a user gesture (iOS asks). A drop pauses the video.
 let sensorsStarted = false;
+const motionAllowed = () => store.get('st_motion') !== 'off';
 async function startSensors() {
-  if (sensorsStarted) return;
+  if (sensorsStarted || !motionAllowed()) return;
   sensorsStarted = true;
   const ok = await sensors.start({ onDrop: () => {
     const item = feed.items[feed.active];
     track('drop', { videoId: item?.data?.id, t: +(item?.watch?.lastT || 0).toFixed(1) });
     if (item?.player && !feed.paused) { feed.paused = true; item.player.pause(); item.el.dataset.paused = 'true'; toast('Paused. Tap to continue.'); }
   } });
-  track('sensors', { motion: ok });
+  track('sensors', { motion: ok, permission: sensors.status().permission });
+  if (view === 'profile') renderSensorCard();
+}
+/** Profile: what the motion sensing sees right now, and a switch to turn it off. */
+function renderSensorCard() {
+  const card = $('#sensor-card');
+  if (!card) return;
+  const st = sensors.status();
+  const on = motionAllowed();
+  const label = { hand: 'held in your hand', flat: 'lying flat', moving: 'on the move', unknown: 'no reading yet' }[st.posture] || st.posture;
+  card.replaceChildren(el('h3', {}, 'Motion sensing'),
+    el('p', { class: 'muted' }, !on ? 'Off. Turn it on and the feed can tell when you are walking (lighter, narration-led lessons) or lying down late at night (calmer ones), and pause if the phone is dropped.'
+      : st.motion ? `On · right now the phone is ${label}. Only this one word ever leaves your phone, never the sensor data.`
+      : st.permission === 'denied' ? 'Blocked by your browser. Allow motion sensors for this site in its settings to turn it on.'
+      : sensorsStarted ? 'On, waiting for the first reading. Tap a video in the feed if nothing arrives.' : 'Starts on your first tap in the feed.'),
+    el('button', { type: 'button', class: 'btn ghost', onclick: () => {
+      store.set('st_motion', on ? 'off' : 'on');
+      track('pref_change', { key: 'motion', value: on ? 'off' : 'on' });
+      if (on) { sensors.stop(); sensorsStarted = false; } else startSensors();
+      renderSensorCard();
+    } }, on ? 'Turn off' : 'Turn on'));
+  clearTimeout(renderSensorCard.timer);
+  if (view === 'profile' && on) renderSensorCard.timer = setTimeout(renderSensorCard, 2000);
 }
 
 // ============================================================================ feed: navigation
@@ -465,6 +488,7 @@ function wireGestures() {
     else if (s.dy > h * 0.18 || (flick && v > 0)) go(-1);
     else setOffset(0, true);
   };
+  f.addEventListener('pointerdown', () => startSensors(), { passive: true });
   f.addEventListener('pointerup', (e) => { startSensors(); end(e); });
   f.addEventListener('pointercancel', (e) => { if (start && e.pointerId === start.id) { start = null; setOffset(0, true); } });
 
@@ -1131,6 +1155,7 @@ function renderProfile() {
       el('div', { class: 'bubble' }, buddyLine(stats)),
       badges.length ? el('div', { class: 'badges' }, ...badges) : null));
   $('#profile-tiles').replaceChildren(...[statTiles(stats), recapCard(stats)].filter(Boolean));
+  renderSensorCard();
 
   renderCredits();
   const account = $('#account-card');

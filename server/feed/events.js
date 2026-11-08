@@ -47,7 +47,7 @@ export const EVENT_SPECS = {
   complete: { video: true, fields: {} },
   leave: { video: true, fields: { t: 'n', watched: 'n', maxT: 'n', pct: 'p', loops: 'i', dir: 's', early: 'b', watchedSec: 'n', posture: 's' } },
   drop: { fields: { videoId: 's', t: 'n' } },
-  sensors: { fields: { motion: 'b' } },
+  sensors: { fields: { motion: 'b', permission: 's' } },
   refresh: { fields: { where: 's' } },
   skip: { video: true, fields: {} }, // legacy: an early leave
   rewatch: { video: true, fields: {} },
@@ -310,7 +310,7 @@ export async function ingest(userId, batch) {
       case 'quiz_skip': writes.push(stat(v.id, 'quizSkips'), fstat(v, 'quizSkips')); signals.quiz.skips++; bump(signals.formats, format, 'quizSkips'); break;
       case 'player_error': writes.push(stat(v.id, 'errors')); break;
       case 'drop': writes.push(kv.hincrby('stats:device', 'drops', 1)); break;
-      case 'sensors': writes.push(kv.hincrby('stats:device', e.motion ? 'motionOn' : 'motionOff', 1)); break;
+      case 'sensors': writes.push(kv.hincrby('stats:device', e.motion ? 'motionOn' : 'motionOff', 1), kv.hincrby('stats:device', `perm_${(e.permission || 'unknown').replace(/[^a-z-]/g, '')}`, 1)); break;
       case 'gen_wait': writes.push(kv.hincrby('stats:generation', e.outcome === 'ready' ? 'waitedReady' : 'waitedGaveUp', 1), kv.hincrby('stats:generation', 'waitMs', Math.round(e.ms || 0))); break;
       case 'pref_change': if (e.key) signals.prefs[e.key.slice(0, 16)] = e.value; break;
       case 'session_start': session.served = session.served || 0; break;
