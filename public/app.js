@@ -1,26 +1,39 @@
-// StudyTok client: onboarding (level -> studies -> syllabus, with live course research), the
-// vertical feed (live Vidmoat players for the active slide ±1, generation polling, tap-to-answer
-// quizzes, likes/saves), and the Library (course progress, saved videos, history).
+// StudyTok client.
+//  - Onboarding: level -> studies -> syllabus (catalog match or live course research).
+//  - Feed: a paging controller (drag/flick, wheel/trackpad, keys, buttons) over a track of
+//    slides; live Vidmoat players only for the active slide ±1; ready videos are moved ahead of
+//    ones still being made; tap = pause, double-tap = like; tap-to-answer quizzes.
+//  - Library (course progress, saved, history) and Profile (Sign in with Vidmoat, install).
+//  - PWA: service worker + install prompt.
 
 import { VidmoatPlayer } from './player.js';
 
 const $ = (s, el = document) => el.querySelector(s);
 const $$ = (s, el = document) => [...el.querySelectorAll(s)];
-const PLAYER_WINDOW = 1;   // keep players mounted for active ±1
-const LOAD_MORE_AT = 2;    // fetch more when this many slides remain below the active one
-const SKIP_SEC = 2;        // leaving before this counts as a skip
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const SKIP_SEC = 2;
 const SCHOOL_LEVELS = new Set(['middle-school', 'high-school']);
-
+const LEVEL_INFO = {
+  'middle-school': 'Junior high, ages 11–14',
+  'high-school': 'Senior high & national exams',
+  university: 'Undergraduate courses',
+  postgraduate: "Master's & PhD",
+  professional: 'Certifications & licensing',
+  lifelong: 'No course: just learn',
+};
 const COUNTRIES = ['Ghana', 'Nigeria', 'Kenya', 'South Africa', 'Uganda', 'Tanzania', 'Rwanda', 'Ethiopia', 'Egypt', 'Morocco', 'Cameroon', "Côte d'Ivoire", 'Senegal', 'Zambia', 'Zimbabwe', 'Botswana', 'Malawi', 'United States', 'Canada', 'United Kingdom', 'Ireland', 'Germany', 'France', 'Spain', 'Italy', 'Netherlands', 'Sweden', 'Poland', 'Turkey', 'India', 'Pakistan', 'Bangladesh', 'Sri Lanka', 'Nepal', 'China', 'Japan', 'South Korea', 'Singapore', 'Malaysia', 'Indonesia', 'Philippines', 'Vietnam', 'Thailand', 'Australia', 'New Zealand', 'Brazil', 'Mexico', 'Argentina', 'Colombia', 'Chile', 'Peru', 'Saudi Arabia', 'United Arab Emirates', 'Qatar', 'Jamaica', 'Trinidad and Tobago'];
 
 let cfg;
-const items = [];          // { data, el, player, polling, viewSent, completed, watched, lastTime, answered }
-let active = -1;
-let loadingMore = false;
-let userPaused = false;
+let me = null;               // the signed-in StudyTok user (from /api/me)
 let view = 'feed';
+let installPrompt = null;     // deferred beforeinstallprompt event
 
-// ---------------------------------------------------------------- utilities
+const store = {
+  get(k) { try { return localStorage.getItem(k); } catch { return null; } },
+  set(k, v) { try { localStorage.setItem(k, v); } catch { /* private mode */ } },
+};
+
+// ============================================================================ utilities
 async function api(method, path, body) {
   const res = await fetch(path, {
     method,
@@ -33,58 +46,55 @@ async function api(method, path, body) {
   if (!res.ok) throw Object.assign(new Error(data.error || `HTTP ${res.status}`), { status: res.status });
   return data;
 }
-
-/** The server no longer knows this browser (e.g. storage was reset): set up again. */
 let recovering = false;
 function sessionLost() {
   if (recovering) return;
   recovering = true;
-  toast('Your session expired. Let\'s set up your feed again.');
-  setTimeout(() => location.replace(location.pathname), 1200);
+  toast("Your session expired. Let's set up your feed again.");
+  setTimeout(() => location.replace('/'), 1200);
 }
 const sendEvent = (videoId, type, extra = {}) => api('POST', '/api/events', { videoId, type, ...extra }).catch(() => {});
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-const el = (tag, attrs = {}, ...children) => {
+function el(tag, attrs = {}, ...children) {
   const node = document.createElement(tag);
   for (const [k, v] of Object.entries(attrs)) {
     if (k === 'class') node.className = v;
-    else if (k === 'style') node.style.cssText = v; // CSSOM, allowed by the page's CSP (style attributes are not)
+    else if (k === 'style') node.style.cssText = v; // CSSOM: allowed by the CSP (style attributes are not)
     else if (k.startsWith('on')) node.addEventListener(k.slice(2), v);
     else if (v !== undefined && v !== null && v !== false) node.setAttribute(k, v === true ? '' : v);
   }
-  for (const c of children.flat()) if (c != null) node.append(c.nodeType ? c : document.createTextNode(String(c)));
+  for (const c of children.flat()) if (c != null && c !== false) node.append(c.nodeType ? c : document.createTextNode(String(c)));
   return node;
-};
+}
 function toast(msg) {
   const t = $('#toast');
   t.textContent = msg;
   t.classList.add('show');
   clearTimeout(toast.timer);
-  toast.timer = setTimeout(() => t.classList.remove('show'), 2600);
+  toast.timer = setTimeout(() => t.classList.remove('show'), 2800);
 }
 
-// ================================================================= onboarding
-const ob = { level: null, profile: {}, interests: new Set(), programs: [], selected: new Set() };
+// ============================================================================ onboarding
+const ob = { level: null, step: 1, profile: {}, interests: new Set(), programs: [], selected: new Set() };
 
 function showStep(n) {
+  ob.step = n;
   $$('#onboard .step').forEach((s) => { s.hidden = s.dataset.step !== String(n); });
-  $$('#onboard .stepper li').forEach((li) => li.classList.toggle('on', Number(li.dataset.step) <= n));
-  $('#onboard').scrollTo?.(0, 0);
-  window.scrollTo(0, 0);
+  $$('#onboard [data-step-action]').forEach((b) => { b.hidden = b.dataset.stepAction !== String(n); });
+  $('.ob-progress i').style.width = `${(n / 3) * 100}%`;
+  $('.ob-progress').setAttribute('aria-valuenow', String(n));
+  $('.ob-back').hidden = n === 1;
+  $('.ob-body').scrollTo(0, 0);
 }
 
 function renderLevels() {
-  const box = $('#levels');
-  box.replaceChildren(...cfg.levels.map((l) => el('button', {
-    type: 'button', class: 'level', role: 'radio', 'aria-checked': String(ob.level === l.id),
-    onclick: () => chooseLevel(l.id),
-  }, el('span', { class: 'emoji', 'aria-hidden': 'true' }, l.emoji), el('span', { class: 'label' }, l.label))));
+  $('#levels').replaceChildren(...cfg.levels.map((l) => el('button', {
+    type: 'button', class: 'level-card', role: 'radio', 'aria-checked': String(ob.level === l.id), onclick: () => chooseLevel(l.id),
+  }, el('span', { class: 'emoji', 'aria-hidden': 'true' }, l.emoji), el('strong', {}, l.label), el('small', {}, LEVEL_INFO[l.id] || ''))));
 }
 
 function renderTopics() {
   $('#topics').replaceChildren(...cfg.topics.map((t) => {
-    const b = el('button', { type: 'button', class: 'topic', 'aria-pressed': String(ob.interests.has(t.id)) },
-      el('span', { class: 'emoji', 'aria-hidden': 'true' }, t.emoji), el('span', { class: 'label' }, t.label));
+    const b = el('button', { type: 'button', class: 'chip-btn', 'aria-pressed': String(ob.interests.has(t.id)) }, `${t.emoji} ${t.label}`);
     b.style.setProperty('--accent', t.accent);
     b.onclick = () => {
       ob.interests.has(t.id) ? ob.interests.delete(t.id) : ob.interests.add(t.id);
@@ -101,54 +111,45 @@ async function chooseLevel(id) {
   const form = $('#details');
   $$('[data-hide-for]', form).forEach((f) => { f.hidden = f.dataset.hideFor.split(' ').includes(id); });
   const school = SCHOOL_LEVELS.has(id);
-  $('[data-label-program]').textContent = school ? 'Subjects' : 'Course / program';
-  form.program.placeholder = school ? 'e.g. Biology, Chemistry, Core Mathematics' : id === 'professional' ? 'e.g. ACCA, CFA Level 1, Nursing licensure' : 'e.g. BSc Computer Science';
-  try {
-    const { programs } = await api('GET', `/api/catalog?level=${encodeURIComponent(id)}`);
-    $('#programs').replaceChildren(...programs.map((p) => el('option', { value: p.name })));
-  } catch { /* suggestions are optional */ }
+  $('[data-label-program]').textContent = school ? 'Subjects' : 'Course or program';
+  form.program.placeholder = school ? 'e.g. Biology, Chemistry, Core Mathematics' : id === 'professional' ? 'e.g. ACCA, CFA Level 1' : 'e.g. BSc Computer Science';
+  api('GET', `/api/catalog?level=${encodeURIComponent(id)}`)
+    .then(({ programs }) => $('#programs').replaceChildren(...programs.map((p) => el('option', { value: p.name }))))
+    .catch(() => {});
   showStep(2);
-  (id === 'lifelong' ? form.country : form.institution).focus();
 }
 
-function updateStart() {
-  $('#start').disabled = ob.selected.size === 0 && ob.interests.size === 0;
-}
+function updateStart() { $('#start').disabled = ob.selected.size === 0 && ob.interests.size === 0; }
 
-function programBlock(program, part) {
+function programBlock(part) {
   const box = el('div', { class: 'program' });
-  const render = (p) => {
+  const block = { box, render: null };
+  block.render = (p) => {
     box.replaceChildren();
-    if (p?.status === 'loading') {
-      box.append(el('div', { class: 'researching' }, el('span', { class: 'spinner', 'aria-hidden': 'true' }), el('strong', {}, `Looking up ${part || ob.profile.institution}…`)));
-      return;
-    }
-    if (!p) {
-      box.append(el('p', { class: 'muted' }, `We couldn't find "${part || ob.profile.institution}". Pick some interests below, or edit your course.`));
-      return;
-    }
-    if (p.status === 'researching') {
+    if (p?.status === 'loading' || p?.status === 'researching') {
+      const what = p.status === 'loading' ? `Looking up ${part || ob.profile.institution}…` : `Researching ${p.institution || p.name}…`;
       box.append(el('div', { class: 'researching' }, el('span', { class: 'spinner', 'aria-hidden': 'true' }),
-        el('div', {}, el('strong', {}, `Researching ${p.institution || p.name}…`), el('p', { class: 'muted' }, 'Looking up the official course list or syllabus. This can take up to a minute.'))));
+        el('div', {}, el('strong', {}, what), p.status === 'researching' ? el('p', {}, 'Reading the official course list or syllabus. Usually under a minute.') : null)));
       return;
     }
-    if (p.status === 'failed') {
-      if (p.fallback) { render({ ...p.fallback, note: 'Research did not finish, so here are the core units instead.' }); return; }
-      box.append(el('p', { class: 'muted' }, `Research didn't work for "${part}" (${p.error || 'unknown error'}). Pick interests below, or try a simpler course name.`));
+    if (!p || p.status === 'failed') {
+      box.append(el('p', { class: 'muted' }, p?.error
+        ? `We couldn't research "${part}" (${p.error}). Pick interests on the previous step, or try a simpler course name.`
+        : `We couldn't find "${part || ob.profile.institution}". Pick interests on the previous step, or edit your course.`));
       return;
     }
-    const head = el('div', { class: 'program-head' },
-      el('div', {}, el('h3', {}, p.name), el('p', { class: 'muted' }, p.note || p.basis || '')),
-      el('button', { type: 'button', class: 'ghost small', onclick: () => {
-        const on = !p.units.every((u) => ob.selected.has(u.id));
+    const allOn = () => p.units.every((u) => ob.selected.has(u.id));
+    box.append(el('div', { class: 'program-head' },
+      el('div', {}, el('h3', {}, p.name), el('p', {}, p.note || p.basis || '')),
+      el('button', { type: 'button', class: 'btn ghost small', onclick: () => {
+        const on = !allOn();
         p.units.forEach((u) => (on ? ob.selected.add(u.id) : ob.selected.delete(u.id)));
-        render(p); updateStart();
-      } }, 'All / none'));
-    box.append(head);
+        block.render(p); updateStart();
+      } }, allOn() ? 'Untick all' : 'Tick all')));
     const list = el('div', { class: 'unit-list' });
     for (const u of p.units) {
       const b = el('button', { type: 'button', class: 'unit', 'aria-pressed': String(ob.selected.has(u.id)) },
-        el('strong', {}, u.title), u.summary ? el('span', {}, u.summary) : null);
+        el('strong', {}, u.title), u.summary ? el('span', {}, u.summary) : null, el('i', { class: 'tick', 'aria-hidden': 'true' }));
       b.onclick = () => {
         ob.selected.has(u.id) ? ob.selected.delete(u.id) : ob.selected.add(u.id);
         b.setAttribute('aria-pressed', String(ob.selected.has(u.id)));
@@ -158,27 +159,25 @@ function programBlock(program, part) {
     }
     box.append(list);
     if (p.sources?.length) {
-      box.append(el('p', { class: 'sources' }, 'Sources: ', ...p.sources.slice(0, 4).flatMap((s, i) => [i ? ' · ' : '', el('a', { href: s.url, target: '_blank', rel: 'noopener noreferrer' }, s.title.slice(0, 50))])));
+      box.append(el('p', { class: 'sources' }, 'Sources: ', ...p.sources.slice(0, 4).flatMap((s, i) => [i ? ' · ' : '',
+        el('a', { href: s.url, target: '_blank', rel: 'noopener noreferrer' }, s.title.slice(0, 48))])));
     }
     if (p.source === 'catalog' && cfg.research && ob.profile.institution) {
-      box.append(el('button', { type: 'button', class: 'link', onclick: () => resolvePart(part, block, true) }, `Tailor this to ${ob.profile.institution}'s actual course →`));
+      box.append(el('p', { class: 'sources' }, el('button', { type: 'button', class: 'link', onclick: () => resolvePart(part, block, true) },
+        `Match ${ob.profile.institution}'s actual course instead →`)));
     }
   };
-  const block = { box, render };
-  render(program);
   return block;
 }
 
 async function resolvePart(part, existing, tailor = false) {
-  const block = existing || programBlock({ status: 'loading' }, part);
-  if (!existing) $('#syllabus .programs').append(block.box);
-  else block.render({ status: 'loading' });
-  // Forget the units of a previous answer for this part (e.g. before tailoring).
+  const block = existing || programBlock(part);
+  if (!existing) $('#syllabus').append(block.box);
+  block.render({ status: 'loading' });
   const previous = ob.programs.find((p) => p.part === part);
   if (previous) { previous.program.units.forEach((u) => ob.selected.delete(u.id)); ob.programs = ob.programs.filter((p) => p !== previous); }
   try {
-    const profile = { ...ob.profile, level: ob.level, program: part };
-    let { program, researchUnavailable } = await api('POST', '/api/programs/resolve', { profile, tailor });
+    let { program, researchUnavailable } = await api('POST', '/api/programs/resolve', { profile: { ...ob.profile, level: ob.level, program: part }, tailor });
     if (researchUnavailable && !program) toast('Researching courses needs the Anthropic key on the server.');
     while (program?.status === 'researching') {
       block.render(program);
@@ -186,53 +185,53 @@ async function resolvePart(part, existing, tailor = false) {
       program = (await api('GET', `/api/programs/${encodeURIComponent(program.key)}`)).program;
     }
     let shown = program;
-    if (program?.status === 'failed' && program.fallback) shown = { ...program.fallback, note: 'Research did not finish, so here are the core units instead.' };
+    if (program?.status === 'failed' && program.fallback) shown = { ...program.fallback, note: "Research didn't finish, so here are the core units instead." };
     if (shown?.units?.length && shown.status !== 'failed') {
       ob.programs.push({ part, program: shown });
-      for (const u of shown.units) ob.selected.add(u.id);
+      shown.units.forEach((u) => ob.selected.add(u.id));
     }
     block.render(shown);
   } catch (err) {
     block.render(null);
-    toast(`Could not look up "${part}": ${err.message}`);
+    toast(`Couldn't look up "${part}": ${err.message}`);
   }
   updateStart();
 }
 
 async function buildSyllabus() {
-  const box = $('#syllabus');
   ob.programs = [];
   ob.selected = new Set();
-  const parts = !ob.profile.program ? (ob.profile.institution ? [''] : [])
-    : SCHOOL_LEVELS.has(ob.level) ? ob.profile.program.split(/\s*(?:,|;|\band\b|&)\s*/i).filter(Boolean).slice(0, 6) : [ob.profile.program];
-  box.replaceChildren(
-    el('p', { class: 'tagline' }, parts.length ? 'Your syllabus. Untick anything you have already mastered: the feed follows what stays ticked, in order.' : 'Pick what you want to learn about.'),
-    el('div', { class: 'programs' }),
-  );
+  const p = ob.profile;
+  const parts = !p.program ? (p.institution ? [''] : [])
+    : SCHOOL_LEVELS.has(ob.level) ? p.program.split(/\s*(?:,|;|\band\b|&)\s*/i).filter(Boolean).slice(0, 6) : [p.program];
+  $('#syllabus').replaceChildren();
+  $('#syllabus-lead').textContent = parts.length
+    ? "Untick anything you've already mastered. Your feed follows what stays ticked, in order."
+    : 'No course to follow, so your feed will follow your interests. Pick some on the previous step, or start with these.';
   if (!parts.length && !ob.interests.size) cfg.topics.slice(0, 4).forEach((t) => ob.interests.add(t.id));
   updateStart();
-  await Promise.all(parts.map((p) => resolvePart(p)));
+  await Promise.all(parts.map((part) => resolvePart(part)));
   if (!ob.selected.size && !ob.interests.size) cfg.topics.slice(0, 4).forEach((t) => ob.interests.add(t.id));
-  renderTopics();
   updateStart();
 }
 
 async function runOnboarding(prefill) {
-  if (prefill) {
-    ob.level = prefill.profile?.level || null;
+  if (prefill?.profile) {
+    ob.level = prefill.profile.level || null;
     ob.profile = { ...prefill.profile };
     ob.interests = new Set(prefill.interests || []);
     const form = $('#details');
-    for (const k of ['country', 'institution', 'program', 'exam']) form[k].value = prefill.profile?.[k] || '';
+    for (const k of ['country', 'institution', 'program', 'exam']) form[k].value = prefill.profile[k] || '';
   }
   renderLevels();
   renderTopics();
+  $('#countries').replaceChildren(...COUNTRIES.map((c) => el('option', { value: c })));
+  $('#ob-signin-hint').hidden = !cfg.vidmoatSignIn || Boolean(me?.vidmoat);
   $('#onboard').hidden = false;
   $('#app').hidden = true;
   showStep(1);
-  $('#countries').replaceChildren(...COUNTRIES.map((c) => el('option', { value: c })));
 
-  $$('#onboard [data-back]').forEach((b) => { b.onclick = () => showStep(Math.max(1, Number(b.closest('.step').dataset.step) - 1)); });
+  $('.ob-back').onclick = () => showStep(Math.max(1, ob.step - 1));
   $('#details').onsubmit = (e) => {
     e.preventDefault();
     const f = e.target;
@@ -244,63 +243,188 @@ async function runOnboarding(prefill) {
 
   await new Promise((resolve) => { $('#start').onclick = resolve; });
   const units = ob.programs.flatMap((p) => p.program.units.map((u) => u.id)).filter((id) => ob.selected.has(id));
-  await api('POST', '/api/profile', {
-    profile: { ...ob.profile, level: ob.level },
-    programKeys: ob.programs.map((p) => p.program.key),
-    units, interests: [...ob.interests],
+  const { user } = await api('POST', '/api/profile', {
+    profile: { ...ob.profile, level: ob.level }, programKeys: ob.programs.map((p) => p.program.key), units, interests: [...ob.interests],
   });
+  me = user;
   $('#onboard').hidden = true;
   $('#app').hidden = false;
 }
 
-// ================================================================= feed
+// ============================================================================ feed: state
+const feed = {
+  items: [],        // { data, el, player, polling, viewSent, completed, watched, lastTime, answered }
+  active: -1,       // index into items; items.length = the "finding your next lesson" slide
+  loading: false,
+  paused: false,
+  endEl: null,
+};
+const trackEl = () => $('#track');
+const feedEl = () => $('#feed');
+const slideHeight = () => feedEl().clientHeight || window.innerHeight;
+
+function layout(animate = false) {
+  const h = slideHeight();
+  feed.items.forEach((it, i) => { it.el.style.top = `${i * h}px`; it.el.dataset.index = String(i); });
+  if (feed.endEl) feed.endEl.style.top = `${feed.items.length * h}px`;
+  setOffset(0, animate);
+  const prev = $('.pager [data-go="-1"]'), next = $('.pager [data-go="1"]');
+  if (prev) prev.disabled = feed.active <= 0;
+  if (next) next.disabled = feed.active >= feed.items.length;
+}
+function setOffset(px, animate) {
+  const t = trackEl();
+  t.classList.toggle('animating', Boolean(animate));
+  t.style.transform = `translate3d(0, ${-Math.max(0, feed.active) * slideHeight() + px}px, 0)`;
+}
+
+function ensureEndSlide() {
+  if (feed.endEl) return;
+  feed.endEl = el('article', { class: 'slide end-slide' },
+    el('div', { class: 'stage' }, el('div', {}, el('span', { class: 'spinner', 'aria-hidden': 'true' }), el('p', {}, 'Finding your next lesson…'))));
+  trackEl().append(feed.endEl);
+}
+
+// ============================================================================ feed: navigation
+function go(delta) { goTo(feed.active + delta); }
+function goTo(index, { animate = true } = {}) {
+  const max = feed.items.length; // the end slide
+  const target = Math.max(0, Math.min(max, index));
+  if (target === feed.active) { setOffset(0, animate); return; }
+  activate(target);
+  layout(animate);
+  if (target >= feed.items.length - 2) loadMore();
+}
+
+function wireGestures() {
+  const f = feedEl();
+  let start = null;
+  let lastTap = 0;
+  let tapTimer = null;
+
+  f.addEventListener('pointerdown', (e) => {
+    if (!e.isPrimary || e.button > 0 || e.target.closest('button, a, input, .quiz')) return;
+    start = { x: e.clientX, y: e.clientY, t: performance.now(), dy: 0, moved: false, id: e.pointerId, samples: [{ y: e.clientY, t: performance.now() }] };
+    f.setPointerCapture(e.pointerId);
+  });
+  f.addEventListener('pointermove', (e) => {
+    if (!start || e.pointerId !== start.id) return;
+    let dy = e.clientY - start.y;
+    start.samples.push({ y: e.clientY, t: performance.now() });
+    if (start.samples.length > 12) start.samples.shift();
+    if (!start.moved && Math.abs(dy) < 8) return;
+    if (!start.moved && Math.abs(e.clientX - start.x) > Math.abs(dy)) return; // horizontal: ignore
+    start.moved = true;
+    const atTop = feed.active <= 0 && dy > 0;
+    const atEnd = feed.active >= feed.items.length && dy < 0;
+    if (atTop || atEnd) dy *= 0.3; // rubber band
+    start.dy = dy;
+    setOffset(dy, false);
+  });
+  const end = (e) => {
+    if (!start || e.pointerId !== start.id) return;
+    const s = start;
+    start = null;
+    if (!s.moved) {
+      // Tap: single = pause/play, double = like (with a heart where you tapped).
+      const now = performance.now();
+      if (now - lastTap < 280) {
+        clearTimeout(tapTimer);
+        lastTap = 0;
+        doubleTapLike(e);
+      } else {
+        lastTap = now;
+        tapTimer = setTimeout(() => togglePause(), 260);
+      }
+      return;
+    }
+    // Flick velocity from the last ~100 ms of movement (px/ms), like native scrolling.
+    const h = slideHeight();
+    const now = performance.now();
+    const recent = s.samples.filter((p) => now - p.t <= 120);
+    const first = recent[0] || s.samples[0];
+    const v = (e.clientY - first.y) / Math.max(16, now - first.t);
+    const flick = Math.abs(s.dy) > 24 && Math.abs(v) > 0.35;
+    if (s.dy < -h * 0.18 || (flick && v < 0)) go(1);
+    else if (s.dy > h * 0.18 || (flick && v > 0)) go(-1);
+    else setOffset(0, true);
+  };
+  f.addEventListener('pointerup', end);
+  f.addEventListener('pointercancel', (e) => { if (start && e.pointerId === start.id) { start = null; setOffset(0, true); } });
+
+  // Wheel / trackpad: exactly one slide per gesture; the gesture's trailing momentum is swallowed.
+  let acc = 0, lockUntil = 0, lastWheel = 0;
+  f.addEventListener('wheel', (e) => {
+    e.preventDefault();
+    const now = performance.now();
+    const gap = now - lastWheel;
+    lastWheel = now;
+    // While events keep arriving (gaps under 250 ms) it is the same gesture or its momentum.
+    if (now < lockUntil) { if (gap < 250) lockUntil = Math.max(lockUntil, now + 250); return; }
+    if (gap > 250) acc = 0;
+    acc += e.deltaMode === 1 ? e.deltaY * 16 : e.deltaY;
+    if (Math.abs(acc) >= 35) {
+      go(acc > 0 ? 1 : -1);
+      acc = 0;
+      lockUntil = now + 500;
+    }
+  }, { passive: false });
+
+  $$('.pager-btn').forEach((b) => { b.onclick = () => go(Number(b.dataset.go)); });
+  window.addEventListener('resize', () => layout(false));
+  document.addEventListener('keydown', (e) => {
+    if ($('#app').hidden || view !== 'feed' || e.target.closest('input, textarea') || !$('#sheet').hidden) return;
+    if (['ArrowDown', 'PageDown', 'j'].includes(e.key)) { e.preventDefault(); go(1); }
+    if (['ArrowUp', 'PageUp', 'k'].includes(e.key)) { e.preventDefault(); go(-1); }
+    if (e.key === ' ') { e.preventDefault(); togglePause(); }
+    if (e.key === 'l') toggleFlag(feed.items[feed.active], 'liked', 'like', 'unlike');
+  });
+}
+
+// ============================================================================ feed: slides
 function addSlide(data, { at } = {}) {
   const node = $('#slide-tpl').content.firstElementChild.cloneNode(true);
   const item = { data, el: node, player: null, polling: false, viewSent: false, completed: false, watched: 0, lastTime: 0, answered: false };
-  if (at == null || at >= items.length) {
-    items.push(item);
-    $('#feed').appendChild(node);
-  } else {
-    items.splice(at, 0, item);
-    $('#feed').insertBefore(node, items[at + 1].el);
-  }
-  items.forEach((it, i) => { it.el.dataset.index = String(i); });
-  render(item);
-
-  $('.tap', node).onclick = () => togglePause(item);
-  $('.like', node).onclick = () => toggle(item, 'liked', 'like', 'unlike');
-  $('.save', node).onclick = () => toggle(item, 'saved', 'save', 'unsave');
+  ensureEndSlide();
+  if (at == null || at >= feed.items.length) { feed.items.push(item); trackEl().insertBefore(node, feed.endEl); }
+  else { feed.items.splice(at, 0, item); trackEl().insertBefore(node, feed.items[at + 1].el); }
+  renderSlide(item);
+  $('.like', node).onclick = () => toggleFlag(item, 'liked', 'like', 'unlike');
+  $('.save', node).onclick = () => toggleFlag(item, 'saved', 'save', 'unsave');
+  $('.why', node).onclick = () => openWhy(item);
   $('.less', node).onclick = () => {
     sendEvent(item.data.id, 'less');
     toast(`Got it: less of ${item.data.unit?.title || item.data.topic.label}`);
-    scrollToIndex(items.indexOf(item) + 1);
+    if (feed.items[feed.active] === item) go(1);
   };
-  $('.replay', node).onclick = () => { if (item.player) { item.player.seek(0); item.player.play(); userPaused = false; setPaused(item, false); } };
-
-  observer.observe(node);
   if (data.status === 'generating') poll(item);
   return item;
 }
 
-function render(item) {
-  const { data, el: node } = item;
-  node.style.setProperty('--accent', data.topic.accent);
-  $('.cover-topic', node).textContent = `${data.topic.emoji} ${data.unit?.title || data.topic.label}`;
-  $('.cover-hook', node).textContent = data.hook || 'Writing your lesson…';
-  $('.chip', node).textContent = `${data.topic.emoji} ${data.unit?.title || data.topic.label}${data.subtopic ? ` · ${data.subtopic}` : ''}`;
-  $('.title', node).textContent = data.title || '';
-  $('.like .count', node).textContent = String(data.likes || 0);
-  $('.like', node).setAttribute('aria-pressed', String(!!data.liked));
-  $('.save', node).setAttribute('aria-pressed', String(!!data.saved));
-  $('.save .count', node).textContent = data.saved ? 'Saved' : 'Save';
-  const credits = [...new Set((data.credits || []).map((c) => c.by).filter(Boolean))];
-  $('.credits', node).textContent = credits.length ? `Footage & music: ${credits.slice(0, 3).join(', ')} (stock)` : '';
+function unitLabel(d) {
+  const name = d.unit?.title || d.topic.label;
+  return d.position ? `Unit ${d.position.index} of ${d.position.total} · ${name}` : `${d.topic.emoji} ${name}`;
+}
+
+function renderSlide(item) {
+  const { data: d, el: node } = item;
+  node.style.setProperty('--accent', d.topic.accent);
+  node.dataset.status = d.status;
+  node.dataset.id = d.id;
+  $('.making-topic', node).textContent = unitLabel(d);
+  $('.making-hook', node).textContent = d.status === 'failed' ? "This one didn't work out. Swipe for the next lesson." : d.hook || '';
+  const stage = d.status === 'ready' ? 3 : d.title ? 1 : 0;
+  $$('.making-steps li', node).forEach((li, i) => { li.classList.toggle('done', i < stage); li.classList.toggle('on', i === stage && d.status === 'generating'); });
+  $('.unit-text', node).textContent = unitLabel(d) + (d.subtopic ? ` · ${d.subtopic}` : '');
+  $('.title', node).textContent = d.title || '';
+  $('.like .count', node).textContent = String(d.likes || 0);
+  $('.like', node).setAttribute('aria-pressed', String(!!d.liked));
+  $('.save', node).setAttribute('aria-pressed', String(!!d.saved));
+  $('.save .count', node).textContent = d.saved ? 'Saved' : 'Save';
+  const credits = [...new Set((d.credits || []).map((c) => c.by).filter(Boolean))];
+  $('.credits', node).textContent = credits.length ? `Stock: ${credits.slice(0, 3).join(', ')}` : '';
   const poster = $('.poster', node);
-  if (data.poster && poster.getAttribute('src') !== data.poster) poster.src = data.poster;
-  node.dataset.status = data.status;
-  $('.status-text', node).textContent =
-    data.status === 'failed' ? 'This one did not work out. Swipe for the next.' :
-    data.status === 'ready' ? 'Loading player…' : (data.title ? 'Adding visuals and voice…' : 'Writing your lesson…');
+  if (d.poster && poster.getAttribute('src') !== d.poster) poster.src = d.poster;
 }
 
 async function poll(item) {
@@ -312,87 +436,101 @@ async function poll(item) {
     delay = Math.min(delay * 1.2, 4000);
     try {
       const { item: fresh } = await api('GET', `/api/videos/${item.data.id}`);
-      item.data = { ...fresh, why: item.data.why };
-      render(item);
+      item.data = { ...fresh, why: item.data.why, position: item.data.position };
+      renderSlide(item);
     } catch { /* transient: keep polling */ }
   }
   item.polling = false;
+  preferReady();
   syncPlayers();
 }
 
-// ---------------------------------------------------------------- players
+/** Keep a ready video in the next slot when the one there is still being made. */
+function preferReady() {
+  const next = feed.active + 1;
+  const slot = feed.items[next];
+  if (!slot || slot.data.status === 'ready') return;
+  const j = feed.items.findIndex((it, i) => i > next && it.data.status === 'ready' && !it.viewSent);
+  if (j < 0) return;
+  const [moved] = feed.items.splice(j, 1);
+  feed.items.splice(next, 0, moved);
+  trackEl().insertBefore(moved.el, feed.items[next + 1].el);
+  layout(false);
+  syncPlayers();
+}
+
+// ============================================================================ feed: players
 function mountPlayer(item) {
   if (item.player || item.data.status !== 'ready') return;
-  const host = $('.player-host', item.el);
   const duration = item.data.duration || 0;
-  item.player = new VidmoatPlayer(host, cfg.playerOrigin, {
+  item.player = new VidmoatPlayer($('.player-host', item.el), cfg.playerOrigin, {
     onLoaded: () => {
       item.el.dataset.loaded = 'true';
-      if (items[active] === item && !userPaused && view === 'feed') item.player.play();
+      if (feed.items[feed.active] === item && !feed.paused && view === 'feed') item.player.play();
     },
     onState: ({ time, playing }) => onState(item, time, playing, duration),
-    onError: (msg) => {
-      item.el.dataset.status = 'failed';
-      $('.status-text', item.el).textContent = msg;
-    },
+    onError: (msg) => { item.el.dataset.status = 'failed'; $('.making-hook', item.el).textContent = msg; },
   });
   item.player.load(item.data.document, 0);
 }
-
 function unmountPlayer(item) {
   if (!item.player) return;
   item.player.destroy();
   item.player = null;
   delete item.el.dataset.loaded;
 }
-
+function syncPlayers() {
+  feed.items.forEach((item, i) => {
+    if (feed.active >= 0 && Math.abs(i - feed.active) <= 1) mountPlayer(item); else unmountPlayer(item);
+    if (!item.player) return;
+    if (i === feed.active && !feed.paused && view === 'feed') item.player.play(); else item.player.pause();
+  });
+}
 function onState(item, time, playing, duration) {
-  const isActive = items[active] === item;
+  const isActive = feed.items[feed.active] === item;
   if (playing && isActive && time > item.lastTime) item.watched += Math.min(time - item.lastTime, 0.5);
   item.lastTime = time;
   $('.bar', item.el).style.transform = `scaleX(${duration ? Math.min(1, time / duration) : 0})`;
   updateQuiz(item, time);
-
-  // Loop at the end, TikTok-style, and count a completion once.
   if (duration && time >= duration - 0.15 && isActive) {
     if (!item.completed) { item.completed = true; sendEvent(item.data.id, 'complete'); }
     item.lastTime = 0;
     item.player.seek(0);
-    if (!userPaused) item.player.play();
+    if (!feed.paused) item.player.play();
   }
   if (!isActive && playing) item.player.pause();
 }
 
-function syncPlayers() {
-  items.forEach((item, i) => {
-    const near = active >= 0 && Math.abs(i - active) <= PLAYER_WINDOW;
-    if (near) mountPlayer(item); else unmountPlayer(item);
-    if (item.player) {
-      if (i === active && !userPaused && view === 'feed') item.player.play();
-      else item.player.pause();
-    }
-  });
+function togglePause() {
+  const item = feed.items[feed.active];
+  if (!item?.player) return;
+  feed.paused = !feed.paused;
+  feed.paused ? item.player.pause() : item.player.play();
+  item.el.dataset.paused = String(feed.paused);
 }
 
-function setPaused(item, paused) { item.el.dataset.paused = String(paused); }
-
-function togglePause(item) {
-  if (!item.player) return;
-  userPaused = !userPaused;
-  userPaused ? item.player.pause() : item.player.play();
-  setPaused(item, userPaused);
+function doubleTapLike(e) {
+  const item = feed.items[feed.active];
+  if (!item || item.data.status !== 'ready') return;
+  const stage = $('.stage', item.el).getBoundingClientRect();
+  const burst = $('.heart-burst', item.el);
+  burst.style.left = `${e.clientX - stage.left}px`;
+  burst.style.top = `${e.clientY - stage.top}px`;
+  burst.classList.remove('go'); void burst.offsetWidth; burst.classList.add('go');
+  if (!item.data.liked) toggleFlag(item, 'liked', 'like', 'unlike');
 }
 
-function toggle(item, field, onType, offType) {
+function toggleFlag(item, field, onType, offType) {
+  if (!item) return;
   const on = !item.data[field];
   item.data[field] = on;
   if (field === 'liked') item.data.likes = Math.max(0, (item.data.likes || 0) + (on ? 1 : -1));
-  render(item);
+  renderSlide(item);
   sendEvent(item.data.id, on ? onType : offType);
   if (field === 'saved' && on) toast('Saved to your Library for revision');
 }
 
-// ---------------------------------------------------------------- tap-to-answer quiz
+// ---------------------------------------------------------------------------- quiz
 function updateQuiz(item, time) {
   const q = item.data.quiz;
   const box = $('.quiz', item.el);
@@ -402,16 +540,11 @@ function updateQuiz(item, time) {
     box.hidden = false;
     if (!$('.quiz-options', box).childElementCount) {
       $('.quiz-options', box).replaceChildren(...q.options.map((opt, i) =>
-        el('button', { type: 'button', class: 'quiz-opt', onclick: () => answer(item, i) }, el('b', {}, 'ABC'[i]), ` ${opt}`)));
+        el('button', { type: 'button', class: 'quiz-opt', onclick: () => answer(item, i) }, el('b', {}, 'ABC'[i]), opt)));
     }
   }
   if (!open && !box.hidden) box.hidden = true;
-  if (time < q.from - 0.5 && item.answered) {
-    // Looping back: allow seeing the options again, but keep the first answer.
-    $$('.quiz-opt', box).forEach((b) => b.disabled = true);
-  }
 }
-
 function answer(item, i) {
   if (item.answered) return;
   item.answered = true;
@@ -427,159 +560,288 @@ function answer(item, i) {
   sendEvent(item.data.id, 'quiz_answer', { correct });
 }
 
-// ---------------------------------------------------------------- activation & paging
+// ---------------------------------------------------------------------------- why sheet
+function openWhy(item) {
+  const d = item.data, w = d.why || {};
+  const reasons = [];
+  if (w.explored) reasons.push(['🧭', 'Something a little different. A small share of your feed explores, so it never gets stale.']);
+  if (w.kind === 'course' && w.progress >= 0.7) reasons.push(['📚', d.position ? `Next up in your syllabus: unit ${d.position.index} of ${d.position.total}.` : 'Next up in your syllabus.']);
+  else if (w.kind === 'course') reasons.push(['📚', 'Part of your course.']);
+  if (w.kind === 'interest') reasons.push(['✨', `From your interests: ${d.topic.label}.`]);
+  if (w.review > 0) reasons.push(['🔁', 'Due for review. Spaced repetition brings units back after 1, 3, 7 and 21 days, and sooner when a quiz goes wrong.']);
+  if (w.affinity >= 0.6) reasons.push(['❤️', "You've been finishing and liking lessons like this."]);
+  const p = me?.profile || {};
+  const lvl = cfg.levels.find((l) => l.id === p.level);
+  if (lvl) reasons.push(['🎓', `Pitched at ${lvl.label}${p.exam ? `, in ${p.exam} terms` : ''}.`]);
+  if (!reasons.length) reasons.push(['🎯', 'Picked for you from your course and interests.']);
+  openSheet("Why you're seeing this", el('ul', { class: 'why-list' }, ...reasons.map(([icon, text]) => el('li', {}, el('span', {}, icon), el('span', {}, text)))));
+}
+function openSheet(title, body) {
+  $('#sheet-title').textContent = title;
+  $('#sheet-body').replaceChildren(body);
+  $('#sheet').hidden = false;
+  feed.items[feed.active]?.player?.pause();
+}
+function closeSheet() {
+  $('#sheet').hidden = true;
+  if (view === 'feed' && !feed.paused) feed.items[feed.active]?.player?.play();
+}
+
+// ---------------------------------------------------------------------------- activation & paging
 function activate(index) {
-  if (index === active) return;
-  const prev = items[active];
+  if (index === feed.active) return;
+  const prev = feed.items[feed.active];
   if (prev) {
     if (!prev.completed && prev.watched < SKIP_SEC && prev.data.status === 'ready') sendEvent(prev.data.id, 'skip');
     if (prev.watched > 0) sendEvent(prev.data.id, 'leave', { watchedSec: Math.round(prev.watched) });
-    setPaused(prev, false);
+    prev.el.dataset.paused = 'false';
   }
-  active = index;
-  userPaused = false;
-  const item = items[index];
-  item.watched = 0;
-  item.lastTime = 0;
-  item.completed = false;
-  if (item.player?.loaded) item.player.seek(0);
+  feed.active = index;
+  feed.paused = false;
+  const item = feed.items[index];
+  if (item) {
+    item.watched = 0; item.lastTime = 0; item.completed = false;
+    if (item.player?.loaded) item.player.seek(0);
+    if (view === 'feed') history.replaceState(null, '', `#v=${item.data.id}`);
+    clearTimeout(activate.viewTimer);
+    activate.viewTimer = setTimeout(() => {
+      if (feed.items[feed.active] === item && !item.viewSent && item.data.status === 'ready') { item.viewSent = true; sendEvent(item.data.id, 'view'); }
+    }, 1000);
+    if (index > 0) { $('#swipe-hint').hidden = true; store.set('st_swiped', '1'); }
+  }
+  preferReady();
   syncPlayers();
-  history.replaceState(null, '', `#v=${item.data.id}`);
-
-  clearTimeout(activate.viewTimer);
-  activate.viewTimer = setTimeout(() => {
-    if (items[active] === item && !item.viewSent && item.data.status === 'ready') { item.viewSent = true; sendEvent(item.data.id, 'view'); }
-  }, 1000);
-
-  if (items.length - 1 - index <= LOAD_MORE_AT) loadMore();
 }
 
 async function loadMore(count = 3) {
-  if (loadingMore) return;
-  loadingMore = true;
+  if (feed.loading) return;
+  feed.loading = true;
   try {
-    const { items: next } = await api('GET', `/api/feed?count=${count}`);
-    next.filter((d) => !items.some((it) => it.data.id === d.id)).forEach((d) => addSlide(d));
+    const before = feed.items.length;
+    const wasOnEnd = feed.active === before;
+    const { items } = await api('GET', `/api/feed?count=${count}`);
+    items.filter((d) => !feed.items.some((it) => it.data.id === d.id)).forEach((d) => addSlide(d));
+    if (wasOnEnd && feed.items.length > before) { feed.active = -1; activate(before); }
+    layout(false);
+    preferReady();
     syncPlayers();
   } catch (err) {
-    if (err.status === 401) return;
-    toast('Could not load more videos. Retrying…');
-    setTimeout(() => loadMore(count), 4000);
+    if (err.status !== 401) { toast("Couldn't load more lessons. Retrying…"); setTimeout(() => loadMore(count), 4000); }
   } finally {
-    loadingMore = false;
+    feed.loading = false;
   }
-}
-
-const observer = new IntersectionObserver((entries) => {
-  for (const e of entries) if (e.isIntersecting && e.intersectionRatio >= 0.6) activate(Number(e.target.dataset.index));
-}, { root: null, threshold: [0.6] });
-
-function scrollToIndex(i, smooth = true) {
-  const node = items[i]?.el;
-  if (node) node.scrollIntoView({ behavior: smooth ? 'smooth' : 'auto', block: 'start' });
 }
 
 /** Opens a specific video (from the Library or a shared link) right after the current one. */
 async function openVideo(id) {
-  const existing = items.findIndex((it) => it.data.id === id);
-  if (existing >= 0) { showView('feed'); scrollToIndex(existing); return; }
+  const existing = feed.items.findIndex((it) => it.data.id === id);
+  showView('feed');
+  if (existing >= 0) { goTo(existing); return; }
   try {
     const { item } = await api('GET', `/api/videos/${id}`);
-    const at = active < 0 ? 0 : active + 1;
+    const at = feed.active < 0 ? 0 : feed.active + 1;
     addSlide(item, { at });
-    showView('feed');
-    requestAnimationFrame(() => scrollToIndex(at, active >= 0));
+    layout(false);
+    goTo(at);
   } catch {
     toast('That video is no longer available.');
   }
 }
 
-// ================================================================= library
+// ============================================================================ library
 async function showLibrary() {
   const lib = await api('GET', '/api/library');
-  const p = lib.profile || {};
-  const level = cfg.levels.find((l) => l.id === p.level);
-  $('#lib-profile').replaceChildren(
-    el('div', {}, el('strong', {}, [p.program, p.institution].filter(Boolean).join(' · ') || 'Exploring interests'),
-      el('p', { class: 'muted' }, [level?.label, p.country, p.exam && `Preparing for ${p.exam}`].filter(Boolean).join(' · '))),
-    ...lib.programs.map((pr) => el('p', { class: 'muted small' }, `${pr.name}: ${pr.basis || ''}`)),
-    el('button', { type: 'button', class: 'ghost small', onclick: editProfile }, 'Edit'),
-  );
-  $('#lib-units').replaceChildren(...(lib.units.length ? lib.units.map((u) => el('div', { class: 'unit-row' },
-    el('div', { class: 'unit-name' }, u.title, u.dueForReview ? el('span', { class: 'due' }, 'review due') : null),
-    el('div', { class: 'meter', role: 'meter', 'aria-valuemin': '0', 'aria-valuemax': '100', 'aria-valuenow': String(Math.round(u.mastery * 100)), 'aria-label': `${u.title} mastery` },
-      el('i', { style: `width:${Math.round(u.mastery * 100)}%` })),
-    el('span', { class: 'muted small' }, `${Math.round(u.mastery * 100)}%`),
-  )) : [el('p', { class: 'muted' }, 'No course units yet. Use Edit to add your course or subjects.')]));
+  const byProgram = new Map();
+  for (const u of lib.units) {
+    const key = u.programKey || 'course';
+    if (!byProgram.has(key)) byProgram.set(key, []);
+    byProgram.get(key).push(u);
+  }
+  const course = $('#lib-course');
+  course.replaceChildren();
+  if (!lib.units.length) {
+    course.append(el('div', { class: 'empty' }, el('b', {}, 'No course yet'), 'Add your course or subjects in Profile, and your feed will follow your syllabus.'));
+  }
+  for (const [key, units] of byProgram) {
+    const program = lib.programs.find((p) => p.key === key);
+    const pct = Math.round((units.reduce((s, u) => s + u.mastery, 0) / units.length) * 100);
+    const ring = el('div', { class: 'ring' }, el('span', {}, `${pct}%`));
+    ring.style.setProperty('--p', String(pct));
+    course.append(el('div', { class: 'course-card' },
+      el('div', { class: 'course-head' }, ring, el('div', {}, el('h3', {}, program?.name || 'Your course'), el('p', {}, program?.basis || `${units.length} units`))),
+      ...units.map((u) => el('div', { class: 'unit-row' },
+        el('div', { class: 'unit-name' }, u.title, u.dueForReview ? el('span', { class: 'due' }, 'Review due') : null),
+        el('div', { class: 'meter', role: 'meter', 'aria-valuemin': '0', 'aria-valuemax': '100', 'aria-valuenow': String(Math.round(u.mastery * 100)), 'aria-label': `${u.title} mastery` },
+          el('i', { style: `width:${Math.round(u.mastery * 100)}%` })),
+        el('span', { class: 'pct' }, `${Math.round(u.mastery * 100)}%`)))));
+  }
+  if (lib.interests?.length) {
+    course.append(el('div', { class: 'card' }, el('h3', {}, 'Also following'),
+      el('div', { class: 'chips' }, ...lib.interests.map((t) => { const topic = cfg.topics.find((x) => x.id === t); return topic ? el('span', { class: 'chip-btn' }, `${topic.emoji} ${topic.label}`) : null; }))));
+  }
   const card = (v) => el('button', { type: 'button', class: 'vcard', onclick: () => openVideo(v.id) },
-    v.poster ? el('img', { src: v.poster, alt: '', loading: 'lazy' }) : el('div', { class: 'ph' }),
-    el('span', {}, v.title || 'Untitled'), el('small', {}, v.unit || ''));
-  $('#lib-saved').replaceChildren(...(lib.saved.length ? lib.saved.map(card) : [el('p', { class: 'muted' }, 'Tap the bookmark on any video to save it for revision.')]));
-  $('#lib-history').replaceChildren(...(lib.history.length ? lib.history.slice(0, 24).map(card) : [el('p', { class: 'muted' }, 'Nothing watched yet.')]));
+    v.poster ? el('img', { src: v.poster, alt: '', loading: 'lazy' }) : el('div', { class: 'ph' }), el('span', {}, v.title || 'Untitled'), el('small', {}, v.unit || ''));
+  $('#lib-saved').replaceChildren(...(lib.saved.length ? lib.saved.map(card) : [el('div', { class: 'empty' }, el('b', {}, 'Nothing saved yet'), 'Tap the bookmark on any lesson to keep it here for revision.')]));
+  $('#lib-history').replaceChildren(...(lib.history.length ? lib.history.slice(0, 30).map(card) : [el('div', { class: 'empty' }, el('b', {}, 'No history yet'), 'Lessons you watch show up here.')]));
 }
 
+// ============================================================================ profile
+function renderProfile() {
+  const p = me?.profile || {};
+  const lvl = cfg.levels.find((l) => l.id === p.level);
+  $('#profile-card').replaceChildren(
+    el('div', { class: 'avatar', 'aria-hidden': 'true' }, (me?.vidmoat?.name || 'S').trim().charAt(0).toUpperCase()),
+    el('div', {}, el('h3', {}, me?.vidmoat?.name || 'Guest learner'), el('p', {}, [lvl?.label, p.institution].filter(Boolean).join(' · ') || 'Exploring'),
+      me?.vidmoat ? el('span', { class: 'badge' }, '✓ Synced with Vidmoat') : null),
+  );
+
+  const account = $('#account-card');
+  if (me?.vidmoat) {
+    account.replaceChildren(el('h3', {}, 'Vidmoat account'),
+      el('p', { class: 'muted' }, `Signed in as ${me.vidmoat.email || me.vidmoat.name}. Your course, progress and library follow you to any device where you sign in.`),
+      el('ul', { class: 'reassure' }, el('li', {}, 'StudyTok never uses your Vidmoat credits'), el('li', {}, 'We only read your name and email')),
+      el('button', { type: 'button', class: 'btn ghost', onclick: signOut }, 'Sign out on this device'));
+  } else {
+    account.replaceChildren(el('h3', {}, 'Keep your progress everywhere'),
+      el('p', { class: 'muted' }, 'Sign in with your Vidmoat account to save your course, progress and library, and pick up on any device.'),
+      el('ul', { class: 'reassure' },
+        el('li', {}, 'We only read your name and email'),
+        el('li', {}, 'StudyTok never uses your Vidmoat credits'),
+        el('li', {}, 'Disconnect any time from your Vidmoat settings')),
+      cfg.vidmoatSignIn
+        ? el('a', { class: 'btn vidmoat', href: '/api/auth/vidmoat/start' }, el('span', { class: 'vm-logo', 'aria-hidden': 'true' }, 'V'), 'Sign in with Vidmoat')
+        : el('p', { class: 'fine' }, 'Sign-in is not configured on this server yet.'));
+  }
+
+  const install = $('#install-card');
+  const standalone = matchMedia('(display-mode: standalone)').matches || navigator.standalone;
+  const ios = /iphone|ipad|ipod/i.test(navigator.userAgent);
+  install.hidden = Boolean(standalone) || (!installPrompt && !ios);
+  if (!install.hidden) {
+    install.replaceChildren(...[el('h3', {}, 'Install StudyTok'),
+      el('p', { class: 'muted' }, installPrompt ? 'Add StudyTok to your home screen: it opens full screen, like an app.' : 'On iPhone or iPad: tap the Share button in Safari, then "Add to Home Screen".'),
+      installPrompt ? el('button', { type: 'button', class: 'btn primary', onclick: doInstall }, 'Install app') : null].filter(Boolean));
+  }
+
+  $('#studies-summary').replaceChildren(el('p', {}, [p.program, p.institution, p.country].filter(Boolean).join(' · ') || 'No course set'),
+    el('p', {}, [lvl?.label, p.exam && `Preparing for ${p.exam}`].filter(Boolean).join(' · ')));
+}
+async function signOut() {
+  await api('POST', '/api/auth/signout').catch(() => {});
+  location.replace('/');
+}
+async function doInstall() {
+  if (!installPrompt) return;
+  installPrompt.prompt();
+  const { outcome } = await installPrompt.userChoice.catch(() => ({}));
+  installPrompt = null;
+  if (outcome === 'accepted') toast('Installed! Find StudyTok on your home screen.');
+  renderProfile();
+}
+
+// ============================================================================ views
 function showView(next) {
   view = next;
-  $$('.tab').forEach((t) => t.setAttribute('aria-current', t.dataset.view === next ? 'page' : 'false'));
-  $('#feed').hidden = next !== 'feed';
-  $('#library').hidden = next !== 'library';
-  if (next === 'library') { items[active]?.player?.pause(); showLibrary().catch(() => toast('Could not load your library.')); }
-  else syncPlayers();
+  $$('.view').forEach((v) => { v.hidden = v.dataset.view !== next; });
+  $$('.tabbtn').forEach((t) => t.setAttribute('aria-current', t.dataset.tab === next ? 'page' : 'false'));
+  if (next === 'feed') {
+    layout(false);
+    syncPlayers();
+    const item = feed.items[feed.active];
+    history.replaceState(null, '', item ? `#v=${item.data.id}` : location.pathname);
+  } else {
+    feed.items[feed.active]?.player?.pause();
+    history.replaceState(null, '', `#${next}`);
+    if (next === 'library') showLibrary().catch(() => toast("Couldn't load your library."));
+    if (next === 'profile') renderProfile();
+  }
 }
 
-async function editProfile() {
-  items[active]?.player?.pause();
+async function editStudies() {
+  feed.items[feed.active]?.player?.pause();
   const user = await api('GET', '/api/me').then((r) => r.user, (err) => { if (err.status === 401) sessionLost(); throw err; });
   await runOnboarding(user);
-  toast('Saved. New videos will follow your updated course.');
-  // Start a fresh feed that reflects the new choices.
-  items.splice(0).forEach((it) => { it.player?.destroy(); it.el.remove(); });
-  active = -1;
+  toast('Saved. New lessons will follow your updated course.');
+  feed.items.splice(0).forEach((it) => { it.player?.destroy(); it.el.remove(); });
+  feed.active = -1;
   showView('feed');
   await loadMore(3);
+  goTo(0, { animate: false });
 }
 
-// ================================================================= boot
-function wireGlobal() {
-  document.addEventListener('keydown', (e) => {
-    if ($('#app').hidden || view !== 'feed' || e.target.closest('input, textarea')) return;
-    if (e.key === 'ArrowDown' || e.key === 'j') { e.preventDefault(); scrollToIndex(active + 1); }
-    if (e.key === 'ArrowUp' || e.key === 'k') { e.preventDefault(); scrollToIndex(Math.max(0, active - 1)); }
-    if (e.key === ' ') { e.preventDefault(); if (items[active]) togglePause(items[active]); }
+function wireChrome() {
+  $$('.tabbtn').forEach((t) => { t.onclick = () => showView(t.dataset.tab); });
+  $$('.segmented [data-seg]').forEach((b) => {
+    b.onclick = () => {
+      $$('.segmented [data-seg]').forEach((x) => x.setAttribute('aria-selected', String(x === b)));
+      $$('.seg-panel').forEach((p) => { p.hidden = p.dataset.panel !== b.dataset.seg; });
+    };
   });
+  $('#edit-studies').onclick = editStudies;
+  $$('#sheet [data-close]').forEach((b) => { b.onclick = closeSheet; });
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !$('#sheet').hidden) closeSheet(); });
+  $$('[data-signin]').forEach((b) => { b.onclick = () => { location.href = '/api/auth/vidmoat/start'; }; });
   document.addEventListener('visibilitychange', () => {
-    const item = items[active];
+    const item = feed.items[feed.active];
     if (!item?.player) return;
-    if (document.hidden) item.player.pause(); else if (!userPaused && view === 'feed') item.player.play();
+    if (document.hidden) item.player.pause(); else if (!feed.paused && view === 'feed') item.player.play();
   });
-  $$('.tab').forEach((t) => { t.onclick = () => showView(t.dataset.view); });
-  $('#edit-profile').onclick = editProfile;
+}
+
+// ============================================================================ boot
+function authNotice() {
+  const auth = new URLSearchParams(location.search).get('auth');
+  if (!auth) return null;
+  history.replaceState(null, '', `/${location.hash || ''}`);
+  return {
+    linked: 'Signed in with Vidmoat. Your progress now follows you.',
+    restored: 'Welcome back! Your course and progress are restored.',
+    cancelled: 'Sign-in cancelled.',
+    error: "Sign-in didn't work. Please try again.",
+    unavailable: 'Sign-in is not configured on this server yet.',
+  }[auth] || null;
 }
 
 async function boot() {
+  if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(() => {});
+  window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); installPrompt = e; if (view === 'profile') renderProfile(); });
+
   cfg = await api('GET', '/api/config');
-  wireGlobal();
-  const linked = /#v=([0-9a-f-]{36})/.exec(location.hash)?.[1];
+  wireChrome();
+  wireGestures();
+  const notice = authNotice();
+  const hash = location.hash;
+  const linked = /#v=([0-9a-f-]{36})/.exec(hash)?.[1];
 
   let onboarded = false;
   try {
-    await api('GET', '/api/me');
+    me = (await api('GET', '/api/me')).user;
   } catch (err) {
     if (err.status !== 401) throw err;
-    await runOnboarding();
+  }
+  if (!me || !me.setupDone) {
+    await runOnboarding(me);
     onboarded = true;
   }
   $('#onboard').hidden = true;
   $('#app').hidden = false;
+  if (notice) toast(notice);
 
-  // Browsers allow sound only after a tap on the page; onboarding already gave us one.
-  if (!onboarded) {
+  // Browsers allow sound only after a tap on the page; onboarding (or sign-in) already gave one.
+  if (!onboarded && !notice) {
     $('#sound-gate').hidden = false;
     await new Promise((r) => { $('#sound-go').onclick = r; });
     $('#sound-gate').hidden = true;
   }
+  ensureEndSlide();
+  if (hash === '#library' || hash === '#profile') showView(hash.slice(1)); else showView('feed');
   if (linked) await openVideo(linked);
   await loadMore(3);
+  if (feed.active < 0 && feed.items.length) goTo(0, { animate: false });
+  if (!store.get('st_swiped')) {
+    $('#swipe-hint').hidden = false;
+    setTimeout(() => { $('#swipe-hint').hidden = true; }, 6000);
+  }
 }
 
 boot().catch((err) => {

@@ -18,7 +18,7 @@ async function serveStatic(req, res, url) {
   if (!file.startsWith(PUBLIC)) return send(res, 403, 'Forbidden');
   try {
     const data = await readFile(file);
-    send(res, 200, data, { 'Content-Type': TYPES[extname(file)] || 'application/octet-stream', 'Cache-Control': 'no-cache' });
+    send(res, 200, data, { 'Content-Type': TYPES[extname(file)] || 'application/octet-stream', 'Cache-Control': 'no-cache', ...(path === '/sw.js' ? { 'Service-Worker-Allowed': '/' } : {}) });
   } catch {
     send(res, 404, 'Not found', { 'Content-Type': 'text/plain' });
   }
