@@ -1,8 +1,8 @@
 // A small sound-effects kit from Vidmoat's stock audio (Freesound, CC0 only: no attribution
 // needed). Each effect is searched and imported once, then cached for every future video.
 
-import { kv } from './kv.js';
-import { searchStock, importMedia } from './vidmoat.js';
+import { kv } from '../core/kv.js';
+import { searchStock, importMedia } from '../core/vidmoat.js';
 
 const KIT = {
   whoosh: { query: 'swoosh', prefer: /swoosh-3|short soft|digital swoosh/i, min: 0.3, max: 2 },

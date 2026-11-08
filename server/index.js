@@ -4,8 +4,8 @@
 import { createServer } from 'node:http';
 import { readFile } from 'node:fs/promises';
 import { extname, join, normalize } from 'node:path';
-import { config } from './config.js';
-import { usingRedis, flushKv } from './kv.js';
+import { config } from './core/config.js';
+import { usingRedis, flushKv } from './core/kv.js';
 import { handleApi, send } from './app.js';
 
 const PUBLIC = new URL('../public/', import.meta.url).pathname;

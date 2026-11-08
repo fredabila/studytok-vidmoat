@@ -2,9 +2,9 @@
 // the account (so clip srcs are Vidmoat-hosted, browser-accessible URLs the embed player can load)
 // and caches every import by source URL so the same stock file is never imported twice.
 
-import { searchStock, importMedia } from './vidmoat.js';
-import { getMedia, setMedia } from './db.js';
-import { kv } from './kv.js';
+import { searchStock, importMedia } from '../core/vidmoat.js';
+import { getMedia, setMedia } from '../core/db.js';
+import { kv } from '../core/kv.js';
 
 const searchCache = new Map(); // `${type}:${query}` -> results (in-memory, per instance)
 

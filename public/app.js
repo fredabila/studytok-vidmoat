@@ -7,6 +7,7 @@
 //  - PWA: service worker + install prompt.
 
 import { VidmoatPlayer } from './player.js';
+import { track, flush, WatchTracker } from './telemetry.js';
 
 const $ = (s, el = document) => el.querySelector(s);
 const $$ = (s, el = document) => [...el.querySelectorAll(s)];
@@ -53,7 +54,8 @@ function sessionLost() {
   toast('Your session expired. Please sign in again.');
   setTimeout(() => location.replace('/'), 1200);
 }
-const sendEvent = (videoId, type, extra = {}) => api('POST', '/api/events', { videoId, type, ...extra }).catch(() => {});
+const sendEvent = (videoId, type, extra = {}) => track(type, { videoId, ...extra });
+let nthVideo = 0; // videos viewed this page load
 function el(tag, attrs = {}, ...children) {
   const node = document.createElement(tag);
   for (const [k, v] of Object.entries(attrs)) {
@@ -390,17 +392,18 @@ function wireGestures() {
 // ============================================================================ feed: slides
 function addSlide(data, { at } = {}) {
   const node = $('#slide-tpl').content.firstElementChild.cloneNode(true);
-  const item = { data, el: node, player: null, polling: false, viewSent: false, completed: false, watched: 0, lastTime: 0, answered: false };
+  const item = { data, el: node, player: null, polling: false, viewSent: false, completed: false, watched: 0, lastTime: 0, answered: false, watch: null, shownAt: 0 };
   ensureEndSlide();
+  track('impression', { videoId: data.id, slot: at ?? feed.items.length, nth: nthVideo, status: data.status, format: data.format?.id });
   if (at == null || at >= feed.items.length) { feed.items.push(item); trackEl().insertBefore(node, feed.endEl); }
   else { feed.items.splice(at, 0, item); trackEl().insertBefore(node, feed.items[at + 1].el); }
   renderSlide(item);
   $('.like', node).onclick = () => toggleFlag(item, 'liked', 'like', 'unlike');
   $('.save', node).onclick = () => toggleFlag(item, 'saved', 'save', 'unsave');
-  $('.why', node).onclick = () => openWhy(item);
-  $('.tune', node).onclick = () => openTune();
+  $('.why', node).onclick = () => { sendEvent(item.data.id, 'why_open'); openWhy(item); };
+  $('.tune', node).onclick = () => { track('tune_open'); openTune(); };
   $('.less', node).onclick = () => {
-    sendEvent(item.data.id, 'less');
+    sendEvent(item.data.id, 'less', { t: +(item.watch?.lastT || 0).toFixed(1) });
     toast(`Got it: less of ${item.data.unit?.title || item.data.topic.label}`);
     if (feed.items[feed.active] === item) go(1);
   };
@@ -453,6 +456,7 @@ async function poll(item) {
     } catch { /* transient: keep polling */ }
   }
   item.polling = false;
+  if (feed.items[feed.active] === item && item.shownAt) track('gen_wait', { videoId: item.data.id, ms: Date.now() - item.shownAt, outcome: item.data.status === 'ready' ? 'ready' : 'failed' });
   preferReady();
   syncPlayers();
 }
@@ -481,7 +485,7 @@ function mountPlayer(item) {
       if (feed.items[feed.active] === item && !feed.paused && view === 'feed') item.player.play();
     },
     onState: ({ time, playing }) => onState(item, time, playing, duration),
-    onError: (msg) => { item.el.dataset.status = 'failed'; $('.making-hook', item.el).textContent = msg; },
+    onError: (msg) => { item.el.dataset.status = 'failed'; $('.making-hook', item.el).textContent = msg; sendEvent(item.data.id, 'player_error', { msg: String(msg).slice(0, 80) }); },
   });
   item.player.load(item.data.document, 0);
 }
@@ -502,6 +506,10 @@ function onState(item, time, playing, duration) {
   const isActive = feed.items[feed.active] === item;
   if (playing && isActive && time > item.lastTime) item.watched += Math.min(time - item.lastTime, 0.5);
   item.lastTime = time;
+  if (isActive) {
+    item.watch ||= new WatchTracker(item.data.id, { duration, scenes: item.data.scenes || [] });
+    item.watch.tick(time, playing);
+  }
   $('.bar', item.el).style.transform = `scaleX(${duration ? Math.min(1, time / duration) : 0})`;
   updateQuiz(item, time);
   // Hold at the end of the question until the viewer answers (or skips): the answer is never
@@ -509,6 +517,9 @@ function onState(item, time, playing, duration) {
   const q = item.data.quiz;
   if (q?.hold != null && isActive && !item.answered && !item.held && time >= q.hold && time < q.reveal) {
     item.held = true;
+    item.heldAt = Date.now();
+    if (item.watch) item.watch.pauseBy = 'quiz';
+    sendEvent(item.data.id, 'quiz_hold', { t: +time.toFixed(1) });
     item.player.pause();
     item.player.seek(q.hold);
     $('.quiz', item.el).dataset.held = 'true';
@@ -527,6 +538,7 @@ function togglePause() {
   const item = feed.items[feed.active];
   if (!item?.player) return;
   feed.paused = !feed.paused;
+  if (item.watch && feed.paused) item.watch.pauseBy = 'tap';
   feed.paused ? item.player.pause() : item.player.play();
   item.el.dataset.paused = String(feed.paused);
 }
@@ -539,16 +551,16 @@ function doubleTapLike(e) {
   burst.style.left = `${e.clientX - stage.left}px`;
   burst.style.top = `${e.clientY - stage.top}px`;
   burst.classList.remove('go'); void burst.offsetWidth; burst.classList.add('go');
-  if (!item.data.liked) toggleFlag(item, 'liked', 'like', 'unlike');
+  if (!item.data.liked) toggleFlag(item, 'liked', 'like', 'unlike', 'double-tap');
 }
 
-function toggleFlag(item, field, onType, offType) {
+function toggleFlag(item, field, onType, offType, by = 'button') {
   if (!item) return;
   const on = !item.data[field];
   item.data[field] = on;
   if (field === 'liked') item.data.likes = Math.max(0, (item.data.likes || 0) + (on ? 1 : -1));
   renderSlide(item);
-  sendEvent(item.data.id, on ? onType : offType);
+  sendEvent(item.data.id, on ? onType : offType, on ? { t: +(item.watch?.lastT || 0).toFixed(1), by } : {});
   if (field === 'saved' && on) toast('Saved to your Library for revision');
 }
 
@@ -561,10 +573,11 @@ function updateQuiz(item, time) {
   if (open && box.hidden) {
     box.hidden = false;
     box.dataset.held = 'false';
+    if (!item.quizShownAt) { item.quizShownAt = Date.now(); sendEvent(item.data.id, 'quiz_shown', { t: +time.toFixed(1) }); }
     if (!$('.quiz-options', box).childElementCount) {
       $('.quiz-options', box).replaceChildren(...q.options.map((opt, i) =>
         el('button', { type: 'button', class: 'quiz-opt', onclick: () => answer(item, i) }, el('b', {}, 'ABC'[i]), opt)));
-      $('.quiz-skip', box).onclick = () => release(item);
+      $('.quiz-skip', box).onclick = () => { sendEvent(item.data.id, 'quiz_skip', { ms: Date.now() - (item.heldAt || item.quizShownAt || Date.now()) }); release(item); };
     }
   }
   if (!open && !box.hidden) box.hidden = true;
@@ -590,7 +603,7 @@ function answer(item, i) {
     b.classList.toggle('wrong', k === i && !correct);
   });
   $('.quiz-feedback', box).textContent = correct ? 'Correct! 🎉' : `Not quite: it's ${'ABC'[q.answerIndex]}. We'll bring this back for review.`;
-  sendEvent(item.data.id, 'quiz_answer', { correct });
+  sendEvent(item.data.id, 'quiz_answer', { correct, choice: i, ms: Date.now() - (item.heldAt || item.quizShownAt || Date.now()) });
   setTimeout(() => release(item), 700);
 }
 
@@ -605,6 +618,14 @@ function openWhy(item) {
   if (w.kind === 'interest') reasons.push(['✨', `From your interests: ${d.topic.label}.`]);
   if (w.review > 0) reasons.push(['🔁', 'Due for review. Spaced repetition brings units back after 1, 3, 7 and 21 days, and sooner when a quiz goes wrong.']);
   if (w.affinity >= 0.6) reasons.push(['❤️', "You've been finishing and liking lessons like this."]);
+  const v = w.video || {};
+  if (v.formatAffinity >= 0.6) reasons.push(['🎬', `You tend to watch ${d.format?.name || 'this kind of'} videos through, so this one is a ${d.format?.name || 'match'}.`]);
+  else if (v.diversity < 1) reasons.push(['🎬', `A ${d.format?.name || 'different'} video, to change the pace from the last one.`]);
+  else if (d.format?.name) reasons.push(['🎬', `Format: ${d.format.name}. The feed rotates formats so it never feels the same.`]);
+  if (v.quality >= 0.6) reasons.push(['⭐', 'Other students watched this one to the end.']);
+  if (v.fatigue > 1.05) reasons.push(['☕', "You've watched a lot this session, so here is something lighter."]);
+  if (v.difficulty < 1) reasons.push(['🧩', 'A gentler format after a couple of tricky questions.']);
+  else if (v.difficulty > 1) reasons.push(['🏋️', "You're on a streak, so this one pushes a little harder."]);
   const p = me?.profile || {};
   const lvl = cfg.levels.find((l) => l.id === p.level);
   if (lvl) reasons.push(['🎓', `Pitched at ${lvl.label}${p.exam ? `, in ${p.exam} terms` : ''}.`]);
@@ -631,9 +652,10 @@ async function closeSheet() {
 function activate(index) {
   if (index === feed.active) return;
   const prev = feed.items[feed.active];
+  const dir = index > feed.active ? 'next' : 'prev';
   if (prev) {
-    if (!prev.completed && prev.watched < SKIP_SEC && prev.data.status === 'ready') sendEvent(prev.data.id, 'skip');
-    if (prev.watched > 0) sendEvent(prev.data.id, 'leave', { watchedSec: Math.round(prev.watched) });
+    if (prev.watch) prev.watch.leave(dir); else if (prev.data.status === 'generating' && prev.shownAt) track('gen_wait', { videoId: prev.data.id, ms: Date.now() - prev.shownAt, outcome: 'gave_up' });
+    prev.watch = null;
     prev.el.dataset.paused = 'false';
   }
   feed.active = index;
@@ -641,11 +663,13 @@ function activate(index) {
   const item = feed.items[index];
   if (item) {
     item.watched = 0; item.lastTime = 0; item.completed = false;
+    item.shownAt = Date.now();
+    if (dir === 'prev' && item.viewSent) sendEvent(item.data.id, 'rewatch');
     if (item.player?.loaded) item.player.seek(0);
     if (view === 'feed') history.replaceState(null, '', `#v=${item.data.id}`);
     clearTimeout(activate.viewTimer);
     activate.viewTimer = setTimeout(() => {
-      if (feed.items[feed.active] === item && !item.viewSent && item.data.status === 'ready') { item.viewSent = true; sendEvent(item.data.id, 'view'); }
+      if (feed.items[feed.active] === item && !item.viewSent && item.data.status === 'ready') { item.viewSent = true; nthVideo++; sendEvent(item.data.id, 'view', { nth: nthVideo, format: item.data.format?.id, source: item.source || 'feed' }); }
     }, 1000);
     if (index > 0) { $('#swipe-hint').hidden = true; store.set('st_swiped', '1'); }
   }
@@ -659,7 +683,10 @@ async function loadMore(count = 3) {
   try {
     const before = feed.items.length;
     const wasOnEnd = feed.active === before;
+    if (wasOnEnd && before > 0) track('end_reached');
+    const t0 = Date.now();
     const { items } = await api('GET', `/api/feed?count=${count}`);
+    track('load_more', { count: items.length, ms: Date.now() - t0, ready: items.filter((d) => d.status === 'ready').length, generating: items.filter((d) => d.status === 'generating').length });
     items.filter((d) => !feed.items.some((it) => it.data.id === d.id)).forEach((d) => addSlide(d));
     if (wasOnEnd && feed.items.length > before) { feed.active = -1; activate(before); }
     layout(false);
@@ -680,7 +707,7 @@ async function openVideo(id) {
   try {
     const { item } = await api('GET', `/api/videos/${id}`);
     const at = feed.active < 0 ? 0 : feed.active + 1;
-    addSlide(item, { at });
+    addSlide(item, { at }).source = 'library';
     layout(false);
     goTo(at);
   } catch {
@@ -719,6 +746,7 @@ async function openTune() {
     b.onclick = async () => {
       interests.has(t.id) ? interests.delete(t.id) : interests.add(t.id);
       b.setAttribute('aria-pressed', String(interests.has(t.id)));
+      track('interest_toggle', { topic: t.id, on: interests.has(t.id) });
       await patchMe({ interests: [...interests] }).catch(() => toast("Couldn't save that."));
     };
     chips.append(b);
@@ -732,6 +760,7 @@ async function openTune() {
   const renderCustom = (units) => {
     customList.replaceChildren(...units.filter((u) => u.custom && u.active).map((u) => el('span', { class: 'chip-btn on' }, u.title,
       el('button', { type: 'button', class: 'chip-x', 'aria-label': `Remove ${u.title}`, onclick: async () => {
+        track('custom_remove', { unitId: u.id });
         await patchMe({ removeUnit: u.id }).catch(() => toast("Couldn't remove that."));
         renderCustom((await api('GET', '/api/library')).units);
       } }, '×'))));
@@ -745,6 +774,7 @@ async function openTune() {
     input.value = '';
     const { added } = await patchMe({ addCustom: { title } }).catch(() => ({}));
     if (!added) return toast("Couldn't add that topic.");
+    track('custom_add', { title: added.title });
     toast(`Added "${added.title}". Lessons are on their way.`);
     renderCustom((await api('GET', '/api/library')).units);
   };
@@ -755,7 +785,7 @@ async function openTune() {
   body.append(el('h4', {}, 'How lessons are made'));
   for (const [key, label, options] of PREFS) {
     const seg = el('div', { class: 'segmented small', role: 'radiogroup', 'aria-label': label });
-    const draw = () => seg.replaceChildren(...options.map(([v, text]) => el('button', { type: 'button', role: 'radio', 'aria-checked': String(prefs[key] === v), 'aria-selected': String(prefs[key] === v), onclick: () => { prefs[key] = v; draw(); } }, text)));
+    const draw = () => seg.replaceChildren(...options.map(([v, text]) => el('button', { type: 'button', role: 'radio', 'aria-checked': String(prefs[key] === v), 'aria-selected': String(prefs[key] === v), onclick: () => { prefs[key] = v; track('pref_change', { key, value: v }); draw(); } }, text)));
     draw();
     body.append(el('div', { class: 'pref-row' }, el('span', {}, label), seg));
   }
@@ -877,7 +907,7 @@ function renderProfile() {
         el('li', {}, 'StudyTok never uses your Vidmoat credits'),
         el('li', {}, 'Disconnect any time from your Vidmoat settings')),
       cfg.vidmoatSignIn
-        ? el('a', { class: 'btn vidmoat', href: '/api/auth/vidmoat/start' }, el('span', { class: 'vm-logo', 'aria-hidden': 'true' }, 'V'), 'Sign in with Vidmoat')
+        ? el('a', { class: 'btn vidmoat', href: '/api/auth/vidmoat/start' }, el('img', { class: 'vm-logo', src: 'https://www.vidmoat.com/logo-512.png', alt: '', width: '22', height: '22' }), 'Sign in with Vidmoat')
         : el('p', { class: 'fine' }, 'Sign-in is not configured on this server yet.'));
   }
 
@@ -902,6 +932,7 @@ async function doInstall() {
   if (!installPrompt) return;
   installPrompt.prompt();
   const { outcome } = await installPrompt.userChoice.catch(() => ({}));
+  track('install', { outcome: outcome || 'dismissed' });
   installPrompt = null;
   if (outcome === 'accepted') toast('Installed! Find StudyTok on your home screen.');
   renderProfile();
@@ -921,12 +952,13 @@ function showView(next) {
   } else {
     feed.items[feed.active]?.player?.pause();
     history.replaceState(null, '', `#${next}`);
-    if (next === 'library') showLibrary().catch(() => toast("Couldn't load your library."));
-    if (next === 'profile') renderProfile();
+    if (next === 'library') { track('library_open', { tab: 'course' }); showLibrary().catch(() => toast("Couldn't load your library.")); }
+    if (next === 'profile') { track('profile_open'); renderProfile(); }
   }
 }
 
 async function editStudies() {
+  track('studies_edit');
   feed.items[feed.active]?.player?.pause();
   const user = await api('GET', '/api/me').then((r) => r.user, (err) => { if (err.status === 401) sessionLost(); throw err; });
   await runOnboarding(user);
@@ -942,6 +974,7 @@ function wireChrome() {
   $$('.tabbtn').forEach((t) => { t.onclick = () => showView(t.dataset.tab); });
   $$('.segmented [data-seg]').forEach((b) => {
     b.onclick = () => {
+      track('library_open', { tab: b.dataset.seg });
       $$('.segmented [data-seg]').forEach((x) => x.setAttribute('aria-selected', String(x === b)));
       $$('.seg-panel').forEach((p) => { p.hidden = p.dataset.panel !== b.dataset.seg; });
     };
@@ -950,7 +983,7 @@ function wireChrome() {
   $('#open-tune').onclick = openTune;
   $$('#sheet [data-close]').forEach((b) => { b.onclick = closeSheet; });
   document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !$('#sheet').hidden) closeSheet(); });
-  $$('[data-signin]').forEach((b) => { b.onclick = () => { location.href = '/api/auth/vidmoat/start'; }; });
+  $$('[data-signin]').forEach((b) => { b.onclick = () => { track('signin_click', { where: 'onboarding' }); flush(true); location.href = '/api/auth/vidmoat/start'; }; });
   document.addEventListener('visibilitychange', () => {
     const item = feed.items[feed.active];
     if (!item?.player) return;
@@ -1048,6 +1081,7 @@ async function boot() {
     $('#sound-gate').hidden = true;
   }
   ensureEndSlide();
+  track('session_start', { source: matchMedia('(display-mode: standalone)').matches || navigator.standalone ? 'app' : 'browser', entry: linked ? 'link' : hash ? hash.slice(1, 12) : 'feed' });
   if (hash === '#library' || hash === '#profile') showView(hash.slice(1)); else showView('feed');
   if (linked) await openVideo(linked);
   await loadMore(3);

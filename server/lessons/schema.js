@@ -1,5 +1,5 @@
 import * as z from 'zod/v4';
-import { FORMAT_IDS } from '../formats.js';
+import { FORMAT_IDS } from '../video/formats.js';
 
 // What a StudyTok video is made of. One schema for every format: a lesson carries `format`,
 // and only the fields that format uses are filled (the rest are empty strings/arrays).

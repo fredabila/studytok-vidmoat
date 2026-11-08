@@ -7,8 +7,8 @@
 // fresh subtopic each episode.
 
 import { createHash } from 'node:crypto';
-import { config } from './config.js';
-import { kv } from './kv.js';
+import { config } from '../core/config.js';
+import { kv } from '../core/kv.js';
 import { CATALOG, matchProgram, normalize } from './catalog.js';
 import { TOPIC_BY_ID, guessTopic } from './topics.js';
 import { researchProgram } from './research.js';

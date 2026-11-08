@@ -189,10 +189,10 @@ export const scenesFor = (lesson) => format(lesson.format).scenes(lesson);
  * Picks `count` distinct formats for a unit's next batch of episodes: weighted by topic, with
  * the formats a student saw most recently (or the unit already has) pushed down.
  */
-export function pickFormats(topic, count = 3, { recent = [], rand = Math.random, allowed = FORMAT_IDS } = {}) {
+export function pickFormats(topic, count = 3, { recent = [], rand = Math.random, allowed = FORMAT_IDS, performance = {} } = {}) {
   const pool = allowed.map((id) => {
     const w = FORMATS[id].weights;
-    const base = w[topic] ?? w.default ?? 1;
+    const base = (w[topic] ?? w.default ?? 1) * (performance[id] ?? 1);
     const age = recent.lastIndexOf(id); // -1 = not recent
     const penalty = age === -1 ? 1 : age === recent.length - 1 ? 0.15 : age >= recent.length - 3 ? 0.4 : 0.7;
     return { id, weight: base * penalty * (0.6 + rand() * 0.8) };

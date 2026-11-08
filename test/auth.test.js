@@ -12,10 +12,10 @@ process.env.VIDMOAT_OAUTH_CLIENT_ID = 'client_123';
 process.env.VIDMOAT_OAUTH_CLIENT_SECRET = 'secret_456';
 for (const k of Object.keys(process.env)) if (/REST_API_URL|REDIS_REST_URL/.test(k)) delete process.env[k];
 
-const { startSignIn, finishSignIn, SCOPE, signInEnabled } = await import('../server/auth.js');
-const { saveProfile, linkVidmoat } = await import('../server/feed.js');
-const { kv } = await import('../server/kv.js');
-const db = await import('../server/db.js');
+const { startSignIn, finishSignIn, SCOPE, signInEnabled } = await import('../server/core/auth.js');
+const { saveProfile, linkVidmoat } = await import('../server/feed/index.js');
+const { kv } = await import('../server/core/kv.js');
+const db = await import('../server/core/db.js');
 
 const req = { headers: { host: 'studytok.example', 'x-forwarded-proto': 'https' } };
 
@@ -81,7 +81,7 @@ test('first sign-in links the guest profile; a new device restores it', async ()
 });
 
 test('without configured credentials, StudyTok registers its own client once and reuses it', async () => {
-  const { config } = await import('../server/config.js');
+  const { config } = await import('../server/core/config.js');
   const saved = { id: config.oauth.clientId, secret: config.oauth.clientSecret };
   config.oauth.clientId = ''; config.oauth.clientSecret = '';
   const realFetch = globalThis.fetch;
