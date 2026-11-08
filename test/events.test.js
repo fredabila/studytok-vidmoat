@@ -12,7 +12,7 @@ for (const k of Object.keys(process.env)) if (/REST_API_URL|REDIS_REST_URL/.test
 
 const { kv } = await import('../server/core/kv.js');
 const db = await import('../server/core/db.js');
-const { ingest, cleanEvent, getSignals, getSession, stats, formatPerformance, EVENT_SPECS } = await import('../server/feed/events.js');
+const { ingest, cleanEvent, getSignals, getSession, stats, formatPerformance, EVENT_SPECS, weekKey, recapOf, studentStats, streakOf } = await import('../server/feed/events.js');
 const { scoreVideo, affinity, exploreRate, videoQuality, applyEvent, emptyState } = await import('../server/feed/ranking.js');
 const { saveProfile, getProgress } = await import('../server/feed/index.js');
 
@@ -125,4 +125,35 @@ test('affinity shrinks to 0.5 without evidence; exploration decays', () => {
   assert.ok(exploreRate(8) > exploreRate(50) && exploreRate(5000) >= 0.03);
   const s = applyEvent(emptyState(), 'leave', { pct: 0.6 });
   assert.equal(s.watchN, 1); assert.equal(s.pctSum, 0.6);
+});
+
+test('weekly recap and level-ups: a unit crossing mastery is reported once and kept in the week', async () => {
+  const user = await saveProfile(null, { profile: { level: 'high-school' }, units: ['hs-biology-1'] });
+  const at = Date.UTC(2026, 10, 4, 10); // Wednesday 4 Nov 2026
+  assert.equal(weekKey(at), '2026-11-02', 'weeks start on Monday');
+  assert.equal(weekKey(Date.UTC(2026, 10, 1)), '2026-10-26', 'Sunday belongs to the previous Monday');
+  const vids = [];
+  for (let i = 0; i < 3; i++) vids.push(await video('explain'));
+  let ups = [];
+  for (const [i, v] of vids.entries()) {
+    const r = await ingest(user.id, { ctx: { sid: 'w' }, events: [
+      { type: 'view', videoId: v.id, at: at + i * 1000 },
+      { type: 'complete', videoId: v.id, at: at + i * 1000 + 100 },
+      { type: 'quiz_answer', videoId: v.id, correct: true, choice: 0, ms: 1500, at: at + i * 1000 + 200 },
+      { type: 'leave', videoId: v.id, pct: 1, watched: 40, dir: 'next', at: at + i * 1000 + 300 },
+    ] });
+    ups = ups.concat(r.levelUps);
+  }
+  assert.equal(ups.length, 1, 'exactly one level-up as mastery crosses 0.7');
+  assert.equal(ups[0].title, 'Cells');
+  const s = await getSignals(user.id);
+  const recap = recapOf(s, '2026-11-02');
+  assert.equal(recap.watched, 3); assert.equal(recap.completes, 3); assert.equal(recap.quizN, 3); assert.equal(recap.quizRight, 3); assert.equal(recap.minutes, 2);
+  assert.deepEqual(recap.mastered, ['Cells']); assert.equal(recap.topFormat, 'explain'); assert.equal(recap.days, 1);
+  assert.equal(recapOf(s, '2026-10-26'), null, 'an empty week has no recap');
+  const st = await studentStats(user.id, { watched: 3, progress: {}, now: at + 86400000 });
+  assert.equal(st.week.watched, 3); assert.equal(st.lastWeek, null);
+  const later = await studentStats(user.id, { watched: 3, progress: {}, now: at + 8 * 86400000 });
+  assert.equal(later.week, null); assert.equal(later.lastWeek.watched, 3);
+  assert.equal(streakOf(s, at + 3600000), 1);
 });

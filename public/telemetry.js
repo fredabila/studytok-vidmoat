@@ -53,6 +53,8 @@ export function flush(beacon = false) {
   }
   sending = true;
   fetch('/api/events', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body, credentials: 'same-origin', keepalive: true })
+    .then((r) => r.json().catch(() => ({})))
+    .then((d) => { if (Array.isArray(d.levelUps) && d.levelUps.length) window.dispatchEvent(new CustomEvent('studytok:levelup', { detail: d.levelUps })); })
     .catch(() => { if (events.length < 100) queue.unshift(...events); })
     .finally(() => { sending = false; if (queue.length && !timer) timer = setTimeout(flush, FLUSH_MS); });
 }

@@ -19,7 +19,7 @@
 
 import { kv } from '../core/kv.js';
 import * as db from '../core/db.js';
-import { applyEvent, emptyState } from './ranking.js';
+import { applyEvent, emptyState, mastery } from './ranking.js';
 import { audienceFor } from './index.js';
 
 // ---- Taxonomy ------------------------------------------------------------------------------------
@@ -70,6 +70,8 @@ export const EVENT_SPECS = {
   library_open: { fields: { tab: 's' } },
   profile_open: { fields: {} },
   studies_edit: { fields: {} },
+  level_up: { fields: { unitId: 's' } },
+  recap_share: { fields: { week: 's' } },
 };
 export const EVENT_TYPES = new Set(Object.keys(EVENT_SPECS));
 
@@ -104,7 +106,15 @@ const WATCH_BUCKET = (pct) => `wf${Math.min(4, Math.floor(pct * 5))}`; // wf0: <
 const hourOf = (at, tz) => { try { return Number(new Intl.DateTimeFormat('en-GB', { hour: 'numeric', hour12: false, timeZone: tz || 'UTC' }).format(new Date(at))) % 24; } catch { return new Date(at).getUTCHours(); } };
 const day = (at) => new Date(at).toISOString().slice(0, 10);
 
-export const emptySignals = () => ({ formats: {}, topics: {}, watch: { n: 0, pctSum: 0, completes: 0, early: 0 }, quiz: { n: 0, right: 0, msSum: 0, skips: 0 }, hours: Array(24).fill(0), sessions: 0, lastSeenAt: 0, prefs: {}, days: {} });
+export const emptySignals = () => ({ formats: {}, topics: {}, watch: { n: 0, pctSum: 0, completes: 0, early: 0 }, quiz: { n: 0, right: 0, msSum: 0, skips: 0 }, hours: Array(24).fill(0), sessions: 0, lastSeenAt: 0, prefs: {}, days: {}, weeks: {} });
+/** Monday of the week containing `at`, as YYYY-MM-DD (UTC): the key of a weekly recap. */
+export function weekKey(at) {
+  const d = new Date(at);
+  const dow = (d.getUTCDay() + 6) % 7; // Monday = 0
+  d.setUTCDate(d.getUTCDate() - dow);
+  return d.toISOString().slice(0, 10);
+}
+const emptyWeek = () => ({ watched: 0, completes: 0, watchSec: 0, quizN: 0, quizRight: 0, units: {}, formats: {}, days: {}, mastered: [] });
 export const emptySession = () => ({ sid: '', startedAt: 0, lastAt: 0, served: 0, viewed: 0, lastFormats: [], lastTopics: [], wrongStreak: 0, rightStreak: 0, earlyStreak: 0 });
 const SESSION_GAP_MS = 30 * 60 * 1000;
 
@@ -133,6 +143,7 @@ export async function ingest(userId, batch) {
   };
   const writes = [];
   const log = [];
+  const levelUps = [];
   let accepted = 0;
 
   for (const e of events) {
@@ -157,7 +168,28 @@ export async function ingest(userId, batch) {
     const unitId = v ? v.unitId || (v.topic ? `topic:${v.topic}` : null) : null;
     const format = v?.format || 'explain';
     const topic = v?.topic || 'general';
-    const unitEvent = (type, extra) => { if (unitId) progress[unitId] = applyEvent(progress[unitId] || emptyState(), type, { ...extra, now: e.at }); };
+    const unitEvent = (type, extra) => {
+      if (!unitId) return;
+      const before = mastery(progress[unitId]);
+      progress[unitId] = applyEvent(progress[unitId] || emptyState(), type, { ...extra, now: e.at });
+      // Crossing the mastery line is a level-up: told to the app for its burst, kept in the week's recap.
+      if (before < 0.7 && mastery(progress[unitId]) >= 0.7) {
+        const title = v?.unitTitle || unitId;
+        levelUps.push({ unitId, title });
+        if (!week.mastered.includes(title)) week.mastered.push(title);
+      }
+    };
+    // Weekly recap counters.
+    signals.weeks ||= {};
+    const wk = weekKey(e.at);
+    const week = signals.weeks[wk] ||= emptyWeek();
+    if (v && ['view', 'complete', 'leave', 'quiz_answer'].includes(e.type)) {
+      week.days[day(e.at)] = 1;
+      if (e.type === 'view') { week.watched++; if (unitId) week.units[unitId] = v.unitTitle || unitId; week.formats[format] = (week.formats[format] || 0) + 1; }
+      if (e.type === 'complete') week.completes++;
+      if (e.type === 'leave') week.watchSec += Math.round(Math.min(600, e.watched ?? e.watchedSec ?? 0));
+      if (e.type === 'quiz_answer' && !(await db.inSet(userId, 'answered', v.id))) { week.quizN++; if (e.correct) week.quizRight++; }
+    }
     writes.push(kv.hincrby(`events:day:${day(e.at)}`, e.type, 1));
     log.push(JSON.stringify({ u: userId.slice(0, 8), ...e, f: v ? format : undefined, tp: v ? topic : undefined }));
 
@@ -259,6 +291,8 @@ export async function ingest(userId, batch) {
     }
   }
 
+  // Keep the last 8 weeks of recaps.
+  for (const k of Object.keys(signals.weeks || {}).sort().slice(0, -8)) delete signals.weeks[k];
   writes.push(
     kv.set(`user:${userId}:signals`, signals),
     kv.set(`user:${userId}:session`, session),
@@ -266,7 +300,7 @@ export async function ingest(userId, batch) {
     kv.lpush('events:log', ...log), kv.ltrim('events:log', 0, 19999),
   );
   await Promise.all(writes.flat());
-  return { accepted };
+  return { accepted, levelUps };
 }
 
 /** Consecutive active days ending today or yesterday (UTC days). */
@@ -279,13 +313,28 @@ export function streakOf(signals, now = Date.now()) {
   return streak;
 }
 
+/** One week's recap, shaped for the sticker card (null when nothing happened). */
+export function recapOf(signals, key) {
+  const w = signals?.weeks?.[key];
+  if (!w || !w.watched) return null;
+  const topFormat = Object.entries(w.formats).sort((a, b) => b[1] - a[1])[0]?.[0] || null;
+  return {
+    week: key, watched: w.watched, completes: w.completes, minutes: Math.round(w.watchSec / 60), quizN: w.quizN, quizRight: w.quizRight,
+    units: Object.values(w.units).slice(0, 6), unitCount: Object.keys(w.units).length, days: Object.keys(w.days).length,
+    topFormat, formats: Object.keys(w.formats).length, mastered: w.mastered || [],
+  };
+}
+
 /** Headline numbers for the Profile and Library (stickers, tiles, the buddy's line). */
-export async function studentStats(userId, { watched = 0, progress = {}, masteryOf = () => 0 } = {}) {
+export async function studentStats(userId, { watched = 0, progress = {}, masteryOf = () => 0, now = Date.now() } = {}) {
   const s = await getSignals(userId);
+  const thisWeek = weekKey(now);
+  const lastWeek = weekKey(now - 7 * 86400000);
   return {
     watched, streak: streakOf(s), sessions: s.sessions || 0,
     quizN: s.quiz?.n || 0, quizRight: s.quiz?.right || 0,
     mastered: Object.values(progress).filter((st) => masteryOf(st) >= 0.7).length,
+    week: recapOf(s, thisWeek), lastWeek: recapOf(s, lastWeek),
   };
 }
 
