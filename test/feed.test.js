@@ -209,13 +209,17 @@ test('a flagging session gets one breather first, which never touches progress, 
   const fun = funUnits.find((u) => u.id === page.items[0].unit.id);
   assert.ok(fun, 'a biology breather');
   const pub = await publicVideo(page.items[0].video, user.id, { why: page.items[0].why, withDocument: false });
-  assert.deepEqual(pub.breather, { reason: 'leaving-early' });
+  assert.equal(pub.breather.reason, 'leaving-early'); assert.match(pub.breather.text, /fun one next door/);
   assert.equal((await getProgress(user.id))[fun.id], undefined, 'a breather is not syllabus progress');
   await recordEvent(user.id, { videoId: page.items[0].video.id, type: 'view' });
   await recordEvent(user.id, { videoId: page.items[0].video.id, type: 'leave', pct: 0.9, watched: 18 });
   assert.equal((await getProgress(user.id))[fun.id], undefined, 'events on it do not create progress either');
-  const session = await kv.get(`user:${user.id}:session`);
-  assert.equal(session.breathers, 1); assert.equal(session.earlyStreak, 0, 'the streak that fired it is reset');
+  const mark = await kv.get(`user:${user.id}:breather`);
+  assert.equal(mark.count, 1); assert.equal(mark.at, 8, 'the marker remembers where in the session it fired');
+  assert.equal((await db.getUser(user.id)).billing?.houseUsed || 0, 0, 'a breather never touches the free allowance');
+  // An events batch rewrites the whole session; the breather marker must survive it.
+  await recordEvent(user.id, { videoId: page.items[1].video.id, type: 'view' });
+  assert.equal((await kv.get(`user:${user.id}:breather`)).count, 1, 'the marker is outside the session object');
   const next = await nextItems(user.id, 3);
   assert.ok(next.items.every((x) => x.why.kind !== 'breather'), 'no second breather right away');
 });

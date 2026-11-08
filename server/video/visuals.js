@@ -233,12 +233,12 @@ export function answerSteps({ id, start, duration, track, accent, theme = 'paper
 }
 
 /** Cheat sheet: a revision card whose lines fill in one by one; the newest line is highlighted. */
-export function sheetCard({ id, start, duration, track, accent, theme = 'paper' }, { items, upTo }) {
+export function sheetCard({ id, start, duration, track, accent, theme = 'paper' }, { items, upTo, title = 'Cheat sheet' }) {
   const t = themeOf(theme, accent);
   const list = items.slice(0, 6);
   const h = 900;
   return html(id, start, duration, track,
-    `<div class="c sh"><div class="h">Cheat sheet</div>${list.map((it, i) =>
+    `<div class="c sh"><div class="h">${esc(title)}</div>${list.map((it, i) =>
       `<div class="r${i < upTo ? ' done' : i === upTo ? ' on' : ''}"><b>${esc(it.title)}</b><span>${esc(it.text)}</span></div>`).join('')}</div>`,
     cardCss(accent, theme, `.sh{gap:16px;justify-content:flex-start}
 .r{display:grid;grid-template-columns:300px 1fr;gap:18px;align-items:start;padding:14px 16px;border-radius:18px;background:${t.cell};opacity:.18}

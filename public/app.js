@@ -731,7 +731,7 @@ function answer(item, i) {
 function openWhy(item) {
   const d = item.data, w = d.why || {};
   const reasons = [];
-  if (w.kind === 'breather') reasons.push(['☕', { 'leaving-early': 'You left the last couple of lessons early, so here is a quick fun one from next door to your subject. Your units are next.', 'tough-run': 'A few tricky questions in a row. Something light before we go back in.', 'long-session': 'You have been at it a while. A short detour, then back to your syllabus.' }[w.reason] || 'A short, fun detour next door to your subject. Your units are next.']);
+  if (d.breather) reasons.push(['☕', d.breather.text || 'A short, fun detour next door to your subject. Your units are next.']);
   if (w.starter) reasons.push(['⏱️', `A ready lesson from the library while yours is being made${d.queuedFor ? ` (${d.queuedFor})` : ''}.`]);
   if (w.explored) reasons.push(['🧭', 'Something a little different. A small share of your feed explores, so it never gets stale.']);
   if (w.kind === 'course' && w.progress >= 0.7) reasons.push(['📚', d.position ? `Next up in your syllabus: unit ${d.position.index} of ${d.position.total}.` : 'Next up in your syllabus.']);

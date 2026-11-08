@@ -138,6 +138,7 @@ export async function dailyRow(date, { now = Date.now() } = {}) {
     'Saves': n('save'),
     'Shares': n('recap_share') + n('levelup_share') + n('profile_share'),
     'Drops': n('drop'),
+    'Breathers': n('breather_view'),
     'Library size': await db.readyCount(),
     'Updated': iso(now),
   };

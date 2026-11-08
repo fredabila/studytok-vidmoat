@@ -561,7 +561,7 @@ export const FORMATS = {
       return [
         { id: 'hook', kind: 'hook', spoken: sentence(l.hook), minDur: 2.6 },
         { id: 'phrase', kind: 'stamp', spoken: `Say it with me: ${sentence(l.fact)}`, label: 'REMEMBER', text: l.fact, color: '#ffd93d', minDur: 3.5 },
-        ...items.map((it, i) => ({ id: `line${i}`, kind: 'sheet', index: i, spoken: `${it.title.split(' → ')[0]}, for ${it.title.split(' → ')[1] || it.title}. ${sentence(it.text)}`, captions: true, items, item: it })),
+        ...items.map((it, i) => ({ id: `line${i}`, kind: 'sheet', index: i, spoken: `${it.title.split(' → ')[0]}, for ${it.title.split(' → ')[1] || it.title}. ${sentence(it.text)}`, captions: true, items, item: it, title: 'Remember it' })),
         ...quizScenes(l, 'Cover the card.'), outro(l, 'Say it back'),
       ];
     },
@@ -654,7 +654,7 @@ export const FORMATS = {
     scenes: (l) => [
       { id: 'hook', kind: 'hook', spoken: sentence(l.hook), minDur: 2.4 },
       ...l.cards.slice(0, 4).flatMap((c, i) => [
-        { id: `q${i}`, kind: 'flashQ', index: i, total: Math.min(4, l.cards.length), spoken: `True or false. ${sentence(c.q)}`, pauseAfter: 2.5, minDur: 3.4, card: { ...c, q: `True or false: ${c.q}` } },
+        { id: `q${i}`, kind: 'flashQ', index: i, total: Math.min(4, l.cards.length), spoken: `True or false. ${sentence(c.q)}`, pauseAfter: 2.5, minDur: 3.4, card: c },
         { id: `a${i}`, kind: 'flashA', index: i, total: Math.min(4, l.cards.length), spoken: sentence(c.a), minDur: 2.2, card: c },
       ]),
       { id: 'outro', kind: 'outro', spoken: `How many did you get? ${sentence(l.takeaway)}`, minDur: 3, label: 'Score yourself' },

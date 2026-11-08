@@ -92,9 +92,12 @@ without drifting away from the course. `feed/breathers.js`:
   shared like any other unit's videos.
 * **Write**: breather episodes use only the light formats (`BREATHER_FORMATS`) and the writer is
   told the student is tired: fun, surprising, true, no exam framing, an easy quiz.
-* **Serve**: a ready breather goes first on the page; otherwise one is generated and the page is
-  filled as usual. `noteBreather()` records the slot and resets the early/wrong streaks so one
-  signal produces one breather. The *Why* sheet says why it appeared.
+* **Serve**: a ready breather goes first on the page; otherwise one is generated **on the
+  house** (never charged to the student or their free allowance, and never generated at all for
+  a student on their own Vidmoat account, who only gets library breathers). `noteBreather()`
+  records the slot in its own key (`user:{id}:breather`, safe from the events batches that
+  rewrite the session), so one signal produces one breather and the next waits six videos. The
+  *Why* sheet says why it appeared.
 * **Not the syllabus**: breather views never touch unit progress, mastery or level-ups
   (`isBreatherUnit`), but they do feed the student's format and topic tastes and a
   `signals.breathers` counter (watch fraction, "less") that can switch them off.
