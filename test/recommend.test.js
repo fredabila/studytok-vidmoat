@@ -76,3 +76,8 @@ test('with several subjects, each one starts from its own first unit', () => {
   assert.equal(progress.c1, 1);
   assert.ok(progress.b4 < progress.b2);
 });
+
+test('a brand-new student always starts at unit 1 (affinity noise cannot override the syllabus)', () => {
+  const rand = seeded(13);
+  for (let i = 0; i < 300; i++) assert.equal(scoreUnits(course, {}, [], { rand })[0].unit.id, 'u1');
+});

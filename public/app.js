@@ -29,8 +29,18 @@ async function api(method, path, body) {
     credentials: 'same-origin',
   });
   const data = await res.json().catch(() => ({}));
+  if (res.status === 401 && !path.startsWith('/api/me') && path !== '/api/profile') sessionLost();
   if (!res.ok) throw Object.assign(new Error(data.error || `HTTP ${res.status}`), { status: res.status });
   return data;
+}
+
+/** The server no longer knows this browser (e.g. storage was reset): set up again. */
+let recovering = false;
+function sessionLost() {
+  if (recovering) return;
+  recovering = true;
+  toast('Your session expired. Let\'s set up your feed again.');
+  setTimeout(() => location.replace(location.pathname), 1200);
 }
 const sendEvent = (videoId, type, extra = {}) => api('POST', '/api/events', { videoId, type, ...extra }).catch(() => {});
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -452,7 +462,7 @@ async function loadMore(count = 3) {
     next.filter((d) => !items.some((it) => it.data.id === d.id)).forEach((d) => addSlide(d));
     syncPlayers();
   } catch (err) {
-    if (err.status === 401) return location.reload();
+    if (err.status === 401) return;
     toast('Could not load more videos. Retrying…');
     setTimeout(() => loadMore(count), 4000);
   } finally {
@@ -519,7 +529,7 @@ function showView(next) {
 
 async function editProfile() {
   items[active]?.player?.pause();
-  const { user } = await api('GET', '/api/me');
+  const user = await api('GET', '/api/me').then((r) => r.user, (err) => { if (err.status === 401) sessionLost(); throw err; });
   await runOnboarding(user);
   toast('Saved. New videos will follow your updated course.');
   // Start a fresh feed that reflects the new choices.
