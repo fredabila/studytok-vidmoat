@@ -2,7 +2,7 @@
 // addMotionComponent). HTML must be self-contained: CSS, unicode and inline SVG work; scripts
 // and external resources do not. Positions are offsets from the canvas centre.
 
-export const CARD = { w: 960, h: 780, y: -90 };
+export const CARD = { w: 960, h: 720, y: -130 };
 const FONT = "'Montserrat', 'Inter', sans-serif";
 
 export const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -117,7 +117,7 @@ export function teachingVisual(v, { id, start, duration, track, accent }) {
     case 'definition':
       return html(id, start, duration, track,
         `<div class="c f"><div class="h">Definition</div><div class="w">${esc(v.title)}</div><div class="x">${esc(items[0])}</div></div>`,
-        cardCss(accent, `.f{gap:36px}.w{font-size:84px;font-weight:900;color:${accent};line-height:1.05}.x{font-size:50px;font-weight:600;line-height:1.3}`),
+        cardCss(accent, `.f{gap:30px}.w{font-size:${v.title.length > 22 ? 64 : 80}px;font-weight:900;color:${accent};line-height:1.05}.x{font-size:${(items[0] || '').length > 100 ? 40 : 48}px;font-weight:600;line-height:1.3}`),
         { motion: 'slide-up' });
     case 'equation':
       return html(id, start, duration, track,

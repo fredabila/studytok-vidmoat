@@ -21,7 +21,7 @@ import { flushKv } from '../server/kv.js';
 const args = process.argv.slice(2);
 const voiceArg = args.findIndex((a) => a.startsWith('--voice='));
 let voice = null;
-const rest = args.filter((_, i) => i !== voiceArg && i !== voiceArg + 1);
+const rest = voiceArg >= 0 ? args.filter((_, i) => i !== voiceArg && i !== voiceArg + 1) : args;
 const [topicId = 'biology', idx = '0', ...times] = rest;
 const look = topicOf(topicId);
 const lesson = sanitizeLesson(BANK[look.id][Number(idx)], look.id);
