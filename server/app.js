@@ -297,8 +297,8 @@ async function route(req, res, url) {
   if (key === 'POST /api/events') {
     const body = await readJson(req, 256 * 1024);
     const batch = Array.isArray(body.events) ? body : { events: [body] };
-    const { accepted } = await ingest(userId, batch);
-    return send(res, 200, { ok: true, accepted });
+    const { accepted, levelUps } = await ingest(userId, batch);
+    return send(res, 200, { ok: true, accepted, levelUps });
   }
 
   return send(res, 404, { error: 'Not found' });

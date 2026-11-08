@@ -506,6 +506,7 @@ async function poll(item) {
   }
   item.polling = false;
   if (feed.items[feed.active] === item && item.shownAt) track('gen_wait', { videoId: item.data.id, ms: Date.now() - item.shownAt, outcome: item.data.status === 'ready' ? 'ready' : 'failed' });
+  setTimeout(() => markViewed(item), 1000);
   preferReady();
   syncPlayers();
 }
@@ -726,12 +727,20 @@ function activate(index) {
     if (view === 'feed') history.replaceState(null, '', `#v=${item.data.id}`);
     clearTimeout(activate.viewTimer);
     activate.viewTimer = setTimeout(() => {
-      if (feed.items[feed.active] === item && !item.viewSent && item.data.status === 'ready') { item.viewSent = true; nthVideo++; sendEvent(item.data.id, 'view', { nth: nthVideo, format: item.data.format?.id, source: item.source || 'feed' }); }
+      markViewed(item);
     }, 1000);
     if (index > 0) { $('#swipe-hint').hidden = true; store.set('st_swiped', '1'); }
   }
   preferReady();
   syncPlayers();
+}
+
+/** Counts a view once the active slide has been ready for a second (also when it finishes generating while active). */
+function markViewed(item) {
+  if (feed.items[feed.active] !== item || item.viewSent || item.data.status !== 'ready') return;
+  item.viewSent = true;
+  nthVideo++;
+  sendEvent(item.data.id, 'view', { nth: nthVideo, format: item.data.format?.id, source: item.source || 'feed' });
 }
 
 async function loadMore(count = 3) {
@@ -866,6 +875,56 @@ async function restartFeed() {
   goTo(0, { animate: false });
 }
 
+// ============================================================================ level-up burst
+const burstQueue = [];
+let bursting = false;
+function levelUp(items) {
+  burstQueue.push(...items);
+  if (!bursting) nextBurst();
+}
+function nextBurst() {
+  const item = burstQueue.shift();
+  if (!item) { bursting = false; return; }
+  bursting = true;
+  track('level_up', { unitId: item.unitId });
+  const host = $('#burst');
+  const colors = ['#ffd93d', '#ff6b6b', '#34d399', '#8fc1ff', '#f472b6', '#141414'];
+  const confetti = Array.from({ length: 26 }, (_, i) => {
+    const a = (i / 26) * Math.PI * 2, r = 140 + Math.random() * 160;
+    return el('i', { class: 'confetti', style: `background:${colors[i % colors.length]};--x:${Math.cos(a) * r}px;--y:${Math.sin(a) * r + 80}px;--r:${Math.round(Math.random() * 720)}deg;--d:${(Math.random() * 0.25).toFixed(2)}s` });
+  });
+  const card = el('div', { class: 'burst-card' }, ...confetti, svgEl(mascot('cheer', 110)), el('b', {}, 'Unit mastered!'), el('span', {}, item.title), sbadge('🏅 level up', { hot: true, r: 2 }));
+  host.replaceChildren(card);
+  host.hidden = false;
+  if (navigator.vibrate) navigator.vibrate([30, 40, 60]);
+  setTimeout(() => { card.classList.add('leaving'); setTimeout(() => { host.hidden = true; nextBurst(); }, 420); }, 2600);
+}
+window.addEventListener('studytok:levelup', (e) => levelUp(e.detail));
+
+/** The weekly recap postcard (this week, or last week's when this one is empty). */
+function recapCard(stats) {
+  const r = stats?.week || stats?.lastWeek;
+  if (!r) return null;
+  const past = !stats?.week;
+  const acc = r.quizN ? `${Math.round((r.quizRight / r.quizN) * 100)}%` : null;
+  const fmt = cfg.formats?.find((f) => f.id === r.topFormat)?.name;
+  const line = r.mastered.length ? `${r.mastered.length} unit${r.mastered.length > 1 ? 's' : ''} mastered: ${r.mastered.slice(0, 2).join(', ')}.`
+    : r.days >= 4 ? `${r.days} study days. That is a habit now.` : r.watched >= 5 ? `${r.unitCount} unit${r.unitCount > 1 ? 's' : ''} explored. Keep going.` : 'A start is a start. Swipe a few more.';
+  const text = `My StudyTok week: ${r.watched} lessons, ${r.minutes} min${acc ? `, ${acc} on quick checks` : ''}${r.mastered.length ? `, ${r.mastered.length} unit${r.mastered.length > 1 ? 's' : ''} mastered` : ''}. studytok.vidmoat.com`;
+  const share = el('button', { type: 'button', class: 'btn ghost', onclick: async () => {
+    track('recap_share', { week: r.week });
+    try { if (navigator.share) await navigator.share({ text }); else { await navigator.clipboard.writeText(text); toast('Copied your recap.'); } } catch { /* cancelled */ }
+  } }, '↗ Share recap');
+  return el('div', { class: `recap${past ? ' past' : ''}` },
+    el('h3', {}, past ? 'Last week with Noti' : 'Your week with Noti'),
+    svgEl(mascot(r.mastered.length || r.days >= 4 ? 'cheer' : 'happy', 64)),
+    el('div', { class: 'recap-stats' },
+      el('span', {}, el('b', {}, String(r.watched)), 'lessons'), el('span', {}, el('b', {}, String(r.minutes)), 'min'),
+      acc ? el('span', {}, el('b', {}, acc), 'quizzes') : null, el('span', {}, el('b', {}, String(r.days)), r.days === 1 ? 'day' : 'days'),
+      fmt ? el('span', {}, el('b', {}, '★'), fmt) : null),
+    el('p', {}, line), share);
+}
+
 // ============================================================================ mascot & stickers
 // "Noti", the sticky-note study buddy: a yellow note with a highlighter. Moods change the face.
 function mascot(mood = 'happy', size = 96) {
@@ -929,6 +988,8 @@ async function showLibrary() {
       el('p', {}, due ? 'Spaced repetition says now is the moment. They are first in your feed.' : 'Untick what you have mastered; your feed follows what stays ticked.'),
       el('div', { class: 'bubble' }, buddyLine(stats)))));
   course.append(statTiles(stats));
+  const recap = recapCard(stats);
+  if (recap && stats?.week) course.append(recap);
   if (!lib.units.length) {
     course.append(el('div', { class: 'empty' }, svgEl(mascot('sleepy', 110)), el('b', {}, 'No course yet'), 'Add your course or subjects in Profile, or add your own topics below.'));
   }
@@ -1010,7 +1071,7 @@ function renderProfile() {
     el('div', {}, el('h3', {}, me?.vidmoat?.name || 'Guest learner'), el('p', {}, [lvl?.label, p.institution, p.age ? `age ${p.age}` : null].filter(Boolean).join(' · ') || 'Exploring'),
       el('div', { class: 'bubble' }, buddyLine(stats)),
       badges.length ? el('div', { class: 'badges' }, ...badges) : null));
-  $('#profile-tiles').replaceChildren(statTiles(stats));
+  $('#profile-tiles').replaceChildren(...[statTiles(stats), recapCard(stats)].filter(Boolean));
 
   renderCredits();
   const account = $('#account-card');

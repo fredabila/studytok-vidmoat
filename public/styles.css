@@ -342,6 +342,34 @@ body[data-view="feed"] .tabbtn[aria-current="page"] span { color: var(--ink); }
 @keyframes fade { from { opacity: 0; } }
 @keyframes up { from { transform: translateY(40px); opacity: 0; } }
 
+/* Level-up burst: Noti cheering, a sticker and confetti, over whatever is on screen. */
+.burst { position: fixed; inset: 0; z-index: 70; display: grid; place-items: center; pointer-events: none; }
+.burst-card { position: relative; display: grid; justify-items: center; gap: 6px; padding: 22px 26px 18px; border-radius: 22px; background: var(--paper); color: var(--ink); border: 2px solid var(--ink);
+  box-shadow: 6px 6px 0 var(--hl); transform: rotate(-3deg); animation: burst-in .55s var(--ease) both; pointer-events: auto; max-width: min(340px, calc(100vw - 40px)); text-align: center; }
+.burst-card .mascot { width: 110px; height: 110px; animation: wiggle .6s ease-in-out 2; }
+.burst-card b { font-family: var(--serif); font-size: 26px; line-height: 1.1; }
+.burst-card span { font-size: 14px; color: var(--ink-2); }
+.burst-card .sbadge { margin-top: 6px; }
+.burst-card.leaving { animation: burst-out .4s var(--ease) both; }
+@keyframes burst-in { 0% { transform: scale(.4) rotate(-12deg); opacity: 0; } 70% { transform: scale(1.06) rotate(-2deg); opacity: 1; } 100% { transform: scale(1) rotate(-3deg); opacity: 1; } }
+@keyframes burst-out { to { transform: scale(.6) rotate(6deg); opacity: 0; } }
+@keyframes wiggle { 0%, 100% { transform: rotate(-6deg); } 50% { transform: rotate(6deg); } }
+.confetti { position: absolute; top: 50%; left: 50%; width: 10px; height: 14px; border-radius: 2px; opacity: 0; animation: confetti 1.4s cubic-bezier(.2, .7, .3, 1) forwards; animation-delay: var(--d, 0s); }
+@keyframes confetti { 0% { transform: translate(0, 0) rotate(0); opacity: 1; } 100% { transform: translate(var(--x), var(--y)) rotate(var(--r)); opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .confetti { display: none; } .burst-card .mascot { animation: none; } }
+
+/* Weekly recap: a postcard-style sticker card. */
+.recap { position: relative; display: grid; grid-template-columns: 1fr auto; gap: 8px 12px; padding: 18px; border-radius: 18px; margin-bottom: 14px; color: var(--ink);
+  background: linear-gradient(135deg, #fff 0%, #fff7cf 100%); border: 1.5px solid var(--ink); box-shadow: 4px 4px 0 var(--hl); overflow: hidden; }
+.recap::after { content: 'THIS WEEK'; position: absolute; right: -22px; top: 14px; font-family: var(--mono); font-size: 10px; letter-spacing: .12em; padding: 3px 28px; background: var(--ink); color: var(--paper); transform: rotate(35deg); }
+.recap h3 { margin: 0; font-size: 21px; grid-column: 1 / -1; }
+.recap .mascot { width: 64px; height: 64px; grid-row: 2 / 4; align-self: center; }
+.recap-stats { display: flex; flex-wrap: wrap; gap: 6px; }
+.recap-stats span { font-family: var(--mono); font-size: 11.5px; font-weight: 600; padding: 5px 8px; border-radius: 8px; background: #fff; border: 1.5px solid var(--line-2); }
+.recap-stats span b { font-family: var(--serif); font-size: 15px; margin-right: 3px; }
+.recap p { margin: 0; font-size: 13.5px; line-height: 1.45; color: var(--ink-2); }
+.recap .btn { grid-column: 1 / -1; justify-self: start; min-height: 38px; font-size: 13.5px; padding: 0 14px; margin-top: 4px; }
+.recap.past::after { content: 'LAST WEEK'; }
 .toast { position: fixed; z-index: 60; left: 50%; bottom: calc(var(--tabbar) + var(--safe-b) + 16px); transform: translate(-50%, 16px); max-width: calc(100vw - 32px);
   background: var(--ink); color: var(--paper); border: 1.5px solid var(--ink); box-shadow: 3px 3px 0 var(--hl); padding: 11px 16px; border-radius: 8px; font-size: 14px; font-weight: 500;
   opacity: 0; transition: opacity .2s, transform .2s; pointer-events: none; }
