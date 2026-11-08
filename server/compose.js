@@ -79,7 +79,8 @@ export function composeLesson(lesson, media = {}) {
   const { segments, duration } = planTimeline(lesson);
   const cmds = [];
 
-  cmds.push({ op: 'setProjectSettings', name: lesson.title.slice(0, 80), aspectRatio: '9:16', background: look.bg });
+  // The project name is set at creation ("StudyTok · <title>") so generated projects are easy to find.
+  cmds.push({ op: 'setProjectSettings', aspectRatio: '9:16', background: look.bg });
 
   // ---- B-roll: one stock clip per section (hook + beats), each scaled to cover, slow push-in,
   // crossfaded into the next. Quiz and outro sit on the last clip, held under a darker scrim.
