@@ -221,7 +221,10 @@ test('a flagging session gets one breather first, which never touches progress, 
   await recordEvent(user.id, { videoId: page.items[1].video.id, type: 'view' });
   assert.equal((await kv.get(`user:${user.id}:breather`)).count, 1, 'the marker is outside the session object');
   const next = await nextItems(user.id, 3);
-  assert.ok(next.items.every((x) => x.why.kind !== 'breather'), 'no second breather right away');
+  assert.ok(next.items.every((x) => x.why?.kind !== 'breather'), 'no second breather right away');
+  // Nine lessons into the session with no breather on the page: the pacing allows a moment, in the second slot.
+  assert.equal(next.items[1].moment?.kind, 'moment', 'a moment takes the second slot');
+  assert.equal(next.items[0].video.status, 'ready', 'a lesson still comes first');
 });
 
 test('invite links: ?ref records the inviter once, counts their invites, never self or unknown numbers', async () => {

@@ -118,6 +118,31 @@ without drifting away from the course. `feed/breathers.js`:
   (`isBreatherUnit`), but they do feed the student's format and topic tastes and a
   `signals.breathers` counter (watch fraction, "less") that can switch them off.
 
+## Moments
+
+Between lessons, every so often, the feed shows a *moment*: an animated card from Noti with a
+tip about StudyTok, a piece of news, or an offer. No video is made for it (the app renders it),
+so it costs nothing, and it is paced so the feed stays a feed. `feed/moments.js`:
+
+* **Pacing** (`pickMoment`): never before four lessons into the session, then at most one every
+  six lessons, at most three a day, never on a page that already carries a breather. Each
+  moment has a repeat window (14 to 120 days) and is not shown again inside it. The marker
+  lives in `user:{id}:moments` (like the breather's, safe from the events batches).
+* **Eligibility**: every built-in moment has a `when(ctx)` that looks at the student's facts:
+  the "save a lesson" tip only before their first save, the install tip only in a browser, the
+  keyboard tip only on a computer, the reminders tip only when push is configured and they have
+  not turned it on, the free-lessons offer halfway through the allowance, the "unlimited" offer
+  once it is used up (never for an own-account student), the invite offer before the first
+  invite, and so on.
+* **Extras**: offers and news that should not wait for a deploy go to
+  `POST /api/admin/moments` (`Authorization: Bearer $STUDYTOK_SHEET_SECRET`) as
+  `{ moments: [{ id, type, title, lines[2-3], emoji, mood, theme, cta: { label, action | href },
+  repeatDays, until, minWatched }] }`. They are shown ahead of the catalogue and expire on
+  `until`. `GET` on the same route lists them.
+* **Slot**: a moment takes the second slot of the page, so a lesson always comes first, and it
+  never counts as a view, a served video or syllabus progress. `moment_view` and `moment_cta`
+  events say which ones get read and tapped (the Daily sheet counts them under "Moments shown").
+
 ## What the algorithm does not do (yet)
 
 * No collaborative filtering across students (the library is small and per unit); format and

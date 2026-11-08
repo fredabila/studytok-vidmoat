@@ -62,6 +62,12 @@ framing, then straight back to the syllabus. Never two within six videos, never 
 mastery, and switched off for anyone who says "less" to them. See
 [docs/ALGORITHM.md](docs/ALGORITHM.md#breathers).
 
+**Moments.** Every so often (never before the fourth lesson of a session, at most one every six
+lessons and three a day) the feed shows an animated card from Noti: a tip about the app that fits
+where the student is (save a lesson, teach the feed, install it, turn on reminders), a piece of
+news, or an offer (free lessons left, invite a classmate). Offers and news can be posted at
+runtime without a deploy. See [docs/ALGORITHM.md](docs/ALGORITHM.md#moments).
+
 Claude writes each batch of episodes in a rotation of formats weighted by topic (maths leans on
 exam drills, history on stories) and steered away from what the unit used most recently; the
 feed also never serves the same format twice in a row. Each video carries a format badge.

@@ -10,6 +10,7 @@ import { catalogNames } from './curriculum/catalog.js';
 import { usingRedis, redisSource, redisLikeVarNames } from './core/kv.js';
 import * as db from './core/db.js';
 import { saveProfile, editProfile, prefetch, nextItems, publicVideo, library, topUpLibrary, cleanProfile, linkVidmoat, recordReferral } from './feed/index.js';
+import { extraMoments, setExtraMoments } from './feed/moments.js';
 import { resolveProgram, getProgram } from './curriculum/index.js';
 import { queueStats } from './video/generator.js';
 import { getMe, getMeAs } from './core/vidmoat.js';
@@ -211,6 +212,13 @@ async function route(req, res, url) {
   }
   // The VAPID public key the browser subscribes with (public by design; { enabled: false } when unset).
   if (key === 'GET /api/push/key') return send(res, 200, { enabled: push.enabled(), publicKey: push.publicKey() });
+  // Admin: the extra moments (offers, news) shown between lessons; GET lists them, POST replaces
+  // the list (Authorization: Bearer $STUDYTOK_SHEET_SECRET; see docs/ALGORITHM.md "Moments").
+  if (key === 'GET /api/admin/moments' || key === 'POST /api/admin/moments') {
+    if (!config.sheet.secret || req.headers.authorization !== `Bearer ${config.sheet.secret}`) return send(res, 401, { error: 'Unauthorized' });
+    if (req.method === 'POST') return send(res, 200, { moments: await setExtraMoments((await readJson(req)).moments) });
+    return send(res, 200, { moments: await extraMoments() });
+  }
   // Admin: rebuild the Google Sheet from every student (Authorization: Bearer $STUDYTOK_SHEET_SECRET).
   if (key === 'POST /api/admin/sheet/resync') {
     if (!sheetEnabled() || req.headers.authorization !== `Bearer ${config.sheet.secret}`) return send(res, 401, { error: 'Unauthorized' });
@@ -365,7 +373,7 @@ async function route(req, res, url) {
     const { items, pending, credits } = await nextItems(userId, count);
     // Keep generating after the response (serverless) / let it run (long-lived server).
     if (pending.length) waitUntil(Promise.allSettled(pending));
-    return send(res, 200, { items: await Promise.all(items.map((x) => publicVideo(x.video, userId, { why: x.why, pos: x.pos, queuedFor: x.queuedFor }))), credits: credits || undefined });
+    return send(res, 200, { items: await Promise.all(items.map((x) => (x.moment ? x.moment : publicVideo(x.video, userId, { why: x.why, pos: x.pos, queuedFor: x.queuedFor })))), credits: credits || undefined });
   }
 
   const videoMatch = /^\/api\/videos\/([0-9a-f-]{36})$/.exec(path);

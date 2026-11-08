@@ -51,6 +51,9 @@ Custom topics typed by a student become open-ended units (`cu:<hash>`).
 4. **Ready first**: ready videos are served before anything that still has to be generated;
    missing units are started in the background and a library starter fills the slot.
 5. The response carries `why` (the score parts) so the app can explain the pick.
+6. **Moments** (`feed/moments.js`): when the pacing allows, a tip, news or offer card takes the
+   second slot (`{ kind: 'moment', moment: {...} }` in the same `items` array); the app renders
+   it (`addMomentSlide`), no video is involved. Extras come from `POST /api/admin/moments`.
 
 ## 4. Making a video (`video/generator.js`)
 
