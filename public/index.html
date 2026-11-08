@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
   <title>StudyTok</title>
   <meta name="description" content="Short narrated study videos that follow your syllabus. Pick your level and course, then swipe and learn.">
-  <meta name="theme-color" content="#07070b">
+  <meta name="theme-color" content="#141414">
   <meta name="color-scheme" content="dark">
   <link rel="manifest" href="/manifest.webmanifest">
   <link rel="icon" href="/icon.svg" type="image/svg+xml">
@@ -17,7 +17,7 @@
   <meta name="apple-mobile-web-app-title" content="StudyTok">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,500;0,9..144,600;0,9..144,700;1,9..144,500&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600&display=swap">
   <link rel="stylesheet" href="/styles.css">
 </head>
 <body>
@@ -35,7 +35,7 @@
       <div class="step" data-step="1">
         <div class="ob-hero">
           <div class="logo-mark" aria-hidden="true"></div>
-          <h1>Learn your syllabus,<br><span class="grad">one swipe at a time.</span></h1>
+          <h1>Learn your syllabus,<br><mark>one swipe at a time.</mark></h1>
           <p class="lead">Short, narrated lessons made for your course, level and exam. First, what are you studying at?</p>
         </div>
         <div id="levels" class="level-grid" role="radiogroup" aria-label="Study level"></div>
@@ -79,7 +79,7 @@
     <!-- Feed -->
     <section class="view view-feed" data-view="feed" aria-label="For You">
       <header class="feed-head">
-        <span class="wordmark">Study<b>Tok</b></span>
+        <span class="wordmark">StudyTok</span>
         <span class="feed-title">For You</span>
         <span class="feed-head-spacer"></span>
       </header>
@@ -152,7 +152,7 @@
       <div class="sound-card">
         <div class="logo-mark" aria-hidden="true"></div>
         <p>Welcome back. Your next lesson is ready.</p>
-        <button type="button" class="btn primary" id="sound-go">Continue learning 🔊</button>
+        <button type="button" class="btn primary" id="sound-go">Continue learning</button>
       </div>
     </div>
   </main>
@@ -182,7 +182,7 @@
         <div class="paused-badge" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg></div>
 
         <div class="quiz" hidden>
-          <p class="quiz-label">Quick check · tap your answer</p>
+          <p class="quiz-label">Quick check</p>
           <div class="quiz-options"></div>
           <p class="quiz-feedback" aria-live="polite"></p>
         </div>

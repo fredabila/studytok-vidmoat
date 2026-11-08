@@ -2,7 +2,7 @@
 // - App shell (HTML, JS, CSS, icons): stale-while-revalidate, so updates arrive on the next open.
 // - Navigations: network first, falling back to the cached shell when offline.
 // - /api/*, the Vidmoat player and media: never cached (always live).
-const VERSION = 'studytok-v3';
+const VERSION = 'studytok-v4';
 const SHELL = ['/', '/index.html', '/app.js', '/player.js', '/styles.css', '/manifest.webmanifest', '/icon.svg',
   '/icons/icon-192.png', '/icons/icon-512.png', '/icons/apple-touch-icon.png', '/icons/favicon-32.png'];
 
