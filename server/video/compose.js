@@ -11,10 +11,10 @@
 // The app overlays its own header (top ~8%) and title block (bottom ~18%), so content stays
 // between roughly y = -760 and y = +560.
 
-import { topic as topicOf } from './topics.js';
+import { topic as topicOf } from '../curriculum/topics.js';
 import { format as formatOf, scenesFor } from './formats.js';
 import { teachingVisual, stampCard, numberCard, recapCard, questionCard, answerSteps, calloutCard, flashCard, chatThread } from './visuals.js';
-import { isTeachingVisual } from './lessons/schema.js';
+import { isTeachingVisual } from '../lessons/schema.js';
 
 export const W = 1080;
 export const H = 1920;

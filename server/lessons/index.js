@@ -4,14 +4,15 @@
 //   3. the offline bank (no Anthropic key, or Claude failed)
 // A short lock stops two concurrent requests from paying for the same batch.
 
-import { config } from '../config.js';
-import { kv } from '../kv.js';
-import { normalize } from '../catalog.js';
-import { topic as topicOf } from '../topics.js';
+import { config } from '../core/config.js';
+import { kv } from '../core/kv.js';
+import { normalize } from '../curriculum/catalog.js';
+import { topic as topicOf } from '../curriculum/topics.js';
 import { BANK } from './bank.js';
 import { sanitizeLesson } from './schema.js';
 import { writeEpisodes } from './claude.js';
-import { pickFormats } from '../formats.js';
+import { pickFormats, FORMAT_IDS } from '../video/formats.js';
+import { formatPerformance } from '../feed/events.js';
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -34,7 +35,9 @@ async function writeBatch(unit, audience, key, covered) {
   // Every batch mixes formats, steering away from the ones this unit used most recently, so a
   // student scrolling one unit never sees the same kind of video twice in a row.
   const recent = ((await kv.lrange(`formats:${key}`, 0, 9)) || []).reverse();
-  const formats = pickFormats(unit.topic, config.anthropic.episodesPerCall, { recent });
+  // Formats that students on this topic actually watch through get written more often.
+  const performance = await formatPerformance(unit.topic, FORMAT_IDS).catch(() => ({}));
+  const formats = pickFormats(unit.topic, config.anthropic.episodesPerCall, { recent, performance });
   const raws = await writeEpisodes({
     unit, audience, covered, formats, count: formats.length, accent: topicOf(unit.topic).accent,
   });

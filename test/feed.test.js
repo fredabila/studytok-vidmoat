@@ -11,12 +11,12 @@ process.env.STUDYTOK_KV_FILE = 'memory';
 process.env.STUDYTOK_READY_AHEAD = '0';
 for (const k of Object.keys(process.env)) if (/REST_API_URL|REDIS_REST_URL/.test(k)) delete process.env[k];
 
-const { kv, usingRedis, findRedisCredentials } = await import('../server/kv.js');
-const db = await import('../server/db.js');
-const { saveProfile, nextItems, recordEvent, publicVideo, library, getProgress, audienceFor } = await import('../server/feed.js');
+const { kv, usingRedis, findRedisCredentials } = await import('../server/core/kv.js');
+const db = await import('../server/core/db.js');
+const { saveProfile, nextItems, recordEvent, publicVideo, library, getProgress, audienceFor } = await import('../server/feed/index.js');
 const { lessonKey } = await import('../server/lessons/index.js');
-const { CATALOG } = await import('../server/catalog.js');
-const { resolveProgram } = await import('../server/curriculum.js');
+const { CATALOG } = await import('../server/curriculum/catalog.js');
+const { resolveProgram } = await import('../server/curriculum/index.js');
 
 const bio = CATALOG.find((p) => p.id === 'hs-biology');
 const profile = { level: 'high-school', country: 'Ghana', institution: 'Achimota School', program: 'Biology', exam: 'WASSCE' };
@@ -132,7 +132,7 @@ test('finds Upstash credentials under default, Upstash and custom prefixes', () 
 });
 
 test('students can add their own topics, file them in a course, and toggle units', async () => {
-  const { editProfile, DEFAULT_PREFS, audienceFor } = await import('../server/feed.js');
+  const { editProfile, DEFAULT_PREFS, audienceFor } = await import('../server/feed/index.js');
   const user = await saveProfile(null, { profile, programKeys: ['cat:hs-biology'], units: bio.units.map((u) => u.id) });
   const { user: u1, added } = await editProfile(user.id, { addCustom: { title: 'Python decorators', programKey: 'cat:hs-biology' } });
   assert.ok(added.id.startsWith('cu:'));
@@ -153,7 +153,7 @@ test('students can add their own topics, file them in a course, and toggle units
 });
 
 test('ready-first: a generating unit never blocks the page when another unit is ready', async () => {
-  const { readyKeyFor } = await import('../server/generator.js');
+  const { readyKeyFor } = await import('../server/video/generator.js');
   // A course whose units 2.. have ready videos but unit 1 has none. Generation is stubbed by
   // leaving the library empty for that unit and checking the page order.
   const prof = { level: 'university', program: 'Law', exam: '' };

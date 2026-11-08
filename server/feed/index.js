@@ -1,18 +1,20 @@
-// The "For You" feed: profiles, picking units with the algorithm (recommend.js), choosing or
-// generating a video for each, keeping a few videos generating ahead of the viewer, and
-// turning engagement into per-unit progress.
+// The "For You" feed: profiles, picking units with the algorithm (ranking.js), choosing the
+// best ready video of each for this student right now (or generating one), keeping a few
+// videos generating ahead of the viewer, and the Library. Engagement events are folded into
+// progress and tastes by events.js.
 
 import { randomUUID } from 'node:crypto';
-import { config } from './config.js';
-import { INTEREST_TOPICS, TOPIC_BY_ID } from './topics.js';
-import { format as formatOf } from './formats.js';
-import { level as levelOf, LEVEL_BY_ID } from './levels.js';
-import { getUnit, getProgram, interestUnit, customUnit } from './curriculum.js';
-import { lessonKey } from './lessons/index.js';
-import { startVideo, readyKeyFor } from './generator.js';
-import { pickUnits, applyEvent, emptyState, mastery, videoQuality } from './recommend.js';
-import { kv } from './kv.js';
-import * as db from './db.js';
+import { config } from '../core/config.js';
+import { INTEREST_TOPICS, TOPIC_BY_ID } from '../curriculum/topics.js';
+import { format as formatOf } from '../video/formats.js';
+import { level as levelOf, LEVEL_BY_ID } from '../curriculum/levels.js';
+import { getUnit, getProgram, interestUnit, customUnit } from '../curriculum/index.js';
+import { lessonKey } from '../lessons/index.js';
+import { startVideo, readyKeyFor } from '../video/generator.js';
+import { pickUnits, mastery, scoreVideo, exploreRate, applyEvent, emptyState } from './ranking.js';
+import { ingest, getSignals, getSession, noteServed } from './events.js';
+import { kv } from '../core/kv.js';
+import * as db from '../core/db.js';
 
 const clean = (s, n = 120) => String(s ?? '').replace(/\s+/g, ' ').trim().slice(0, n);
 
@@ -129,21 +131,24 @@ async function candidatesFor(user) {
 
 // ---------------------------------------------------------------- choosing videos
 /**
- * Best ready video for this unit+level the viewer has not seen or been served. Among them, a
- * video in a different format from the one just served wins, so the feed keeps changing shape.
+ * Best ready video for this unit+level the viewer has not seen or been served, scored for this
+ * student right now (ranking.js scoreVideo: quality × taste × diversity × fatigue × difficulty).
+ * @returns {Promise<null | { video, parts }>}
  */
-async function reusable(userId, readyKey, taken, lastFormat = null) {
+async function reusable(userId, readyKey, taken, { signals, session } = {}) {
   const ids = (await db.readyIds(readyKey, 60)).filter((id) => !taken.has(id));
   if (!ids.length) return null;
   const blocked = await db.inAnySet(userId, ['seen', 'served'], ids);
   const candidates = ids.filter((_, i) => !blocked[i]).slice(0, 12);
   if (!candidates.length) return null;
-  const videos = await Promise.all(candidates.map((id) => db.getVideo(id)));
-  const stats = await Promise.all(candidates.map((id) => db.getStats(id)));
-  const score = (i) => videoQuality(stats[i]) + (lastFormat && (videos[i]?.format || 'explain') === lastFormat ? -0.35 : 0);
-  let best = 0;
-  for (let i = 1; i < candidates.length; i++) if (score(i) > score(best)) best = i;
-  return videos[best];
+  const videos = (await Promise.all(candidates.map((id) => db.getVideo(id)))).filter((v) => v?.status === 'ready');
+  const stats = await Promise.all(videos.map((v) => db.getStats(v.id)));
+  let best = null;
+  videos.forEach((v, i) => {
+    const r = scoreVideo(v, stats[i], signals, session);
+    if (!best || r.score > best.score) best = { video: v, ...r };
+  });
+  return best;
 }
 
 /** Videos this viewer already has generating (so prefetch does not pile up). */
@@ -180,25 +185,33 @@ export async function nextItems(userId, count = 3) {
   const user = await db.getUser(userId);
   const audience = audienceFor(user);
   const { candidates, hasCourse } = await candidatesFor(user);
-  const states = await getProgress(userId);
+  const [states, signals, session] = await Promise.all([getProgress(userId), getSignals(userId), getSession(userId)]);
   const recent = (await kv.lrange(`user:${userId}:recentUnits`, 0, 9)) || [];
 
-  // No exploration for a new student's first videos: start them at the beginning of the syllabus.
+  // No exploration for a new student's first videos (start at the beginning of the syllabus);
+  // then a share that decays as the algorithm learns the student.
   const servedSoFar = Object.values(states).reduce((n, s) => n + (s.served || 0), 0);
-  const picks = pickUnits(candidates, states, recent, Math.min(candidates.length, count + 4), { hasCourse, explore: servedSoFar < 8 ? 0 : 0.1 });
+  const picks = pickUnits(candidates, states, recent, Math.min(candidates.length, count + 4), { hasCourse, explore: exploreRate(servedSoFar) });
   const pending = [];
   const taken = new Set();
   let generating = (await generatingFor(userId)).length;
 
   const ready = [];
   const unready = [];
-  let lastFormat = await kv.get(`user:${userId}:lastFormat`);
+  // As videos are chosen for this page, treat them as the session's most recent for diversity.
+  const pageSession = { ...session, lastFormats: [...(session.lastFormats || [])], lastTopics: [...(session.lastTopics || [])] };
   for (const pick of picks) {
-    const video = await reusable(userId, readyKeyFor(pick.unit.id, audience), taken, lastFormat);
-    if (video) { taken.add(video.id); ready.push({ pick, video }); lastFormat = video.format || 'explain'; } else unready.push(pick);
+    const best = await reusable(userId, readyKeyFor(pick.unit.id, audience), taken, { signals, session: pageSession });
+    if (best) {
+      taken.add(best.video.id);
+      ready.push({ pick, video: best.video, videoParts: best.parts });
+      pageSession.lastFormats.unshift(best.video.format || 'explain');
+      pageSession.lastTopics.unshift(best.video.topic);
+      pageSession.viewed = (pageSession.viewed || 0) + 1;
+    } else unready.push(pick);
   }
 
-  const items = ready.slice(0, count).map(({ pick, video }) => ({ video, unit: pick.unit, why: { ...pick.parts, kind: pick.kind }, pos: pick.pos || null }));
+  const items = ready.slice(0, count).map(({ pick, video, videoParts }) => ({ video, unit: pick.unit, why: { ...pick.parts, kind: pick.kind, video: videoParts }, pos: pick.pos || null }));
 
   // Start what is missing: the most important missing unit always, enough to fill this page,
   // plus a few ahead (bounded per viewer).
@@ -228,8 +241,7 @@ export async function nextItems(userId, count = 3) {
     await updateProgress(userId, x.unit.id, 'served');
   }
   await kv.ltrim(`user:${userId}:recentUnits`, 0, 19);
-  const lastReady = page.filter((x) => x.video.status === 'ready').at(-1);
-  if (lastReady) await kv.set(`user:${userId}:lastFormat`, lastReady.video.format || 'explain');
+  await noteServed(userId, page.map((x) => x.video));
   return { items: page, pending };
 }
 
@@ -253,41 +265,10 @@ export async function prefetch(userId) {
 }
 
 // ---------------------------------------------------------------- events
-const STAT_FOR = { view: 'views', complete: 'completes', like: 'likes', skip: 'skips', save: 'saves' };
-
-export async function recordEvent(userId, { videoId, type, watchedSec = 0, correct }) {
-  const video = await db.getVideo(videoId);
-  if (!video) return false;
-  const unitId = video.unitId || (video.topic ? `topic:${video.topic}` : null);
-
-  // Once-per-viewer events.
-  const onceSets = { view: 'seen', like: 'liked', save: 'saved', quiz_answer: 'answered' };
-  if (onceSets[type]) {
-    if (await db.inSet(userId, onceSets[type], videoId)) return true;
-    await db.addToSet(userId, onceSets[type], videoId);
-  }
-  if (type === 'unlike' || type === 'unsave') {
-    const set = type === 'unlike' ? 'liked' : 'saved';
-    if (!(await db.inSet(userId, set, videoId))) return true;
-    await db.removeFromSet(userId, set, videoId);
-    await db.incrStat(videoId, type === 'unlike' ? 'likes' : 'saves', -1);
-  }
-  if (type === 'view') {
-    if (video.readyKey) {
-      await kv.zincrby('popular:units', 1, video.readyKey);
-      const user = await db.getUser(userId);
-      await kv.set(`popular:audience:${video.readyKey}`, { unitId: video.unitId, audience: audienceFor(user) });
-    }
-    await kv.lpush(`user:${userId}:history`, videoId);
-    await kv.ltrim(`user:${userId}:history`, 0, 199);
-  }
-  if (STAT_FOR[type]) await db.incrStat(videoId, STAT_FOR[type], 1);
-  if (type === 'quiz_answer') await db.incrStat(videoId, correct ? 'quizRight' : 'quizWrong', 1);
-  if (type === 'leave' && watchedSec > 0) await db.incrStat(videoId, 'watchSec', Math.min(Math.round(watchedSec), 600));
-
-  if (unitId && ['view', 'complete', 'skip', 'like', 'unlike', 'less', 'quiz_answer'].includes(type)) {
-    await updateProgress(userId, unitId, type, { correct: Boolean(correct) });
-  }
+/** One event (the batch API is events.js ingest). Returns false when the video is unknown. */
+export async function recordEvent(userId, event) {
+  if (event.videoId && !(await db.getVideo(event.videoId))) return false;
+  await ingest(userId, { events: [{ at: Date.now(), ...event }] });
   return true;
 }
 
@@ -316,6 +297,7 @@ export async function publicVideo(v, userId, { withDocument = true, why, pos, qu
     poster: v.poster || null,
     narrated: Boolean(v.narrated),
     quiz: ready ? v.quiz || null : null,
+    scenes: ready ? v.scenes || [] : [],
     credits: v.credits || [],
     liked, saved,
     likes: stats.likes,

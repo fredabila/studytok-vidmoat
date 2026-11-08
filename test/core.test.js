@@ -7,16 +7,16 @@ import { join } from 'node:path';
 process.env.STUDYTOK_DATA_DIR = mkdtempSync(join(tmpdir(), 'studytok-test-')) + '/';
 process.env.STUDYTOK_KV_FILE = 'memory';
 
-const { composeLesson, planTimeline, coverScale, timeWords } = await import('../server/compose.js');
+const { composeLesson, planTimeline, coverScale, timeWords } = await import('../server/video/compose.js');
 const { sanitizeLesson } = await import('../server/lessons/schema.js');
 const { BANK } = await import('../server/lessons/bank.js');
-const { INTEREST_TOPICS } = await import('../server/topics.js');
-const { rank } = await import('../server/media.js');
-const { sanitizeSvg, teachingVisual } = await import('../server/visuals.js');
-const { narrationParts, alignParts } = await import('../server/voice.js');
-const { scenesFor, FORMAT_IDS, pickFormats } = await import('../server/formats.js');
+const { INTEREST_TOPICS } = await import('../server/curriculum/topics.js');
+const { rank } = await import('../server/video/media.js');
+const { sanitizeSvg, teachingVisual } = await import('../server/video/visuals.js');
+const { narrationParts, alignParts } = await import('../server/video/voice.js');
+const { scenesFor, FORMAT_IDS, pickFormats } = await import('../server/video/formats.js');
 const { SAMPLES } = await import('../server/lessons/samples.js');
-const { matchProgram, CATALOG } = await import('../server/catalog.js');
+const { matchProgram, CATALOG } = await import('../server/curriculum/catalog.js');
 
 const lesson = sanitizeLesson(BANK.biology[0], 'biology');
 const media = {

@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { applyEvent, emptyState, mastery, scoreUnits, pickUnits, sampleBeta, videoQuality, BOX_DAYS } from '../server/recommend.js';
+import { applyEvent, emptyState, mastery, scoreUnits, pickUnits, sampleBeta, videoQuality, BOX_DAYS } from '../server/feed/ranking.js';
 
 const seeded = (seed = 1) => () => ((seed = (seed * 9301 + 49297) % 233280) / 233280);
 const unit = (id) => ({ id, title: id, topic: 'math' });

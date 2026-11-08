@@ -7,8 +7,8 @@
 
 import * as z from 'zod/v4';
 import { zodOutputFormat } from '@anthropic-ai/sdk/helpers/zod';
-import { config } from './config.js';
-import { claude } from './claude.js';
+import { config } from '../core/config.js';
+import { claude } from '../core/claude.js';
 import { level as levelOf } from './levels.js';
 import { TOPICS } from './topics.js';
 

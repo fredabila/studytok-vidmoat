@@ -11,17 +11,17 @@
 // response; on a long-running server the promise simply runs in the background.
 
 import { randomUUID } from 'node:crypto';
-import { config } from './config.js';
-import { topic as topicOf } from './topics.js';
-import { nextLesson, lessonKey } from './lessons/index.js';
-import { interestUnit } from './curriculum.js';
+import { config } from '../core/config.js';
+import { topic as topicOf } from '../curriculum/topics.js';
+import { nextLesson, lessonKey } from '../lessons/index.js';
+import { interestUnit } from '../curriculum/index.js';
 import { resolveLessonMedia, resolveMusic } from './media.js';
 import { soundKit } from './sfx.js';
 import { narrate } from './voice.js';
 import { composeLesson } from './compose.js';
 import { format as formatOf } from './formats.js';
-import { createProject, getDocument as fetchDocument, deleteProject, fileProject } from './vidmoat.js';
-import { saveVideo, updateVideo, setDocument, markReady } from './db.js';
+import { createProject, getDocument as fetchDocument, deleteProject, fileProject } from '../core/vidmoat.js';
+import { saveVideo, updateVideo, setDocument, markReady } from '../core/db.js';
 
 // ---- A small promise queue so a burst of scrolling cannot fire unbounded API work
 // (per process / serverless instance).
@@ -106,7 +106,7 @@ async function buildVideo(video, unit, audience) {
   ]);
 
   const chip = unit.open ? look.label : unit.title;
-  const { commands, duration, quiz } = composeLesson({ ...lesson, topic: unit.topic, chip }, { ...media, music, sfx, voice });
+  const { commands, duration, quiz, segments } = composeLesson({ ...lesson, topic: unit.topic, chip }, { ...media, music, sfx, voice });
   const created = await createProject(`StudyTok · ${lesson.title}`, commands);
   const projectId = created.project.id;
   const failed = (created.results || []).filter((r) => !r.ok);
@@ -132,6 +132,8 @@ async function buildVideo(video, unit, audience) {
     narrated: Boolean(voice),
     voice: voice ? { mode: voice.mode, credits: voice.credits, voiceId: voice.voiceId } : null,
     quiz: lesson.quiz && quiz ? { ...lesson.quiz, ...quiz } : null,
+    // Scene boundaries, so the app can report which scene a viewer left on (drop-off curves).
+    scenes: segments.map((s) => ({ id: s.id, kind: s.kind, start: s.start, duration: s.duration })),
     lint: (created.verification?.layout || []).filter((l) => l.severity === 'warn'),
     timings: { lessonMs, totalMs: Date.now() - started },
     readyAt: new Date().toISOString(),

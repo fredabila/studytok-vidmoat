@@ -11,8 +11,8 @@ player**: nothing is ever exported to MP4.
 ```
 onboarding: level -> country / school / course / exam -> syllabus (catalog match or web research)
                                                            │ cached per course, shared by classmates
-feed request ─► algorithm picks units ─► unseen ready video for that unit+level?  ── yes ─► serve
-                (recommend.js)                         │ no
+feed request ─► algorithm picks units ─► best unseen ready video for that unit+level?  ── yes ─► serve
+                (feed/ranking.js)                      │ no
                                                        ▼
    lesson: queued episode, or Claude writes 3 progressive episodes for the unit (1 call)
    in parallel: narration (Vidmoat speech + word timings) · teaching visuals (SVG diagrams,
@@ -99,21 +99,39 @@ lesson of any format (`server/lessons/samples.js`) into a real project and saves
   canvas; Pixabay's 1080p variant is fetched instead of the 720p one; backgrounds fall back to
   high-resolution photos with a slow push-in rather than upscaled 720p video.
 
-## The algorithm (`server/recommend.js`)
+## The algorithm (`server/feed/ranking.js`)
 
-Every feed slot scores each of the student's units (course units plus optional interest topics):
+Two stages per feed slot, both pure functions with tests; the full write-up is
+[docs/ALGORITHM.md](docs/ALGORITHM.md).
+
+**Which unit** = affinity + syllabus progress + spaced-repetition review − recency, × "less":
 
 | Signal | What it does |
 | --- | --- |
-| **Affinity** | Thompson sample from Beta(completes + 2·likes + correct answers + 1, skips + 3·"less" + ½·wrong + 1): units the student engages with come up more, uncertain ones still get explored. |
+| **Affinity** | Thompson sample from Beta(completes + 2·likes + correct answers + watch fraction + 1, skips + 3·"less" + ½·wrong + unwatched fraction + 1), shrunk toward neutral until there is evidence. |
 | **Progress** | The syllabus frontier: in each course, the first units not yet learned get a boost that decays along the course order, so the feed walks the syllabus. |
 | **Review** | Spaced repetition (Leitner boxes): a unit is due again 1, 3, 7 or 21 days after a correct answer, and 20 minutes after a wrong one. |
 | **Recency** | Just-served units are pushed back to keep the feed varied. |
 | **Less** | "Show me less" multiplies a unit down (×0.35 each time). |
 
-Plus 10% exploration. Within a unit, videos are chosen by a smoothed quality score from everyone's
-completions, likes, saves and quiz answers. Mastery per unit (shown in the Library) combines quiz
-accuracy and completions.
+Plus exploration that starts at 0 for a new student and decays from 15% toward 3%.
+
+**Which video** of that unit = quality × taste × diversity × fatigue × difficulty × freshness:
+everyone's watch fraction, completions, likes, saves and quiz accuracy on the video
+(Bayesian-smoothed); the student's own taste for the format and topic (Thompson sample from
+their signals); not the same format twice in a row; lighter formats late in a session; gentler
+formats after wrong answers and exam drills on a right streak; a small bonus for new videos.
+The *Why* sheet shows the parts.
+
+## Events
+
+The app reports everything a viewer does, TikTok-style: impressions, view starts, 5-second
+heartbeats, scene changes, pauses, loops, how far each video got and how it was left, quiz
+timing and answers, reactions, "less", sheet opens, every preference change, library and
+profile use, install prompts, sessions. `server/feed/events.js` folds them into per-video,
+per-format, per-unit and per-student aggregates (the ranking's inputs), a per-scene drop-off
+curve, daily counts and a capped raw log; `GET /api/stats` publishes anonymous aggregates.
+The full taxonomy is [docs/EVENTS.md](docs/EVENTS.md).
 
 ## Speed
 
@@ -181,22 +199,21 @@ route (`vercel.json`). Generation and research keep running after the response v
 
 ## Files
 
-| File | What it does |
-| --- | --- |
-| `server/levels.js`, `server/catalog.js` | Study levels, and built-in programs (high-school subjects, university programs) with ordered units. |
-| `server/research.js`, `server/curriculum.js` | Web-search research of an institution's course into units (cached and shared), catalog matching, unit lookup. |
-| `server/lessons/` | Lesson schema (beats with visual specs), Claude episode writer (structured output), episode queue with a lock, offline bank. |
-| `server/visuals.js` | Teaching-visual templates (HTML/CSS/inline SVG via `addHtmlElement`, stat counters) and the SVG sanitizer. |
-| `server/voice.js` | Narration script, Vidmoat speech + transcription, section alignment to pauses, credit floor. |
-| `server/sfx.js`, `server/media.js` | CC0 sound kit; stock/Commons media ranking, import cache, music pool. |
-| `server/formats.js` | The eight formats: scene builders, skins (fonts, captions, grade, transitions, music, voice, card theme), weighted rotation. |
-| `server/compose.js` | Scenes + media + voice → Vidmoat commands (audio-driven timeline with pauses, per-skin rendering, captions, quiz timing, sfx, ducked music). |
-| `server/recommend.js`, `server/feed.js` | The algorithm; profiles, feed pages, generate-ahead, events → progress, library, cron top-up. |
-| `server/generator.js` | The build pipeline with retries. |
-| `server/kv.js`, `server/db.js` | Upstash Redis (or a local file with the same commands) and the data model. |
-| `server/auth.js` | Sign in with Vidmoat: self-registered OAuth client, code + PKCE, `account.read` only, no stored tokens. |
-| `server/app.js`, `api/index.js`, `server/index.js` | The API, the Vercel Function, the local server. |
-| `public/` | Onboarding, the paging feed with live players and tap-to-answer quizzes, Library, Profile; `sw.js` + `manifest.webmanifest` + `icons/` for the PWA. |
+```
+server/app.js        the API (api/index.js wraps it for Vercel; server/index.js serves it locally)
+server/core/         config, KV (Upstash Redis or a local file), data model, Vidmoat + Claude clients, Sign in with Vidmoat
+server/curriculum/   levels, program catalog, course research, topics, unit lookup
+server/lessons/      lesson schema + sanitiser, Claude episode writer, episode queue, offline bank, format samples
+server/video/        formats (scenes + skins), composer, HTML cards, narration, media, sfx, generator
+server/feed/         ranking (the algorithm), feed pages + profiles + library, events
+public/              the PWA: app.js, telemetry.js, player.js, styles.css, sw.js, icons
+scripts/             preview.mjs (real frames of any lesson or format), warm.mjs
+test/                node:test suites (no network)
+docs/                ARCHITECTURE · FORMATS · EVENTS · ALGORITHM
+```
+
+See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for a request walkthrough and
+[CONTRIBUTING.md](CONTRIBUTING.md) for how to work on it.
 
 ## Notes
 
@@ -205,3 +222,9 @@ route (`vercel.json`). Generation and research keep running after the response v
   editor. `VIDMOAT_DELETE_PROJECTS=true` deletes them once the document is stored.
 * **Sound**: browsers allow sound only after a tap; onboarding counts as one, and returning
   viewers get a single "Tap to start" screen.
+
+## Contributing and license
+
+StudyTok is open source under the [MIT license](LICENSE). Issues and pull requests are
+welcome: start with [CONTRIBUTING.md](CONTRIBUTING.md). Built by
+[Vidmoat](https://www.vidmoat.com), a Buzz Innovations Ltd. company.

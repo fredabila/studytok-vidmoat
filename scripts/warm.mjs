@@ -5,15 +5,15 @@
 // Usage: npm run warm -- [perUnit=1] [target ...] [--level=high-school] [--exam=WASSCE] [--country=Ghana]
 //   target: a catalog program (cat:hs-biology), a researched program key (res:…), or topic:<id>
 //   (default: every interest topic, for "just curious" viewers)
-import { INTEREST_TOPICS } from '../server/topics.js';
-import { startVideo } from '../server/generator.js';
-import { readyIds, getVideo } from '../server/db.js';
-import { getProgram, getUnit, interestUnit } from '../server/curriculum.js';
+import { INTEREST_TOPICS } from '../server/curriculum/topics.js';
+import { startVideo } from '../server/video/generator.js';
+import { readyIds, getVideo } from '../server/core/db.js';
+import { getProgram, getUnit, interestUnit } from '../server/curriculum/index.js';
 import { lessonKey } from '../server/lessons/index.js';
-import { audienceFor } from '../server/feed.js';
-import { soundKit } from '../server/sfx.js';
-import { resolveMusic } from '../server/media.js';
-import { usingRedis, flushKv } from '../server/kv.js';
+import { audienceFor } from '../server/feed/index.js';
+import { soundKit } from '../server/video/sfx.js';
+import { resolveMusic } from '../server/video/media.js';
+import { usingRedis, flushKv } from '../server/core/kv.js';
 
 const args = process.argv.slice(2);
 const opt = (name, d = '') => args.find((a) => a.startsWith(`--${name}=`))?.split('=').slice(1).join('=') || d;

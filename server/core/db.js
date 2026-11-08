@@ -61,7 +61,7 @@ export async function readyCount() {
   return Number((await kv.hgetall('stats:library'))?.ready) || 0;
 }
 
-const STAT_FIELDS = ['views', 'completes', 'likes', 'skips', 'watchSec', 'quizRight', 'quizWrong', 'saves'];
+const STAT_FIELDS = ['views', 'completes', 'likes', 'skips', 'watchSec', 'quizRight', 'quizWrong', 'saves', 'leaves', 'pctSum', 'loops', 'less', 'impressions', 'rewatches'];
 export async function getStats(id) {
   const h = (await kv.hgetall(`video:${id}:stats`)) || {};
   return Object.fromEntries(STAT_FIELDS.map((f) => [f, Number(h[f]) || 0]));

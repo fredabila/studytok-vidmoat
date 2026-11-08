@@ -2,6 +2,8 @@
   "name": "studytok",
   "version": "0.1.0",
   "private": true,
+  "license": "MIT",
+  "repository": { "type": "git", "url": "https://github.com/fredabila/studytok-vidmoat" },
   "description": "A TikTok-style feed of short study videos, generated on the fly with the Vidmoat API and played live in the Vidmoat embed player (no MP4 exports).",
   "type": "module",
   "engines": {

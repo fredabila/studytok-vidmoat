@@ -3,21 +3,21 @@
 // function alive after the response and is a no-op on a normal long-running server.
 
 import { waitUntil } from '@vercel/functions';
-import { config } from './config.js';
-import { INTEREST_TOPICS } from './topics.js';
-import { LEVELS } from './levels.js';
-import { catalogNames } from './catalog.js';
-import { usingRedis, redisSource, redisLikeVarNames } from './kv.js';
-import * as db from './db.js';
-import { saveProfile, editProfile, prefetch, nextItems, recordEvent, publicVideo, library, topUpLibrary, cleanProfile, linkVidmoat } from './feed.js';
-import { resolveProgram, getProgram } from './curriculum.js';
-import { queueStats } from './generator.js';
-import { getMe } from './vidmoat.js';
-import { signInEnabled, signInRequired, startSignIn, finishSignIn } from './auth.js';
-import { FORMATS } from './formats.js';
-import { kv } from './kv.js';
+import { config } from './core/config.js';
+import { INTEREST_TOPICS } from './curriculum/topics.js';
+import { LEVELS } from './curriculum/levels.js';
+import { catalogNames } from './curriculum/catalog.js';
+import { usingRedis, redisSource, redisLikeVarNames } from './core/kv.js';
+import * as db from './core/db.js';
+import { saveProfile, editProfile, prefetch, nextItems, publicVideo, library, topUpLibrary, cleanProfile, linkVidmoat } from './feed/index.js';
+import { resolveProgram, getProgram } from './curriculum/index.js';
+import { queueStats } from './video/generator.js';
+import { getMe } from './core/vidmoat.js';
+import { signInEnabled, signInRequired, startSignIn, finishSignIn } from './core/auth.js';
+import { FORMATS, FORMAT_IDS } from './video/formats.js';
+import { ingest, stats as eventStats } from './feed/events.js';
+import { kv } from './core/kv.js';
 
-const EVENT_TYPES = new Set(['view', 'complete', 'like', 'unlike', 'save', 'unsave', 'skip', 'less', 'leave', 'quiz_answer']);
 
 export const SECURITY_HEADERS = {
   'X-Content-Type-Options': 'nosniff',
@@ -139,6 +139,9 @@ async function route(req, res, url) {
     return send(res, 200, { programs: catalogNames(url.searchParams.get('level') || 'high-school') });
   }
 
+  // Anonymous aggregates: how the formats perform, event volumes per day, generation waits.
+  if (key === 'GET /api/stats') return send(res, 200, await eventStats({ formats: FORMAT_IDS }), { 'Cache-Control': 'public, max-age=60' });
+
   if (key === 'GET /api/health') {
     try {
       const me = await getMe();
@@ -250,11 +253,12 @@ async function route(req, res, url) {
     return v ? send(res, 200, { item: await publicVideo(v, userId) }) : send(res, 404, { error: 'Not found' });
   }
 
+  // Engagement events: a batch { ctx, events: [...] } from telemetry.js, or one event { type, videoId, ... }.
   if (key === 'POST /api/events') {
-    const body = await readJson(req);
-    if (!EVENT_TYPES.has(body.type) || typeof body.videoId !== 'string') return send(res, 400, { error: 'Bad event' });
-    const ok = await recordEvent(userId, { videoId: body.videoId, type: body.type, watchedSec: Number(body.watchedSec) || 0, correct: body.correct === true });
-    return ok ? send(res, 200, { ok: true }) : send(res, 404, { error: 'Unknown video' });
+    const body = await readJson(req, 256 * 1024);
+    const batch = Array.isArray(body.events) ? body : { events: [body] };
+    const { accepted } = await ingest(userId, batch);
+    return send(res, 200, { ok: true, accepted });
   }
 
   return send(res, 404, { error: 'Not found' });

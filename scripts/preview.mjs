@@ -9,18 +9,18 @@
 //   --narrate real narration through Vidmoat speech (spends credits: up to 20)
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { config } from '../server/config.js';
+import { config } from '../server/core/config.js';
 import { BANK } from '../server/lessons/bank.js';
 import { SAMPLES } from '../server/lessons/samples.js';
-import { format as formatOf } from '../server/formats.js';
+import { format as formatOf } from '../server/video/formats.js';
 import { sanitizeLesson } from '../server/lessons/schema.js';
-import { topic as topicOf } from '../server/topics.js';
-import { composeLesson } from '../server/compose.js';
-import { resolveLessonMedia, resolveMusic } from '../server/media.js';
-import { soundKit } from '../server/sfx.js';
-import { narrationParts, alignParts, narrate } from '../server/voice.js';
-import { createProject, previewFrame } from '../server/vidmoat.js';
-import { flushKv } from '../server/kv.js';
+import { topic as topicOf } from '../server/curriculum/topics.js';
+import { composeLesson } from '../server/video/compose.js';
+import { resolveLessonMedia, resolveMusic } from '../server/video/media.js';
+import { soundKit } from '../server/video/sfx.js';
+import { narrationParts, alignParts, narrate } from '../server/video/voice.js';
+import { createProject, previewFrame } from '../server/core/vidmoat.js';
+import { flushKv } from '../server/core/kv.js';
 
 const args = process.argv.slice(2);
 const voiceArg = args.findIndex((a) => a.startsWith('--voice='));

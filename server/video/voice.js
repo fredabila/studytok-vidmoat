@@ -7,8 +7,8 @@
 // estimates timings from the text; it then leaves the quiz answer unspoken (no reliable cut
 // point), so the answer is shown, not said.
 
-import { config } from './config.js';
-import { createSpeech, transcribe, importMedia, getMe } from './vidmoat.js';
+import { config } from '../core/config.js';
+import { createSpeech, transcribe, importMedia, getMe } from '../core/vidmoat.js';
 import { scenesFor, format as formatOf } from './formats.js';
 
 const MAX_CHARS = 1000;
