@@ -6,9 +6,9 @@ import { randomUUID } from 'node:crypto';
 import { config } from './config.js';
 import { INTEREST_TOPICS, TOPIC_BY_ID } from './topics.js';
 import { level as levelOf, LEVEL_BY_ID } from './levels.js';
-import { getUnit, getProgram, interestUnit } from './curriculum.js';
+import { getUnit, getProgram, interestUnit, customUnit } from './curriculum.js';
 import { lessonKey } from './lessons/index.js';
-import { startVideo } from './generator.js';
+import { startVideo, readyKeyFor } from './generator.js';
 import { pickUnits, applyEvent, emptyState, mastery, videoQuality } from './recommend.js';
 import { kv } from './kv.js';
 import * as db from './db.js';
@@ -26,7 +26,15 @@ export function cleanProfile(p = {}) {
   };
 }
 
-/** body: { profile, programKey?, units?: string[], interests?: string[] } */
+export const DEFAULT_PREFS = { voice: 'on', length: 'standard', visuals: 'mixed', difficulty: 'standard' };
+const PREF_VALUES = { voice: ['on', 'off'], length: ['quick', 'standard', 'deep'], visuals: ['mixed', 'diagrams', 'footage'], difficulty: ['easier', 'standard', 'harder'] };
+export function cleanPrefs(p = {}, base = DEFAULT_PREFS) {
+  const out = { ...base };
+  for (const [k, allowed] of Object.entries(PREF_VALUES)) if (allowed.includes(p[k])) out[k] = p[k];
+  return out;
+}
+
+/** body: { profile, programKeys?, units?: string[], interests?: string[], prefs? } */
 export async function saveProfile(userId, body) {
   const existing = userId ? await db.getUser(userId) : null;
   const user = {
@@ -38,6 +46,9 @@ export async function saveProfile(userId, body) {
       : typeof body.programKey === 'string' ? [body.programKey.slice(0, 40)] : existing?.programKeys || [],
     units: Array.isArray(body.units) ? body.units.map(String).slice(0, 40) : existing?.units || [],
     interests: Array.isArray(body.interests) ? body.interests.filter((t) => TOPIC_BY_ID[t]).slice(0, 14) : existing?.interests || [],
+    prefs: cleanPrefs(body.prefs || {}, existing?.prefs || DEFAULT_PREFS),
+    // Custom units a student added inside a course: unitId -> programKey.
+    unitGroups: existing?.unitGroups || {},
     vidmoat: existing?.vidmoat || null,
     setupDone: true,
   };
@@ -50,7 +61,38 @@ export async function saveProfile(userId, body) {
 export function audienceFor(user) {
   const p = user.profile || cleanProfile();
   const lvl = levelOf(p.level);
-  return { level: lvl.id, levelLabel: lvl.label, audience: lvl.audience, country: p.country, institution: p.institution, exam: p.exam };
+  const prefs = cleanPrefs(user.prefs || {});
+  // Only non-default lesson preferences change the lesson key, so defaults stay shared.
+  const lessonStyle = ['length', 'visuals', 'difficulty'].filter((k) => prefs[k] !== DEFAULT_PREFS[k]).map((k) => `|${k[0]}:${prefs[k]}`).join('');
+  return { level: lvl.id, levelLabel: lvl.label, audience: lvl.audience, country: p.country, institution: p.institution, exam: p.exam, prefs, lessonStyle };
+}
+
+/**
+ * Edits from the app: toggle units, add custom topics, change interests or preferences.
+ * body: { units?: string[], interests?: string[], prefs?: object, addCustom?: { title, programKey? }, removeUnit?: string }
+ */
+export async function editProfile(userId, body) {
+  const user = await db.getUser(userId);
+  if (Array.isArray(body.units)) user.units = body.units.map(String).slice(0, 60);
+  if (Array.isArray(body.interests)) user.interests = body.interests.filter((t) => TOPIC_BY_ID[t]).slice(0, 14);
+  if (body.prefs) user.prefs = cleanPrefs(body.prefs, user.prefs || DEFAULT_PREFS);
+  user.unitGroups ||= {};
+  let added = null;
+  if (body.addCustom?.title) {
+    added = await customUnit(body.addCustom.title);
+    if (added) {
+      if (!user.units.includes(added.id)) user.units.push(added.id);
+      const programKey = typeof body.addCustom.programKey === 'string' && (user.programKeys || []).includes(body.addCustom.programKey) ? body.addCustom.programKey : null;
+      if (programKey) user.unitGroups[added.id] = programKey; else delete user.unitGroups[added.id];
+    }
+  }
+  if (typeof body.removeUnit === 'string') {
+    user.units = user.units.filter((id) => id !== body.removeUnit);
+    delete user.unitGroups[body.removeUnit];
+  }
+  if (!user.units.length && !user.interests.length) user.interests = INTEREST_TOPICS.map((t) => t.id);
+  await db.saveUser(user);
+  return { user, added };
 }
 
 // ---------------------------------------------------------------- progress
@@ -66,11 +108,12 @@ async function updateProgress(userId, unitId, type, extra) {
 async function candidatesFor(user) {
   const out = [];
   const course = (await Promise.all(user.units.map((id) => getUnit(id)))).filter(Boolean);
+  const groupOf = (u) => u.programKey || user.unitGroups?.[u.id] || (u.custom ? 'custom' : 'course');
   const sizes = {};
-  for (const u of course) sizes[u.programKey || 'course'] = (sizes[u.programKey || 'course'] || 0) + 1;
+  for (const u of course) sizes[groupOf(u)] = (sizes[groupOf(u)] || 0) + 1;
   const seen = {};
   course.forEach((unit, order) => {
-    const group = unit.programKey || 'course';
+    const group = groupOf(unit);
     seen[group] = (seen[group] || 0) + 1;
     out.push({ unit, kind: 'course', order, group, pos: { index: seen[group], total: sizes[group] } });
   });
@@ -102,10 +145,28 @@ async function generatingFor(userId) {
   return vids.filter((v) => v?.status === 'generating');
 }
 
+async function startFor(userId, unit, audience, pending) {
+  const started = await startVideo(unit, audience, { requestedBy: userId });
+  pending.push(started.done);
+  await kv.lpush(`user:${userId}:generating`, started.video.id);
+  return started.video;
+}
+
+/** Any ready, unseen video for this level (then any level): an instant starter while the student's own units generate. */
+async function starter(userId, level, taken) {
+  const ids = (await db.anyReadyIds(level, 40)).filter((id) => !taken.has(id));
+  if (!ids.length) return null;
+  const blocked = await db.inAnySet(userId, ['seen', 'served'], ids);
+  const id = ids.find((_, i) => !blocked[i]);
+  return id ? db.getVideo(id) : null;
+}
+
 /**
  * Returns `count` feed items plus the promises of generation work started (pass them to
- * waitUntil on serverless). Ready, unseen library videos are served first; units without one
- * get a new video started. A few more are started ahead for the units likely to come next.
+ * waitUntil on serverless). Ready-first: a ready, unseen library video for any of the student's
+ * likely units is served before a video that still has to be made, so the feed almost never
+ * shows a waiting slide; the units that need generating are started in the background and
+ * appear once ready. A brand-new library falls back to any ready starter for the level.
  */
 export async function nextItems(userId, count = 3) {
   const user = await db.getUser(userId);
@@ -116,42 +177,68 @@ export async function nextItems(userId, count = 3) {
 
   // No exploration for a new student's first videos: start them at the beginning of the syllabus.
   const servedSoFar = Object.values(states).reduce((n, s) => n + (s.served || 0), 0);
-  const picks = pickUnits(candidates, states, recent, count + 2, { hasCourse, explore: servedSoFar < 8 ? 0 : 0.1 });
-  const items = [];
+  const picks = pickUnits(candidates, states, recent, Math.min(candidates.length, count + 4), { hasCourse, explore: servedSoFar < 8 ? 0 : 0.1 });
   const pending = [];
   const taken = new Set();
   let generating = (await generatingFor(userId)).length;
 
-  for (const [i, pick] of picks.entries()) {
-    const key = lessonKey(pick.unit.id, audience);
-    const ready = await reusable(userId, key, taken);
-    if (i < count) {
-      let video = ready;
-      if (!video) {
-        const started = await startVideo(pick.unit, audience, { requestedBy: userId });
-        video = started.video;
-        pending.push(started.done);
-        generating++;
-        await kv.lpush(`user:${userId}:generating`, video.id);
-      }
-      taken.add(video.id);
+  const ready = [];
+  const unready = [];
+  for (const pick of picks) {
+    const video = await reusable(userId, readyKeyFor(pick.unit.id, audience), taken);
+    if (video) { taken.add(video.id); ready.push({ pick, video }); } else unready.push(pick);
+  }
+
+  const items = ready.slice(0, count).map(({ pick, video }) => ({ video, unit: pick.unit, why: { ...pick.parts, kind: pick.kind }, pos: pick.pos || null }));
+
+  // Start what is missing: the most important missing unit always, enough to fill this page,
+  // plus a few ahead (bounded per viewer).
+  let started = 0;
+  for (const pick of unready) {
+    const needed = items.length < count;
+    if (!needed && started > 0 && generating >= config.generation.readyAhead) break;
+    started++;
+    const video = await startFor(userId, pick.unit, audience, pending);
+    generating++;
+    if (needed) {
+      // While it generates, show a starter from the library instead of a waiting slide.
+      const fill = await starter(userId, audience.level, taken);
+      if (fill) { taken.add(fill.id); items.push({ video: fill, unit: null, why: { starter: true }, pos: null, queuedFor: pick.unit.title }); }
       items.push({ video, unit: pick.unit, why: { ...pick.parts, kind: pick.kind }, pos: pick.pos || null });
-    } else if (!ready && generating < config.generation.readyAhead) {
-      // Prefetch: start the likely next units now so they are ready when the viewer gets there.
-      const started = await startVideo(pick.unit, audience, { requestedBy: userId });
-      pending.push(started.done);
-      generating++;
-      await kv.lpush(`user:${userId}:generating`, started.video.id);
     }
   }
+  // Keep the page to `count` ready-or-generating items, generating ones last.
+  items.sort((a, b) => Number(a.video.status !== 'ready') - Number(b.video.status !== 'ready'));
+  const page = items.slice(0, count + 1);
+
   await kv.ltrim(`user:${userId}:generating`, 0, 19);
-  await db.addToSet(userId, 'served', ...items.map((x) => x.video.id));
-  for (const x of items) {
+  await db.addToSet(userId, 'served', ...page.map((x) => x.video.id));
+  for (const x of page) {
+    if (!x.unit) continue;
     await kv.lpush(`user:${userId}:recentUnits`, x.unit.id);
     await updateProgress(userId, x.unit.id, 'served');
   }
   await kv.ltrim(`user:${userId}:recentUnits`, 0, 19);
-  return { items, pending };
+  return { items: page, pending };
+}
+
+/** Right after setup: start generating the student's first units so the feed opens without a wait. */
+export async function prefetch(userId) {
+  const user = await db.getUser(userId);
+  const audience = audienceFor(user);
+  const { candidates, hasCourse } = await candidatesFor(user);
+  const picks = pickUnits(candidates, await getProgress(userId), [], Math.min(candidates.length, config.generation.readyAhead), { hasCourse, explore: 0 });
+  const pending = [];
+  let generating = (await generatingFor(userId)).length;
+  for (const pick of picks) {
+    if (generating >= config.generation.readyAhead) break;
+    const have = (await db.readyIds(readyKeyFor(pick.unit.id, audience), 1)).length;
+    if (have) continue;
+    await startFor(userId, pick.unit, audience, pending);
+    generating++;
+  }
+  await kv.ltrim(`user:${userId}:generating`, 0, 19);
+  return pending;
 }
 
 // ---------------------------------------------------------------- events
@@ -195,7 +282,7 @@ export async function recordEvent(userId, { videoId, type, watchedSec = 0, corre
 
 // ---------------------------------------------------------------- views for the browser
 /** What the browser gets. The Vidmoat document is included only once the video is ready. */
-export async function publicVideo(v, userId, { withDocument = true, why, pos } = {}) {
+export async function publicVideo(v, userId, { withDocument = true, why, pos, queuedFor } = {}) {
   const look = TOPIC_BY_ID[v.topic] || TOPIC_BY_ID.biology;
   const ready = v.status === 'ready';
   const [stats, liked, saved, document] = await Promise.all([
@@ -222,6 +309,8 @@ export async function publicVideo(v, userId, { withDocument = true, why, pos } =
     likes: stats.likes,
     why: why || undefined,
     position: pos || undefined,
+    starter: why?.starter ? true : undefined,
+    queuedFor: queuedFor || undefined,
     document: document || undefined,
   };
 }
@@ -241,15 +330,26 @@ export async function library(userId) {
   const saved = (await Promise.all((savedIds || []).map(summarize))).filter(Boolean);
   const history = (await Promise.all([...new Set(historyIds)].map(summarize))).filter(Boolean);
   const programs = (await Promise.all((user.programKeys || []).map((k) => getProgram(k)))).filter(Boolean);
-  const units = await Promise.all(user.units.map(async (id) => {
+  const active = new Set(user.units);
+  const row = (u, programKey) => {
+    const s = states[u.id];
+    return { id: u.id, title: u.title, topic: u.topic, programKey, custom: Boolean(u.custom), active: active.has(u.id), mastery: mastery(s), views: s?.views || 0, dueForReview: Boolean(s?.due && s.due <= Date.now() && s.lastSeen) };
+  };
+  const units = [];
+  for (const p of programs) {
+    for (const u of p.units) units.push(row(u, p.key));
+  }
+  // Custom units: filed under the course the student added them to, else a "My topics" group.
+  for (const id of user.units) {
+    if (units.some((u) => u.id === id)) continue;
     const u = await getUnit(id);
-    const s = states[id];
-    return u ? { id, title: u.title, topic: u.topic, programKey: u.programKey || null, mastery: mastery(s), views: s?.views || 0, dueForReview: Boolean(s?.due && s.due <= Date.now() && s.lastSeen) } : null;
-  }));
+    if (u) units.push(row(u, user.unitGroups?.[id] || (u.custom ? 'custom' : null)));
+  }
   return {
     profile: user.profile,
+    prefs: cleanPrefs(user.prefs || {}),
     programs: programs.map((p) => ({ key: p.key, name: p.name, basis: p.basis, sources: p.sources || [] })),
-    units: units.filter(Boolean), interests: user.interests, saved, history,
+    units, interests: user.interests, saved, history,
   };
 }
 

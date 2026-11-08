@@ -14,15 +14,18 @@ import { writeEpisodes } from './claude.js';
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-/** Lessons are shared by everyone studying the same unit at the same level (and exam). */
-export const lessonKey = (unitId, audience) => `${unitId}|${audience.level}|${normalize(audience.exam || '')}`;
+/**
+ * Lessons are shared by everyone studying the same unit at the same level (and exam), with the
+ * same lesson preferences. Default preferences add nothing, so the common case stays shared.
+ */
+export const lessonKey = (unitId, audience) => `${unitId}|${audience.level}|${normalize(audience.exam || '')}${audience.lessonStyle || ''}`;
 
 function fromBank(unit, covered) {
   const list = BANK[unit.topic] || [];
   const seen = new Set(covered.map(normalize));
   const fresh = list.filter((l) => !seen.has(normalize(l.title)));
   const pool = fresh.length ? fresh : list;
-  if (!pool.length) throw new Error(`No offline lessons for topic ${unit.topic}`);
+  if (!pool.length) throw new Error(unit.custom ? 'Custom topics need Claude (set ANTHROPIC_API_KEY)' : `No offline lessons for topic ${unit.topic}`);
   return pool[Math.floor(Math.random() * pool.length)];
 }
 

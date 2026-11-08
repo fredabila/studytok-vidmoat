@@ -54,6 +54,32 @@ term, a clock under the think pause, a ding on the answer, and a CC0 music bed d
   Vidmoat account; signing in on another device restores it. Without sign-in, StudyTok works
   as a guest with a one-year cookie.
 
+## Personalization
+
+* **Your own topics**: any topic in the student's own words ("Python decorators", "The Ashanti
+  Empire") becomes an open-ended unit Claude writes fresh episodes for. Add them from the
+  **Tune** button on any video or from the Library; add them *into* a course, and they join
+  that syllabus. Everyone who adds the same topic shares its lessons.
+* **Editable courses**: in the Library, tick units off and on, add topics to a course, remove
+  your own. Interests can be changed any time.
+* **Preferences** (Tune): narration on/off, length (quick 20-30 s / standard / deep 45-60 s),
+  visuals (mixed / diagrams only / real footage), difficulty (a step easier or harder than the
+  level). Length, visuals and difficulty change the lesson Claude writes; narration changes the
+  video. Non-default settings are part of the lesson key, so defaults stay shared and custom
+  settings are shared with students who chose the same.
+
+## No waiting
+
+* **Ready-first**: a feed page is filled with ready, unseen videos for the student's likely
+  units before anything that still has to be made; the missing units generate in the
+  background and appear when ready. A brand-new library falls back to any ready starter for
+  the level, labelled "while you wait", with a note saying which lesson is being made.
+* **Prefetch at setup**: the first units start generating the moment the profile is saved.
+* `STUDYTOK_READY_AHEAD` (default 4) videos are kept generating ahead of each viewer.
+* Sharper footage: candidates are ranked by how much they must be scaled up for a 1080x1920
+  canvas; Pixabay's 1080p variant is fetched instead of the 720p one; backgrounds fall back to
+  high-resolution photos with a slow push-in rather than upscaled 720p video.
+
 ## The algorithm (`server/recommend.js`)
 
 Every feed slot scores each of the student's units (course units plus optional interest topics):

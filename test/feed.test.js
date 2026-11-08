@@ -130,3 +130,45 @@ test('finds Upstash credentials under default, Upstash and custom prefixes', () 
   assert.equal(findRedisCredentials({ KV_REST_API_URL: u }), null, 'needs a token');
   assert.equal(findRedisCredentials({ REDIS_URL: 'rediss://x' }), null, 'TCP URLs are not REST credentials');
 });
+
+test('students can add their own topics, file them in a course, and toggle units', async () => {
+  const { editProfile, DEFAULT_PREFS, audienceFor } = await import('../server/feed.js');
+  const user = await saveProfile(null, { profile, programKeys: ['cat:hs-biology'], units: bio.units.map((u) => u.id) });
+  const { user: u1, added } = await editProfile(user.id, { addCustom: { title: 'Python decorators', programKey: 'cat:hs-biology' } });
+  assert.ok(added.id.startsWith('cu:'));
+  assert.equal(added.topic, 'computer-science', 'topic guessed from the title');
+  assert.ok(u1.units.includes(added.id));
+  assert.equal(u1.unitGroups[added.id], 'cat:hs-biology');
+  const { added: again } = await editProfile(user.id, { addCustom: { title: 'python decorators' } });
+  assert.equal(again.id, added.id, 'the same topic typed by anyone shares one unit');
+  const { user: u2 } = await editProfile(user.id, { units: [bio.units[0].id, added.id], removeUnit: added.id, prefs: { voice: 'off', length: 'deep', difficulty: 'bogus' } });
+  assert.deepEqual(u2.units, [bio.units[0].id]);
+  assert.deepEqual(u2.prefs, { ...DEFAULT_PREFS, voice: 'off', length: 'deep' });
+  const a = audienceFor(u2);
+  assert.equal(a.lessonStyle, '|l:deep', 'only non-default lesson preferences change the lesson key');
+  assert.equal(lessonKey('x', a), 'x|high-school|wassce|l:deep');
+  const lib = await library(user.id);
+  assert.equal(lib.units.filter((u) => u.active).length, 1);
+  assert.equal(lib.units.length, bio.units.length, 'inactive course units stay listed so they can be re-added');
+});
+
+test('ready-first: a generating unit never blocks the page when another unit is ready', async () => {
+  const { readyKeyFor } = await import('../server/generator.js');
+  // A course whose units 2.. have ready videos but unit 1 has none. Generation is stubbed by
+  // leaving the library empty for that unit and checking the page order.
+  const prof = { level: 'university', program: 'Law', exam: '' };
+  const law = CATALOG.find((p) => p.id === 'uni-law');
+  const aud = audienceFor({ profile: prof });
+  for (const u of law.units.slice(1)) await seed(u.id, 'law', aud, 2);
+  const user = await saveProfile(null, { profile: prof, programKeys: ['cat:uni-law'], units: law.units.map((u) => u.id) });
+  process.env.STUDYTOK_READY_AHEAD = '0';
+  const { items, pending } = await nextItems(user.id, 3);
+  const statuses = items.map((x) => x.video.status);
+  assert.equal(statuses[0], 'ready', 'the page opens with a ready video');
+  assert.ok(statuses.every((st) => st === 'ready'), 'nothing on the page is still being made when ready videos exist');
+  assert.equal(pending.length, 1, 'the missing unit 1 is started in the background');
+  const generating = await kv.lrange(`user:${user.id}:generating`, 0, 5);
+  const v = await db.getVideo(generating[0]);
+  assert.equal(v.unitId, law.units[0].id);
+  assert.equal(readyKeyFor(law.units[0].id, { ...aud, prefs: { voice: 'off' } }).endsWith('|novoice'), true);
+});

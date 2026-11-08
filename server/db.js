@@ -38,8 +38,19 @@ export const getDocument = (id) => kv.get(`video:${id}:doc`);
 export const setDocument = (id, doc) => kv.set(`video:${id}:doc`, doc);
 
 export async function markReady(v) {
-  await kv.zadd(`ready:${v.readyKey}`, { score: Date.parse(v.createdAt), member: v.id });
+  const entry = { score: Date.parse(v.createdAt), member: v.id };
+  await kv.zadd(`ready:${v.readyKey}`, entry);
+  if (v.level) await kv.zadd(`ready:any:${v.level}`, entry);
+  await kv.zadd('ready:any', entry);
   await kv.hincrby('stats:library', 'ready', 1);
+}
+
+/** Newest ready videos for a level (any unit), then for any level: instant starters. */
+export async function anyReadyIds(level, limit = 40) {
+  const mine = await kv.zrange(`ready:any:${level}`, 0, limit - 1, { rev: true });
+  if (mine.length >= limit) return mine;
+  const all = await kv.zrange('ready:any', 0, limit - 1, { rev: true });
+  return [...mine, ...all.filter((id) => !mine.includes(id))];
 }
 
 /** Newest ready video ids for a unit+level key (lessons/index.js lessonKey). */

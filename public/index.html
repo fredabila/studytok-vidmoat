@@ -116,6 +116,11 @@
         <div id="account-card" class="card"></div>
         <div id="install-card" class="card" hidden></div>
         <div class="card">
+          <h3>Tune your feed</h3>
+          <p class="muted">Topics you want to see, and how lessons are made for you.</p>
+          <button type="button" class="btn ghost" id="open-tune">Open feed settings</button>
+        </div>
+        <div class="card">
           <h3>Your studies</h3>
           <div id="studies-summary" class="muted"></div>
           <button type="button" class="btn ghost" id="edit-studies">Edit level, course & interests</button>
@@ -200,6 +205,10 @@
             <span class="ic"><svg viewBox="0 0 24 24"><path d="M12 3l2.2 5.3L20 9l-4.4 3.8L17 18.5 12 15.6 7 18.5l1.4-5.7L4 9l5.8-.7z"/></svg></span>
             <span class="count">Why</span>
           </button>
+          <button class="rail-btn tune" type="button" aria-label="Tune your feed">
+            <span class="ic"><svg viewBox="0 0 24 24"><path d="M4 6h10M18 6h2M4 12h3M11 12h9M4 18h12M20 18h0"/><circle cx="16" cy="6" r="2"/><circle cx="9" cy="12" r="2"/><circle cx="18" cy="18" r="2"/></svg></span>
+            <span class="count">Tune</span>
+          </button>
           <button class="rail-btn less" type="button" aria-label="Show me less of this">
             <span class="ic"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M5.6 5.6l12.8 12.8"/></svg></span>
             <span class="count">Less</span>
@@ -210,6 +219,7 @@
           <div class="unit-pill"><span class="dot"></span><span class="unit-text"></span></div>
           <h2 class="title"></h2>
           <p class="credits"></p>
+          <p class="next-note" hidden></p>
         </footer>
         <div class="progress" aria-hidden="true"><div class="bar"></div></div>
       </div>
