@@ -1,7 +1,9 @@
-// Generates one StudyTok video:
-//   lesson (Claude or bank) -> stock b-roll + music (Vidmoat stock search + import)
-//   -> commands (compose.js) -> POST /v1/projects with those commands (one call)
-//   -> GET /v1/projects/{id}?view=document -> stored and served to the embed player.
+// Generates one StudyTok video for a unit at a level:
+//   lesson (queued episode, or a Claude batch, or the offline bank)
+//   -> in parallel: narration (Vidmoat speech + timings), ambient/beat media (stock + Commons),
+//      sound-effects kit, music bed
+//   -> commands (compose.js) -> POST /v1/projects (one call) -> GET ?view=document
+//   -> stored and filed under the unit+level so every student on that unit can be served it.
 // Nothing is rendered: the browser plays the document live in Vidmoat's /embed/player.
 //
 // startVideo() saves a "generating" record and returns it with a `done` promise. On Vercel the
@@ -11,11 +13,14 @@
 import { randomUUID } from 'node:crypto';
 import { config } from './config.js';
 import { topic as topicOf } from './topics.js';
-import { writeLesson } from './lessons/index.js';
-import { resolveBroll, resolveMusic } from './media.js';
+import { nextLesson, lessonKey } from './lessons/index.js';
+import { interestUnit } from './curriculum.js';
+import { resolveLessonMedia, resolveMusic } from './media.js';
+import { soundKit } from './sfx.js';
+import { narrate } from './voice.js';
 import { composeLesson } from './compose.js';
 import { createProject, getDocument as fetchDocument, deleteProject, fileProject } from './vidmoat.js';
-import { saveVideo, updateVideo, setDocument, markReady, addCovered, getCovered } from './db.js';
+import { saveVideo, updateVideo, setDocument, markReady } from './db.js';
 
 // ---- A small promise queue so a burst of scrolling cannot fire unbounded API work
 // (per process / serverless instance).
@@ -38,38 +43,66 @@ export const queueStats = () => ({ running, waiting: queue.length });
 
 /**
  * Registers a new video as "generating" and starts building it.
+ * @param unit      { id, title, topic, ... }
+ * @param audience  { level, levelLabel, audience, country, institution, exam }
  * @returns {Promise<{video: object, done: Promise<void>}>}  `done` never rejects.
  */
-export async function startVideo(topicId, { requestedBy } = {}) {
+export async function startVideo(unit, audience, { requestedBy } = {}) {
   const video = {
-    id: randomUUID(), topic: topicId, status: 'generating',
+    id: randomUUID(), unitId: unit.id, unitTitle: unit.title, topic: unit.topic, level: audience.level,
+    readyKey: lessonKey(unit.id, audience), status: 'generating',
     createdAt: new Date().toISOString(), requestedBy: requestedBy || null,
   };
   await saveVideo(video);
-  const done = enqueue(() => buildVideo(video)).catch(async (err) => {
+  const done = enqueue(() => buildWithRetry(video, unit, audience)).catch(async (err) => {
     console.error(`[generator] ${video.id} failed:`, err);
     await updateVideo(video.id, { status: 'failed', error: String(err.message || err) }).catch(() => {});
   });
   return { video, done };
 }
 
-async function buildVideo(video) {
+async function buildWithRetry(video, unit, audience) {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await buildVideo(video, unit, audience);
+    } catch (err) {
+      if (attempt >= config.generation.retries) throw err;
+      console.warn(`[generator] ${video.id} attempt ${attempt + 1} failed (${err.message}); retrying`);
+      await updateVideo(video.id, { createdAt: new Date().toISOString(), lastError: String(err.message || err) });
+    }
+  }
+}
+
+async function buildVideo(video, unit, audience) {
   const started = Date.now();
-  const look = topicOf(video.topic);
+  const look = topicOf(unit.topic);
 
-  const { lesson, source } = await writeLesson(look, await getCovered(video.topic));
-  await addCovered(video.topic, lesson.title, lesson.subtopic);
+  // Music and sound effects do not depend on the lesson: start them now.
+  const musicP = config.generation.music ? resolveMusic().catch(() => null) : Promise.resolve(null);
+  const sfxP = config.generation.sfx ? soundKit().catch(() => ({})) : Promise.resolve({});
+
+  const { lesson, source } = await nextLesson(unit, audience);
+  // An offline-bank lesson is about the unit's broad topic, not the unit itself: label and file
+  // it under the topic so it never claims to teach (or counts towards) that unit.
+  if (source === 'bank' && !unit.open) {
+    const topicUnit = interestUnit(unit.topic);
+    if (topicUnit) {
+      unit = topicUnit;
+      await updateVideo(video.id, { unitId: unit.id, unitTitle: unit.title, readyKey: lessonKey(unit.id, audience) });
+    }
+  }
   await updateVideo(video.id, { lesson, lessonSource: source });
+  const lessonMs = Date.now() - started;
 
-  // One clip for the hook and one per beat. The hook reuses the first beat's visual, with the
-  // topic's generic query as a fallback.
-  const queries = [lesson.beats[0].visual, ...lesson.beats.map((b) => b.visual)];
-  const [broll, music] = await Promise.all([
-    resolveBroll(queries, look.fallbackVisual),
-    config.generation.music ? resolveMusic() : Promise.resolve(null),
+  const [voice, media, music, sfx] = await Promise.all([
+    narrate(lesson),
+    resolveLessonMedia(lesson, look.fallbackVisual),
+    musicP,
+    sfxP,
   ]);
 
-  const { commands, duration } = composeLesson({ ...lesson, topicLabel: look.label }, { broll, music });
+  const chip = unit.open ? look.label : unit.title;
+  const { commands, duration } = composeLesson({ ...lesson, topic: unit.topic, chip }, { ...media, music, sfx, voice });
   const created = await createProject(`StudyTok · ${lesson.title}`, commands);
   const projectId = created.project.id;
   const failed = (created.results || []).filter((r) => !r.ok);
@@ -84,17 +117,29 @@ async function buildVideo(video) {
 
   if (config.vidmoat.deleteProjectsAfterCache) await deleteProject(projectId).catch((e) => console.warn('[generator] delete failed', e.message));
 
+  const credits = [media.ambient, ...media.beatMedia, music].filter(Boolean).map((m) => ({ by: m.credit, source: m.sourceUrl, provider: m.provider }));
   const ready = await updateVideo(video.id, {
     status: 'ready',
     projectId: config.vidmoat.deleteProjectsAfterCache ? null : projectId,
     duration,
-    poster: broll[0]?.thumbnailUrl || null,
-    credits: [...broll, music].filter(Boolean).map((m) => ({ by: m.credit, source: m.sourceUrl, provider: m.provider })),
+    poster: media.ambient?.thumbnailUrl || media.beatMedia.find(Boolean)?.thumbnailUrl || null,
+    credits,
+    narrated: Boolean(voice),
+    voice: voice ? { mode: voice.mode, credits: voice.credits } : null,
+    quiz: lesson.quiz ? quizTiming(lesson, commands) : null,
     lint: (created.verification?.layout || []).filter((l) => l.severity === 'warn'),
-    buildMs: Date.now() - started,
+    timings: { lessonMs, totalMs: Date.now() - started },
     readyAt: new Date().toISOString(),
   });
   await markReady(ready);
+}
+
+
+/** Quiz options and when they are on screen, so the app can let viewers answer by tapping. */
+function quizTiming(lesson, commands) {
+  const opt = commands.find((c) => c.clipId === 'opt0');
+  const ok = commands.find((c) => c.clipId === 'optOk');
+  return { question: lesson.quiz.question, options: lesson.quiz.options, answerIndex: lesson.quiz.answerIndex, from: opt?.start ?? null, reveal: ok?.start ?? null };
 }
 
 // The embed player only sees the document we send it: every media URL must be absolute and

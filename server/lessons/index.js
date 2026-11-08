@@ -1,33 +1,82 @@
-// Picks where a lesson comes from: Claude when configured, otherwise (or on failure) the offline bank.
+// Where a video's lesson comes from:
+//   1. a queued episode for this unit + level (written earlier in a batch)  -> instant
+//   2. Claude writes a batch of episodes (one call), the rest are queued
+//   3. the offline bank (no Anthropic key, or Claude failed)
+// A short lock stops two concurrent requests from paying for the same batch.
 
 import { config } from '../config.js';
+import { kv } from '../kv.js';
+import { normalize } from '../catalog.js';
+import { topic as topicOf } from '../topics.js';
 import { BANK } from './bank.js';
 import { sanitizeLesson } from './schema.js';
-import { writeLessonWithClaude } from './claude.js';
+import { writeEpisodes } from './claude.js';
 
-const norm = (s) => String(s || '').toLowerCase().trim();
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-function fromBank(topic, avoid) {
-  const list = BANK[topic.id] || [];
-  const seen = new Set(avoid.map(norm));
-  const fresh = list.filter((l) => !seen.has(norm(l.title)) && !seen.has(norm(l.subtopic)));
+/** Lessons are shared by everyone studying the same unit at the same level (and exam). */
+export const lessonKey = (unitId, audience) => `${unitId}|${audience.level}|${normalize(audience.exam || '')}`;
+
+function fromBank(unit, covered) {
+  const list = BANK[unit.topic] || [];
+  const seen = new Set(covered.map(normalize));
+  const fresh = list.filter((l) => !seen.has(normalize(l.title)));
   const pool = fresh.length ? fresh : list;
-  if (!pool.length) throw new Error(`No offline lessons for topic ${topic.id}`);
-  return { lesson: pool[Math.floor(Math.random() * pool.length)], source: 'bank', exhausted: !fresh.length };
+  if (!pool.length) throw new Error(`No offline lessons for topic ${unit.topic}`);
+  return pool[Math.floor(Math.random() * pool.length)];
+}
+
+async function writeBatch(unit, audience, key, covered) {
+  const raws = await writeEpisodes({
+    unit, audience, covered, count: config.anthropic.episodesPerCall, accent: topicOf(unit.topic).accent,
+  });
+  const lessons = [];
+  for (const raw of raws) {
+    try { lessons.push(sanitizeLesson(raw, unit.topic)); } catch (err) { console.warn('[lessons] dropped an episode:', err.message); }
+  }
+  if (!lessons.length) throw new Error('No usable episodes');
+  await kv.lpush(`covered:${key}`, ...lessons.flatMap((l) => [l.title, l.subtopic]));
+  await kv.ltrim(`covered:${key}`, 0, 199);
+  if (lessons.length > 1) await kv.rpush(`lessons:${key}`, ...lessons.slice(1));
+  return lessons[0];
 }
 
 /**
- * @returns {Promise<{lesson: object, source: 'claude'|'bank', exhausted?: boolean}>}
+ * @param unit      { id, title, summary, topic, open?, programName? }
+ * @param audience  { level, levelLabel, audience, country, institution, exam }
+ * @returns {Promise<{ lesson, source: 'queue'|'claude'|'bank' }>}
  */
-export async function writeLesson(topic, avoid = []) {
+export async function nextLesson(unit, audience) {
+  const key = lessonKey(unit.id, audience);
+  const meta = { unitId: unit.id, level: audience.level };
+
+  const queued = await kv.lpop(`lessons:${key}`);
+  if (queued) return { lesson: { ...queued, ...meta }, source: 'queue' };
+
   if (config.anthropic.enabled) {
-    try {
-      const raw = await writeLessonWithClaude({ topic, avoid });
-      return { lesson: sanitizeLesson(raw, topic.id), source: 'claude' };
-    } catch (err) {
-      console.warn(`[lessons] Claude failed for ${topic.id}, using the offline bank: ${err.message}`);
+    const covered = await kv.lrange(`covered:${key}`, 0, 199);
+    const lock = `lock:lessons:${key}`;
+    if (await kv.set(lock, Date.now(), { nx: true, ex: 180 })) {
+      try {
+        return { lesson: { ...(await writeBatch(unit, audience, key, covered)), ...meta }, source: 'claude' };
+      } catch (err) {
+        console.warn(`[lessons] Claude failed for ${unit.id}, using the offline bank: ${err.message}`);
+      } finally {
+        await kv.del(lock);
+      }
+    } else {
+      // Someone else is writing this unit's batch: wait for it rather than paying twice.
+      for (let i = 0; i < 50; i++) {
+        await sleep(2000);
+        const item = await kv.lpop(`lessons:${key}`);
+        if (item) return { lesson: { ...item, ...meta }, source: 'queue' };
+        if (!(await kv.get(lock))) break;
+      }
     }
   }
-  const { lesson, source, exhausted } = fromBank(topic, avoid);
-  return { lesson: sanitizeLesson(lesson, topic.id), source, exhausted };
+
+  const covered = await kv.lrange(`covered:${key}`, 0, 199);
+  const raw = fromBank(unit, covered);
+  await kv.lpush(`covered:${key}`, raw.title);
+  return { lesson: sanitizeLesson(raw, unit.topic, meta), source: 'bank' };
 }

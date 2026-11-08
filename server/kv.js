@@ -63,8 +63,22 @@ class LocalKV {
     renameSync(`${this.file}.tmp`, this.file);
   }
   clone(v) { return v == null ? null : structuredClone(v); }
-  async get(k) { return this.clone(this.data.get(k)); }
-  async set(k, v) { this.data.set(k, this.clone(v)); this.persist(); return 'OK'; }
+  #expired(k) {
+    const at = this.expiry?.get(k);
+    if (at && Date.now() >= at) { this.data.delete(k); this.expiry.delete(k); return true; }
+    return false;
+  }
+  async get(k) { this.#expired(k); return this.clone(this.data.get(k)); }
+  /** Supports the Upstash options used here: { nx: true } (only if absent) and { ex: seconds }. */
+  async set(k, v, opts = {}) {
+    this.#expired(k);
+    if (opts.nx && this.data.has(k)) return null;
+    this.data.set(k, this.clone(v));
+    this.expiry ??= new Map();
+    if (opts.ex) this.expiry.set(k, Date.now() + opts.ex * 1000); else this.expiry.delete(k);
+    this.persist();
+    return 'OK';
+  }
   async del(...ks) { let n = 0; for (const k of ks) n += this.data.delete(k) ? 1 : 0; this.persist(); return n; }
   #set(k) { if (!this.data.has(k)) this.data.set(k, new Set()); return this.data.get(k); }
   async sadd(k, ...ms) { const s = this.#set(k); let n = 0; for (const m of ms) if (!s.has(m)) { s.add(m); n++; } this.persist(); return n; }
@@ -72,6 +86,7 @@ class LocalKV {
   async sismember(k, m) { return this.data.get(k)?.has(m) ? 1 : 0; }
   async smismember(k, ms) { const s = this.data.get(k); return ms.map((m) => (s?.has(m) ? 1 : 0)); }
   async scard(k) { return this.data.get(k)?.size || 0; }
+  async smembers(k) { return [...(this.data.get(k) || [])]; }
   async zadd(k, ...entries) {
     if (!this.data.has(k)) this.data.set(k, new Map());
     const z = this.data.get(k);
@@ -79,6 +94,7 @@ class LocalKV {
     this.persist();
     return entries.length;
   }
+  async zincrby(k, by, m) { if (!this.data.has(k)) this.data.set(k, new Map()); const z = this.data.get(k); z.set(m, (z.get(m) || 0) + by); this.persist(); return z.get(m); }
   async zrem(k, ...ms) { const z = this.data.get(k); let n = 0; for (const m of ms) n += z?.delete(m) ? 1 : 0; this.persist(); return n; }
   async zrange(k, start, stop, opts = {}) {
     const z = this.data.get(k);
@@ -90,6 +106,9 @@ class LocalKV {
   async hgetall(k) { const h = this.data.get(k); return h && Object.keys(h).length ? { ...h } : null; }
   async lpush(k, ...vs) { const l = this.data.get(k) || []; l.unshift(...vs.reverse()); this.data.set(k, l); this.persist(); return l.length; }
   async ltrim(k, start, stop) { const l = this.data.get(k) || []; this.data.set(k, l.slice(start, stop === -1 ? undefined : stop + 1)); this.persist(); return 'OK'; }
+  async rpush(k, ...vs) { const l = this.data.get(k) || []; l.push(...vs.map((v) => this.clone(v))); this.data.set(k, l); this.persist(); return l.length; }
+  async lpop(k) { const l = this.data.get(k); if (!l?.length) return null; const v = l.shift(); this.persist(); return v; }
+  async llen(k) { return (this.data.get(k) || []).length; }
   async lrange(k, start, stop) { return (this.data.get(k) || []).slice(start, stop === -1 ? undefined : stop + 1); }
 }
 

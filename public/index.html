@@ -5,32 +5,85 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#000000">
   <title>StudyTok</title>
-  <meta name="description" content="Learn something new every swipe. Short study videos generated for your interests.">
+  <meta name="description" content="Short study videos that follow your syllabus. Pick your level and course, then scroll and learn.">
   <link rel="icon" href="/icon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="/styles.css">
 </head>
 <body>
-  <!-- Onboarding / interests picker -->
+  <!-- ============================== Onboarding ============================== -->
   <section id="onboard" class="onboard" hidden>
     <div class="onboard-inner">
       <h1 class="brand">Study<span>Tok</span></h1>
-      <p class="tagline">Learn something new every swipe. Pick what you're curious about and we'll make videos for you as you scroll.</p>
-      <div id="topics" class="topics" role="group" aria-label="Interests"></div>
-      <button id="start" class="primary" type="button" disabled>Start learning</button>
-      <p class="hint">Pick at least one. You can change these any time.</p>
+      <ol class="stepper" aria-label="Setup steps"><li data-step="1">Level</li><li data-step="2">Studies</li><li data-step="3">Syllabus</li></ol>
+
+      <!-- Step 1: level -->
+      <div class="step" data-step="1">
+        <p class="tagline">Short videos that follow <em>your</em> syllabus. What are you studying at?</p>
+        <div id="levels" class="levels" role="radiogroup" aria-label="Study level"></div>
+      </div>
+
+      <!-- Step 2: details -->
+      <form class="step" data-step="2" id="details" autocomplete="off">
+        <p class="tagline">Tell us about your studies. We'll match your course, or research what your school teaches.</p>
+        <label class="field"><span>Country</span><input name="country" list="countries" placeholder="e.g. Ghana" maxlength="60"></label>
+        <label class="field" data-hide-for="lifelong"><span>School / university</span><input name="institution" placeholder="e.g. University of Ghana, Achimota School" maxlength="120"></label>
+        <label class="field" data-hide-for="lifelong"><span data-label-program>Course or subjects</span><input name="program" list="programs" placeholder="e.g. BSc Computer Science, or Biology, Chemistry" maxlength="120"></label>
+        <label class="field" data-hide-for="lifelong university postgraduate"><span>Exam you're preparing for <small>(optional)</small></span><input name="exam" list="exams" placeholder="e.g. WASSCE, GCSE, AP, IB" maxlength="60"></label>
+        <div class="interests-block">
+          <span class="field-label">Also curious about <small>(optional)</small></span>
+          <div id="topics" class="topics" role="group" aria-label="Interests"></div>
+        </div>
+        <div class="row-actions">
+          <button type="button" class="ghost" data-back>Back</button>
+          <button type="submit" class="primary">Find my syllabus</button>
+        </div>
+      </form>
+
+      <!-- Step 3: syllabus -->
+      <div class="step" data-step="3">
+        <div id="syllabus"></div>
+        <div class="row-actions">
+          <button type="button" class="ghost" data-back>Back</button>
+          <button type="button" class="primary" id="start" disabled>Start learning</button>
+        </div>
+      </div>
+
+      <datalist id="countries"></datalist>
+      <datalist id="programs"></datalist>
+      <datalist id="exams"><option value="BECE"><option value="WASSCE"><option value="NECO"><option value="JAMB / UTME"><option value="KCSE"><option value="NSC / Matric"><option value="GCSE"><option value="A-Level"><option value="IB Diploma"><option value="AP"><option value="SAT"><option value="CBSE Class 12"><option value="ACCA"><option value="CFA"><option value="USMLE"></datalist>
     </div>
   </section>
 
-  <!-- The feed -->
+  <!-- ============================== App ============================== -->
   <main id="app" class="app" hidden>
     <header class="topbar">
       <span class="brand small">Study<span>Tok</span></span>
-      <span class="tab">For You</span>
-      <button id="edit-interests" class="icon-btn" type="button" aria-label="Edit interests" title="Edit interests">
+      <nav class="tabs" aria-label="Views">
+        <button class="tab" data-view="feed" aria-current="page">For You</button>
+        <button class="tab" data-view="library">Library</button>
+      </nav>
+      <button id="edit-profile" class="icon-btn" type="button" aria-label="Edit level, course and interests" title="Edit level, course and interests">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h10" /></svg>
       </button>
     </header>
+
     <div id="feed" class="feed" tabindex="0" aria-label="Video feed"></div>
+
+    <section id="library" class="library" hidden aria-label="Library">
+      <div class="lib-inner">
+        <div id="lib-profile" class="lib-card"></div>
+        <h2>Your course</h2>
+        <div id="lib-units" class="units"></div>
+        <h2>Saved</h2>
+        <div id="lib-saved" class="grid"></div>
+        <h2>Recently watched</h2>
+        <div id="lib-history" class="grid"></div>
+      </div>
+    </section>
+
+    <div id="sound-gate" class="sound-gate" hidden>
+      <button type="button" class="primary" id="sound-go">Tap to start learning 🔊</button>
+    </div>
   </main>
 
   <template id="slide-tpl">
@@ -41,18 +94,25 @@
         <div class="cover">
           <div class="cover-topic"></div>
           <div class="cover-hook"></div>
-          <div class="status"><span class="spinner" aria-hidden="true"></span><span class="status-text">Generating your video…</span></div>
+          <div class="status"><span class="spinner" aria-hidden="true"></span><span class="status-text">Making your video…</span></div>
         </div>
         <button class="tap" type="button" aria-label="Play or pause"></button>
-        <div class="paused-badge" aria-hidden="true">
-          <svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z" /></svg>
+        <div class="paused-badge" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z" /></svg></div>
+        <div class="quiz" hidden>
+          <p class="quiz-label">Tap your answer</p>
+          <div class="quiz-options"></div>
+          <p class="quiz-feedback" aria-live="polite"></p>
         </div>
         <aside class="rail">
           <button class="rail-btn like" type="button" aria-label="Like" aria-pressed="false">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21s-7.5-4.6-9.5-9.2C1 8.3 3.2 5 6.6 5c2 0 3.6 1.1 4.4 2.6h2C13.8 6.1 15.4 5 17.4 5 20.8 5 23 8.3 21.5 11.8 19.5 16.4 12 21 12 21z" /></svg>
             <span class="count">0</span>
           </button>
-          <button class="rail-btn less" type="button" aria-label="Show me less of this topic">
+          <button class="rail-btn save" type="button" aria-label="Save for revision" aria-pressed="false">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h12v18l-6-4-6 4z" /></svg>
+            <span class="count">Save</span>
+          </button>
+          <button class="rail-btn less" type="button" aria-label="Show me less of this">
             <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9" /><path d="M5.6 5.6l12.8 12.8" /></svg>
             <span class="count">Less</span>
           </button>

@@ -5,7 +5,7 @@
 //   video:{id}            JSON  video record (no document)
 //   video:{id}:doc        JSON  the Vidmoat edit document (~100 KB), fetched only for playback
 //   video:{id}:stats      HASH  views, completes, likes, skips, watchSec
-//   ready:{topic}         ZSET  ready video ids, scored by creation time
+//   ready:{unit|level|exam} ZSET ready video ids for a unit at a level, scored by creation time
 //   covered:{topic}       LIST  recent lesson titles/subtopics (to keep lessons varied)
 //   user:{id}             JSON  { id, createdAt, interests }
 //   user:{id}:seen|served|liked   SET
@@ -38,19 +38,18 @@ export const getDocument = (id) => kv.get(`video:${id}:doc`);
 export const setDocument = (id, doc) => kv.set(`video:${id}:doc`, doc);
 
 export async function markReady(v) {
-  await kv.zadd(`ready:${v.topic}`, { score: Date.parse(v.createdAt), member: v.id });
+  await kv.zadd(`ready:${v.readyKey}`, { score: Date.parse(v.createdAt), member: v.id });
+  await kv.hincrby('stats:library', 'ready', 1);
 }
 
-/** Newest ready video ids for a topic. */
-export const readyIds = (topic, limit = 60) => kv.zrange(`ready:${topic}`, 0, limit - 1, { rev: true });
+/** Newest ready video ids for a unit+level key (lessons/index.js lessonKey). */
+export const readyIds = (readyKey, limit = 60) => kv.zrange(`ready:${readyKey}`, 0, limit - 1, { rev: true });
 
-export async function readyCount(topics) {
-  let n = 0;
-  for (const t of topics) n += (await kv.zrange(`ready:${t}`, 0, -1)).length;
-  return n;
+export async function readyCount() {
+  return Number((await kv.hgetall('stats:library'))?.ready) || 0;
 }
 
-const STAT_FIELDS = ['views', 'completes', 'likes', 'skips', 'watchSec'];
+const STAT_FIELDS = ['views', 'completes', 'likes', 'skips', 'watchSec', 'quizRight', 'quizWrong', 'saves'];
 export async function getStats(id) {
   const h = (await kv.hgetall(`video:${id}:stats`)) || {};
   return Object.fromEntries(STAT_FIELDS.map((f) => [f, Number(h[f]) || 0]));

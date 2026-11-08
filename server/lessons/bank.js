@@ -243,3 +243,58 @@ export const BANK = {
     },
   ],
 };
+
+// ---- Teaching visuals and quiz explanations for the offline bank -------------------------
+// (Lessons without these fall back to stock footage per beat.)
+const RBC_SVG = `<svg viewBox="0 0 800 800"><ellipse cx="400" cy="400" rx="250" ry="250" fill="#b91c1c"/><ellipse cx="400" cy="400" rx="130" ry="130" fill="#7f1d1d"/><ellipse cx="400" cy="400" rx="250" ry="250" fill="none" stroke="#fca5a5" stroke-width="6"/><line x1="560" y1="230" x2="680" y2="120" stroke="#fff" stroke-width="5"/><text x="690" y="105" fill="#fff" font-size="44" text-anchor="end">Hemoglobin</text><line x1="400" y1="400" x2="200" y2="660" stroke="#fff" stroke-width="5"/><text x="60" y="710" fill="#fff" font-size="44">No nucleus: more room</text><text x="400" y="770" fill="#34d399" font-size="40" text-anchor="middle">Biconcave disc ≈ 8 µm</text></svg>`;
+
+const ENRICH = {
+  biology: [[
+    { kind: 'diagram', title: 'A red blood cell', svg: RBC_SVG },
+    { kind: 'definition', title: 'Hemoglobin', items: ['An iron-containing protein that binds oxygen in the lungs and releases it in tissues'] },
+    { kind: 'stat', value: 120, unit: ' days', title: 'Lifespan of a red blood cell' },
+  ], 'Red cells are made in the marrow of larger bones.'],
+  physics: [null, [
+    { kind: 'footage', query: 'car driving road' },
+    { kind: 'steps', title: 'In a sudden stop', items: ['Car brakes hard', 'Your body keeps moving', 'Belt applies the force', 'You stop with the car'] },
+    { kind: 'photo', query: 'seatbelt car' },
+  ], "Objects keep moving unless a force acts: that's inertia."],
+  math: [[
+    { kind: 'footage', query: 'group of friends' },
+    { kind: 'equation', title: 'number of pairs among n people', items: ['pairs = n(n − 1) ÷ 2', '23 × 22 ÷ 2 = 253'] },
+    { kind: 'stat', value: 50, unit: '%', title: 'Chance of a shared birthday with 23 people' },
+  ], '23 × 22 ÷ 2 = 253 possible pairs.'],
+  history: [[
+    { kind: 'photo', query: 'Gutenberg printing press' },
+    { kind: 'compare', title: 'By hand|Printing press', items: ['Months per copy|Hundreds a day', 'Errors vary|Identical copies', 'Rare and costly|Cheaper books'] },
+    { kind: 'timeline', items: ['1450|Gutenberg press, Mainz', '1500|Millions of books in Europe', '1517|Reformation spreads in print', '1543|Copernicus published'] },
+  ], 'Movable metal type made identical copies cheap.'],
+  chemistry: [[
+    { kind: 'footage', query: 'water drops' },
+    { kind: 'definition', title: 'Hydrogen bond', items: ['A weak attraction between a slightly positive hydrogen and a slightly negative atom such as oxygen'] },
+    { kind: 'compare', title: 'Liquid water|Ice', items: ['Molecules close|Open lattice', 'Denser|Less dense', 'Sinks below ice|Floats'] },
+  ], 'The ice lattice takes up more space, so it is less dense.'],
+  'computer-science': [[
+    { kind: 'steps', title: 'Binary search', items: ['Look at the middle item', 'Too big? Keep the left half', 'Too small? Keep the right half', 'Repeat until found'] },
+    { kind: 'equation', title: 'halving a million twenty times', items: ['1,000,000 ÷ 2²⁰ ≈ 1'] },
+    { kind: 'definition', title: 'O(log n)', items: ['Work grows with the number of halvings, not the number of items'] },
+  ], 'Binary search only works on sorted data.'],
+  economics: [[
+    { kind: 'footage', query: 'coins stack' },
+    { kind: 'equation', title: 'years to double', items: ['years ≈ 72 ÷ rate', '72 ÷ 6 = 12'] },
+    { kind: 'stat', value: 2, unit: 'x', title: 'Money every ~10 years at 7%' },
+  ], '72 divided by 6 is 12, so about 12 years.'],
+};
+
+for (const [topic, value] of Object.entries(ENRICH)) {
+  // An entry is [visuals, explanation] for lesson 0, or a list of such entries (null = skip).
+  const lessons = typeof value[1] === 'string' ? [value] : value[0] === null ? [null, [value[1], value[2]]] : value;
+  lessons.forEach((entry, i) => {
+    if (!entry || !BANK[topic]?.[i]) return;
+    const [visuals, explanation] = entry;
+    const lesson = BANK[topic][i];
+    lesson.ambient = lesson.beats[0].visual;
+    visuals.forEach((v, k) => { if (lesson.beats[k]) lesson.beats[k].visual = { query: lesson.beats[k].visual, ...v }; });
+    lesson.quiz.explanation = explanation;
+  });
+}
