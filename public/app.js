@@ -424,7 +424,7 @@ function wireGestures() {
   let tapTimer = null;
 
   f.addEventListener('pointerdown', (e) => {
-    if (!e.isPrimary || e.button > 0 || e.target.closest('button, a, input, .quiz')) return;
+    if (!e.isPrimary || e.button > 0 || e.target.closest('button, a, input, .quiz, .progress')) return; // the progress bar seeks, it does not pause
     start = { x: e.clientX, y: e.clientY, t: performance.now(), dy: 0, moved: false, id: e.pointerId, samples: [{ y: e.clientY, t: performance.now() }] };
     f.setPointerCapture(e.pointerId);
   });
@@ -656,6 +656,7 @@ function renderSlide(item) {
   $('.credits', node).textContent = credits.length ? `Stock: ${credits.slice(0, 3).join(', ')}` : '';
   const poster = $('.poster', node);
   if (d.poster && poster.getAttribute('src') !== d.poster) poster.src = d.poster;
+  if (d.status === 'ready') { renderChapters(item); renderGaps(item); }
   const note = $('.next-note', node);
   note.hidden = !d.queuedFor;
   note.textContent = d.queuedFor ? `Your lesson on ${d.queuedFor} is being made and will follow.` : '';
@@ -725,7 +726,7 @@ function soundGate(item) {
     try { window.focus(); } catch { /* fine */ }
     // Restart this video's audio pipeline now that the frame has had its gesture.
     const t = Math.max(0, (item.player.time || 0) - 0.3);
-    item.player.load(item.data.document, t);
+    item.player.load(prepareDocument(item, { reveal: item.revealed }), t);
     item.player.play();
     track('sound_unlock', { videoId: item.data.id, t: Math.round(t) });
   };
@@ -751,7 +752,7 @@ function mountPlayer(item) {
       sendEvent(item.data.id, 'player_error', { msg: String(msg).slice(0, 80) });
     },
   });
-  item.player.load(item.data.document, 0);
+  item.player.load(prepareDocument(item), 0);
 }
 function unmountPlayer(item) {
   if (!item.player) return;
@@ -759,6 +760,109 @@ function unmountPlayer(item) {
   item.player = null;
   delete item.el.dataset.loaded;
 }
+// ---- Live document edits ---------------------------------------------------------------------------
+// The player only ever sees the document we hand it, so the app can change the lesson before it
+// plays (and re-send it at the current time): captions, music and narration on or off, recall
+// mode that hides the key terms, chapter markers from the scenes, and a stamp with the student's
+// quiz answer inside the video. No new video is made for any of this.
+const PLAY_DEFAULTS = { captions: 'on', music: 'on', voice: 'on', gaps: 'review' }; // gaps: off | review | all
+const playPref = (k) => store.get(`st_play_${k}`) || PLAY_DEFAULTS[k];
+const CAPTION_TRACK = 6;
+const isCaption = (c) => c.type === 'text' && c.trackIndex === CAPTION_TRACK;
+const isVoice = (c) => c.type === 'audio' && /^voice/.test(c.id || '');
+const isMusic = (c) => c.type === 'audio' && c.id === 'music';
+// Text the gaps may hide: captions, beats, items, cards, the explanation; never the quiz options, labels or the chip.
+const GAP_SAFE = /^(opt|quiz|chip|outroLabel|kick|num)/;
+const blank = (term) => '▁'.repeat(Math.min(9, Math.max(4, Math.round(term.length * 0.7))));
+/** Should this lesson open in recall mode? */
+function gapsFor(item) {
+  const pref = playPref('gaps');
+  if (pref === 'off' || !item.data.terms?.length || !item.data.document) return false;
+  if (pref === 'all') return true;
+  return Boolean(item.data.why?.review > 0 || item.data.why?.video?.retrieval);
+}
+/** A copy of the document with the viewer's playback choices applied. */
+function prepareDocument(item, { reveal = false } = {}) {
+  const src = item.data.document;
+  if (!src?.clips) return src;
+  item.gaps ??= gapsFor(item);
+  const voiceOff = playPref('voice') === 'off' || (item.gaps && !reveal);
+  const clips = [];
+  for (const c of src.clips) {
+    if (isCaption(c) && playPref('captions') === 'off') continue;
+    if (isMusic(c) && playPref('music') === 'off') continue;
+    if (isVoice(c) && voiceOff) continue;
+    let out = c;
+    if (item.gaps && !reveal && c.type === 'text' && !GAP_SAFE.test(c.id || '') && c.textStyle?.content) {
+      let text = c.textStyle.content;
+      for (const term of item.data.terms) {
+        const re = new RegExp(`\\b${term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'gi');
+        text = text.replace(re, blank(term));
+      }
+      if (text !== c.textStyle.content) out = { ...c, textStyle: { ...c.textStyle, content: text } };
+    }
+    clips.push(out);
+  }
+  if (item.stamp) clips.push(item.stamp);
+  return { ...src, clips };
+}
+/** Re-sends the active lesson's document with the current choices, keeping the time. */
+function reloadDocument(item, opts = {}) {
+  if (!item?.player || item.moment) return;
+  const t = item.lastTime || 0;
+  item.player.load(prepareDocument(item, opts), t);
+}
+/** The chip over a recall-mode lesson: tap to reveal the hidden terms (re-sends the full document). */
+function renderGaps(item) {
+  const chip = $('.gaps-chip', item.el);
+  if (!chip) return;
+  item.gaps ??= gapsFor(item);
+  chip.hidden = !item.gaps;
+  if (!item.gaps) return;
+  chip.dataset.revealed = String(Boolean(item.revealed));
+  $('span', chip).textContent = item.revealed ? `Revealed: ${item.data.terms.slice(0, 4).join(', ')}${item.data.terms.length > 4 ? '…' : ''}` : 'Recall mode: key terms hidden, narration off. Tap to reveal.';
+  chip.onclick = (e) => {
+    e.stopPropagation();
+    if (item.revealed) { item.gaps = false; item.revealed = false; renderGaps(item); reloadDocument(item); return; }
+    item.revealed = true;
+    renderGaps(item);
+    sendEvent(item.data.id, 'gaps_reveal', { t: +(item.lastTime || 0).toFixed(1) });
+    reloadDocument(item, { reveal: true });
+  };
+}
+/** Chapter markers on the progress bar, one per scene; tapping one jumps there. */
+function renderChapters(item) {
+  const bar = $('.progress', item.el);
+  const scenes = (item.data.scenes || []).filter((s) => s.start > 0.5 && s.kind !== 'outro');
+  const dur = item.data.duration || 0;
+  if (!bar || !dur || !scenes.length) return;
+  $$('.chap', bar).forEach((x) => x.remove());
+  for (const s of scenes) bar.append(el('i', { class: 'chap', style: `left:${(s.start / dur) * 100}%`, title: s.kind }));
+  bar.onclick = (e) => {
+    e.stopPropagation();
+    if (!item.player?.loaded) return;
+    const r = bar.getBoundingClientRect();
+    const t = Math.max(0, Math.min(dur, ((e.clientX - r.left) / r.width) * dur));
+    const all = [{ start: 0 }, ...scenes].filter((s) => s.start <= t + 0.75);
+    const to = all[all.length - 1].start;
+    sendEvent(item.data.id, 'chapter_seek', { from: +(item.lastTime || 0).toFixed(1), to: +to.toFixed(1) });
+    item.player.seek(to);
+    if (item.watch) item.watch.pauseBy = 'seek';
+  };
+}
+/** Stamps the student's answer into the video over the reveal (re-sent while the video is held). */
+function stampAnswer(item, choice, correct) {
+  const q = item.data.quiz, doc = item.data.document;
+  if (!doc?.clips || !item.player?.loaded || q?.reveal == null) return;
+  const base = doc.clips.find((c) => c.id === 'explain' || c.id === 'quizLabel') || doc.clips.find((c) => c.type === 'text');
+  if (!base) return;
+  const end = Math.min(item.data.duration || q.reveal + 6, q.reveal + 6);
+  item.stamp = { ...base, id: 'youSaid', trackIndex: 20, start: +q.reveal.toFixed(2), duration: +(end - q.reveal).toFixed(2), y: 700, x: 0, opacity: 1, kfOpacity: [], kfY: [], kfScale: [], kfX: [],
+    textStyle: { ...base.textStyle, content: correct ? `You said ${'ABC'[choice]}  ✓  Correct` : `You said ${'ABC'[choice]}  ·  It was ${'ABC'[q.answerIndex]}`, fontSize: 44, fontWeight: 800, color: '#0b0b0b', bgColor: correct ? '#9be37d' : '#ffd93d', bgOpacity: 1, bgPadding: 22, bgRadius: 999, align: 'center', outlineWidth: 0, shadow: false, highlight: '' } };
+  sendEvent(item.data.id, 'quiz_stamp');
+  item.player.load(prepareDocument(item, { reveal: item.revealed }), q.hold ?? (item.lastTime || 0));
+}
+
 // Playback performance: the embed player decodes every video layer of a document in the
 // browser, so only the active lesson has a live player. The next one is mounted (paused, loading
 // its document) once the viewer is halfway through the current lesson, or at once when the
@@ -881,6 +985,7 @@ function answer(item, i) {
   });
   $('.quiz-feedback', box).textContent = correct ? 'Correct! 🎉' : `Not quite: it's ${'ABC'[q.answerIndex]}. We'll bring this back for review.`;
   sendEvent(item.data.id, 'quiz_answer', { correct, choice: i, ms: Date.now() - (item.heldAt || item.quizShownAt || Date.now()) });
+  if (item.held && item.el.dataset.loaded === 'true') stampAnswer(item, i, correct);
   setTimeout(() => release(item), 700);
 }
 
@@ -962,6 +1067,7 @@ function markViewed(item) {
   if (feed.items[feed.active] !== item || item.viewSent || item.data.status !== 'ready') return;
   item.viewSent = true;
   if (item.recall) { track('recall_view', { id: item.data.recall.videoId }); return; }
+  if (item.gaps) sendEvent(item.data.id, 'gaps_on', { auto: playPref('gaps') === 'review' });
   if (item.moment) { track('moment_view', { id: item.data.moment.id, kind: item.data.moment.type }); return; }
   nthVideo++;
   sendEvent(item.data.id, 'view', { nth: nthVideo, format: item.data.format?.id, source: item.source || 'feed' });
@@ -1028,6 +1134,33 @@ async function openTune() {
   const prefs = { ...lib.prefs };
   const interests = new Set(lib.interests);
   const body = el('div', { class: 'tune' });
+
+  // Playback: applied to the lesson on screen at once, and to every lesson after it.
+  body.append(el('h4', {}, 'Playback'));
+  const PLAY = [
+    ['gaps', 'Recall mode', [['off', 'Off'], ['review', 'Review lessons'], ['all', 'Every lesson']], 'Hides the key terms in the on-screen text and mutes the narration; tap the chip to reveal.'],
+    ['captions', 'Captions', [['on', 'On'], ['off', 'Off']]],
+    ['voice', 'Narration audio', [['on', 'On'], ['off', 'Off']]],
+    ['music', 'Music', [['on', 'On'], ['off', 'Off']]],
+  ];
+  for (const [key, label, options, hint] of PLAY) {
+    const row = el('div', { class: 'pref-row' }, el('span', { class: 'pref-label' }, label));
+    const seg = el('div', { class: 'segmented small', role: 'group', 'aria-label': label });
+    for (const [val, text] of options) {
+      const b = el('button', { type: 'button', 'aria-selected': String(playPref(key) === val) }, text);
+      b.onclick = () => {
+        store.set(`st_play_${key}`, val);
+        $$('button', seg).forEach((x) => x.setAttribute('aria-selected', String(x === b)));
+        track('play_pref', { key, value: val });
+        const active = feed.items[feed.active];
+        if (active?.player && !active.moment) { if (key === 'gaps') { active.gaps = gapsFor(active); active.revealed = false; renderGaps(active); } reloadDocument(active, { reveal: active.revealed }); }
+      };
+      seg.append(b);
+    }
+    row.append(seg);
+    body.append(row);
+    if (hint) body.append(el('p', { class: 'pref-hint' }, hint));
+  }
 
   // Interests
   body.append(el('h4', {}, 'Topics you follow'));

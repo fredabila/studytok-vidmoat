@@ -265,3 +265,13 @@ test('start fresh: resetting the feed forgets progress, history and misses but k
   assert.equal(all.memberNo, user.memberNo, 'the member number stays');
   assert.equal(await resetStudent('nobody', 'feed'), null);
 });
+
+test('keyTerms: beat terms, item titles, card answers and the quiz answer, cleaned and deduped', async () => {
+  const { keyTerms } = await import('../server/feed/index.js');
+  const v = { lesson: { subtopic: 'Error detection', beats: [{ keyTerm: 'Check digit' }, { keyTerm: 'CRC' }, { keyTerm: 'check digit' }, { keyTerm: 'A' }], items: [{ title: 'Checksum' }], cards: [{ a: '42' }, { a: 'Parity bit' }] },
+    quiz: { options: ['A.  A louder beep', 'B.  A check digit', 'C.  A brighter laser'], answerIndex: 1 } };
+  assert.deepEqual(keyTerms(v), ['Check digit', 'CRC', 'Checksum', 'Parity bit', 'A check digit', 'Error detection']);
+  assert.deepEqual(keyTerms({}), []);
+  const pub = await publicVideo({ id: 'x', status: 'generating', topic: 'biology', lesson: { beats: [{ keyTerm: 'Osmosis' }] } }, null, {});
+  assert.deepEqual(pub.terms, [], 'terms only when ready');
+});

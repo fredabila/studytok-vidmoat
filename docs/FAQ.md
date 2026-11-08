@@ -114,6 +114,17 @@ saved lessons, settings and member number stay, and new lessons start from the b
 your syllabus. *Reset everything* also clears your course, saved lessons and settings, and you
 set up again. Your account, member number, invites and free-lesson count always stay.
 
+**What is recall mode (the "key terms hidden" chip)?**
+The video plays with its key terms blanked out of the on-screen text and the narration muted, so
+you have to supply them yourself: that is retrieval practice, the thing that makes knowledge
+stick. Tap the chip to reveal the terms and hear the narration. It is on for lessons that come
+back for review; in *Tune › Playback* you can turn it off or have it on for every lesson. Captions,
+music and narration audio can be switched there too, and take effect on the video you are
+watching.
+
+**Can I jump around inside a lesson?**
+Yes. The marks on the progress bar are the lesson's scenes; tap one to jump there.
+
 **What are the cards from Noti between videos?**
 *Moments*: a tip about StudyTok, a piece of news or an offer, shown at most every six lessons and
 three times a day. Tap anywhere on one (or swipe) to carry on. Each appears once, then not again

@@ -65,6 +65,11 @@ acceleration samples never leave the device, and nothing is recorded when permis
 | `recall_view` / `recall_skip` | `id` (the lesson's video id) | a recall card was seen / skipped |
 | `recall_answer` | `id`, `correct`, `ms` | answered a recall card (right twice retires the question) |
 | `reset` | `scope` feed/everything | the student started over from the Profile |
+| `play_pref` | `key`, `value` | a Playback choice in Tune (captions, music, narration audio, recall mode) |
+| `gaps_on` | `auto` | a lesson played in recall mode (key terms hidden) |
+| `gaps_reveal` | `t` | the viewer revealed the hidden terms |
+| `chapter_seek` | `from`, `to` | tapped a scene marker on the progress bar |
+| `quiz_stamp` | | the viewer's quiz answer was stamped into the video over the reveal |
 | `quiz_shown` / `quiz_hold` | `t` | options appeared / the video was held at the question |
 | `quiz_answer` | `choice`, `correct`, `ms` (time to answer) | tapped an option |
 | `quiz_skip` | `ms` | tapped Skip |

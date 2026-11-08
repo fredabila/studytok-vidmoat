@@ -431,6 +431,7 @@ export async function publicVideo(v, userId, { withDocument = true, why, pos, qu
     // Videos made before the hold existed: their think pause started 3 s before the reveal.
     quiz: ready && v.quiz ? quizWithStepText({ ...v.quiz, hold: v.quiz.hold ?? (v.quiz.reveal != null ? Math.max(v.quiz.from ?? 0, +(v.quiz.reveal - 3).toFixed(2)) : null) }, v.lesson) : null,
     scenes: ready ? v.scenes || [] : [],
+    terms: ready ? keyTerms(v) : [],
     credits: v.credits || [],
     liked, saved,
     likes: stats.likes,
@@ -472,6 +473,32 @@ export async function resetStudent(userId, scope = 'feed') {
   return user;
 }
 const emptySignalsFor = () => emptySignals();
+
+/**
+ * The lesson's key terms, for the app's recall mode ("fill the gaps": the player hides them in
+ * the on-screen text until the student taps to reveal). Beat key terms, item titles, flashcard
+ * answers, the quiz answer; 3 to 28 characters, no duplicates, at most twelve.
+ */
+export function keyTerms(v) {
+  const l = v.lesson || {};
+  const raw = [
+    ...(l.beats || []).map((b) => b.keyTerm),
+    ...(l.items || []).map((it) => it.title),
+    ...(l.cards || []).map((c) => c.a),
+    v.quiz?.options?.[v.quiz.answerIndex],
+    l.subtopic,
+  ];
+  const out = [];
+  for (let t of raw) {
+    t = String(t || '').replace(/^[A-C]\.\s+/, '').replace(/\s+/g, ' ').trim();
+    if (t.length < 3 || t.length > 28 || /^\d+$/.test(t)) continue;
+    if (!/[a-z]/i.test(t)) continue;
+    if (out.some((o) => o.toLowerCase() === t.toLowerCase())) continue;
+    out.push(t);
+    if (out.length >= 12) break;
+  }
+  return out;
+}
 
 /** Saved videos, watch history and course progress for the Library screen. */
 export async function library(userId) {

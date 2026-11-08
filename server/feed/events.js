@@ -60,6 +60,11 @@ export const EVENT_SPECS = {
   recall_answer: { fields: { id: 's', correct: 'b', ms: 'n' } },
   recall_skip: { fields: { id: 's' } },
   reset: { fields: { scope: 's' } },
+  play_pref: { fields: { key: 's', value: 's' } },
+  gaps_on: { video: true, fields: { auto: 'b' } },
+  gaps_reveal: { video: true, fields: { t: 'n' } },
+  chapter_seek: { video: true, fields: { from: 'n', to: 'n' } },
+  quiz_stamp: { video: true, fields: {} },
   invite_share: { fields: {} },
   refresh: { fields: { where: 's' } },
   skip: { video: true, fields: {} }, // legacy: an early leave
