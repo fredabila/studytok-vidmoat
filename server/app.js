@@ -21,6 +21,9 @@ import { syncUser, syncDaily, resyncAll, enabled as sheetEnabled } from './core/
 import { mastery } from './feed/ranking.js';
 import { getProgress } from './feed/index.js';
 import { kv } from './core/kv.js';
+import * as push from './core/push.js';
+import { originOf } from './core/auth.js';
+import { publicLesson, watchPage, notFoundPage, refOf } from './core/watch.js';
 
 
 export const SECURITY_HEADERS = {
@@ -158,6 +161,27 @@ async function route(req, res, url) {
     return send(res, 200, { ok: Boolean(step) });
   }
 
+  // ---- Public lesson pages: no session, no sign-in (see core/watch.js) ----
+  // /v/:id is rewritten by vercel.json to ?__path=v/:id, so it arrives here as /api/v/:id; the
+  // local server (server/index.js) forwards the bare path.
+  const watchMatch = /^\/(?:api\/)?v\/([0-9a-f-]{36})$/.exec(path);
+  if (req.method === 'GET' && watchMatch) {
+    const ref = refOf(url.searchParams.get('ref'));
+    const pageUrl = `${originOf(req)}/v/${watchMatch[1]}`;
+    const v = await db.getVideo(watchMatch[1]);
+    const html = { 'Content-Type': 'text/html; charset=utf-8' };
+    if (!v || v.status !== 'ready') return send(res, 404, notFoundPage({ url: pageUrl, ref }), { ...html, 'Cache-Control': 'no-store' });
+    // Views of shared pages: one counter per day for the sheet, one per video for ranking.
+    waitUntil(Promise.allSettled([kv.hincrby(`events:day:${new Date().toISOString().slice(0, 10)}`, 'share_page_view', 1), db.incrStat(v.id, 'shareViews')]));
+    return send(res, 200, watchPage(v, { url: pageUrl, ref, playerOrigin: config.vidmoat.playerOrigin }), { ...html, 'Cache-Control': 'public, max-age=300' });
+  }
+  const publicVideoMatch = /^\/api\/public\/videos\/([0-9a-f-]{36})$/.exec(path);
+  if (req.method === 'GET' && publicVideoMatch) {
+    const v = await db.getVideo(publicVideoMatch[1]);
+    if (!v || v.status !== 'ready') return send(res, 404, { error: 'Not found' });
+    return send(res, 200, { item: publicLesson(v, await db.getDocument(v.id)) }, { 'Cache-Control': 'public, max-age=300' });
+  }
+
   if (key === 'GET /api/health') {
     try {
       const me = await getMe();
@@ -177,8 +201,16 @@ async function route(req, res, url) {
     const pending = await topUpLibrary();
     if (pending.length) waitUntil(Promise.allSettled(pending));
     waitUntil(syncDaily());
+    waitUntil(push.remindDue().catch((err) => console.warn('[push]', err.message)));
     return send(res, 200, { started: pending.length });
   }
+  // Cron reminders (same secret): one Web Push per student at most, see core/push.js remindDue.
+  if (key === 'GET /api/cron/remind') {
+    if (!process.env.CRON_SECRET || req.headers.authorization !== `Bearer ${process.env.CRON_SECRET}`) return send(res, 401, { error: 'Unauthorized' });
+    return send(res, 200, await push.remindDue());
+  }
+  // The VAPID public key the browser subscribes with (public by design; { enabled: false } when unset).
+  if (key === 'GET /api/push/key') return send(res, 200, { enabled: push.enabled(), publicKey: push.publicKey() });
   // Admin: rebuild the Google Sheet from every student (Authorization: Bearer $STUDYTOK_SHEET_SECRET).
   if (key === 'POST /api/admin/sheet/resync') {
     if (!sheetEnabled() || req.headers.authorization !== `Bearer ${config.sheet.secret}`) return send(res, 401, { error: 'Unauthorized' });
@@ -301,6 +333,24 @@ async function route(req, res, url) {
   }
 
   if (key === 'GET /api/library') return send(res, 200, await library(userId));
+
+  // Web Push reminders (public/push.js): register / drop this device, or send a test to the caller.
+  if (key === 'POST /api/push/subscribe') {
+    if (!push.enabled()) return send(res, 200, { enabled: false });
+    const body = await readJson(req, 8 * 1024);
+    const list = await push.subscribe(userId, body.subscription);
+    return send(res, 200, { enabled: true, devices: list.length });
+  }
+  if (key === 'POST /api/push/unsubscribe') {
+    const body = await readJson(req, 8 * 1024);
+    const list = await push.unsubscribe(userId, body.endpoint);
+    return send(res, 200, { enabled: push.enabled(), devices: list.length });
+  }
+  if (key === 'POST /api/push/test') {
+    if (!push.enabled()) return send(res, 200, { enabled: false, sent: 0 });
+    const sent = await push.sendTo(userId, { title: 'StudyTok', body: 'Reminders are on. We will nudge you when a streak or a review is at stake.', url: '/#feed', tag: 'studytok-reminder' });
+    return send(res, 200, { enabled: true, sent });
+  }
 
   // Edit units, interests, preferences; add a custom topic (optionally into a course); remove a unit.
   if (key === 'PATCH /api/me') {

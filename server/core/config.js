@@ -52,6 +52,14 @@ export const config = {
     secret: process.env.STUDYTOK_SHEET_SECRET || '',
   },
 
+  // Web Push reminders (server/core/push.js). Off until both VAPID keys are set:
+  // `npx web-push generate-vapid-keys` prints a pair.
+  push: {
+    publicKey: process.env.STUDYTOK_VAPID_PUBLIC || '',
+    privateKey: process.env.STUDYTOK_VAPID_PRIVATE || '',
+    subject: process.env.STUDYTOK_VAPID_SUBJECT || 'mailto:hello@vidmoat.com',
+  },
+
   anthropic: {
     // When unset, lessons come from the built-in offline bank (server/lessons/bank.js).
     enabled: Boolean(process.env.ANTHROPIC_API_KEY || process.env.ANTHROPIC_AUTH_TOKEN),

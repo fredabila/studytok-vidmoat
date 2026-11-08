@@ -684,5 +684,8 @@ export function pickFormats(topic, count = 3, { recent = [], rand = Math.random,
 /** Light, fun, still-accurate formats the feed uses for a breather (feed/breathers.js). */
 export const BREATHER_FORMATS = ['wow', 'whatif', 'realworld', 'story', 'pov', 'onething', 'eli5', 'mythbust', 'levels'];
 
+/** Retrieval practice: the formats a review session uses once a unit is due again (spaced repetition). */
+export const RETRIEVAL_FORMATS = ['flashcards', 'truefalse', 'challenge', 'examdrill', 'spotmistake', 'guess', 'cheatsheet', 'mnemonic', 'thisorthat', 'mistakes'];
+
 /** Formats that can run without Claude (the offline bank only has explainers). */
 export const OFFLINE_FORMATS = ['explain'];

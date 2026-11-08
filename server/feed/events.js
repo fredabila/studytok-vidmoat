@@ -22,6 +22,7 @@ import * as db from '../core/db.js';
 import { applyEvent, emptyState, mastery } from './ranking.js';
 import { audienceFor } from './index.js';
 import { isBreatherUnit } from './breathers.js';
+import { FORMAT_IDS } from '../video/formats.js';
 
 // ---- Taxonomy ------------------------------------------------------------------------------------
 // video: the event is about a video (videoId required). fields: name -> type ('n' number 0..1e6,
@@ -51,6 +52,7 @@ export const EVENT_SPECS = {
   sensors: { fields: { motion: 'b', permission: 's' } },
   sound_unlock: { video: true, fields: { t: 'n' } },
   player_retry: { video: true, fields: { n: 'i' } },
+  lesson_share: { video: true, fields: { by: 's' } },
   invite_share: { fields: {} },
   refresh: { fields: { where: 's' } },
   skip: { video: true, fields: {} }, // legacy: an early leave
@@ -81,6 +83,9 @@ export const EVENT_SPECS = {
   recap_share: { fields: { week: 's' } },
   levelup_share: { fields: { unitId: 's' } },
   profile_share: { fields: {} },
+  // reminders (public/push.js)
+  push_enabled: { fields: {} },
+  push_disabled: { fields: {} },
 };
 export const EVENT_TYPES = new Set(Object.keys(EVENT_SPECS));
 
@@ -113,8 +118,9 @@ export function cleanContext(ctx = {}) {
 
 // ---- Aggregation ----------------------------------------------------------------------------------
 const WATCH_BUCKET = (pct) => `wf${Math.min(4, Math.floor(pct * 5))}`; // wf0: <20% … wf4: ≥80%
-const hourOf = (at, tz) => { try { return Number(new Intl.DateTimeFormat('en-GB', { hour: 'numeric', hour12: false, timeZone: tz || 'UTC' }).format(new Date(at))) % 24; } catch { return new Date(at).getUTCHours(); } };
-const day = (at) => new Date(at).toISOString().slice(0, 10);
+/** Hour of the day (0..23) at `at` in the viewer's time zone, UTC when unknown or invalid. */
+export const hourOf = (at, tz) => { try { return Number(new Intl.DateTimeFormat('en-GB', { hour: 'numeric', hour12: false, timeZone: tz || 'UTC' }).format(new Date(at))) % 24; } catch { return new Date(at).getUTCHours(); } };
+export const day = (at) => new Date(at).toISOString().slice(0, 10);
 
 export const emptySignals = () => ({ formats: {}, topics: {}, watch: { n: 0, pctSum: 0, completes: 0, early: 0 }, quiz: { n: 0, right: 0, msSum: 0, skips: 0 }, hours: Array(24).fill(0), sessions: 0, lastSeenAt: 0, prefs: {}, days: {}, weeks: {} });
 /** Monday of the week containing `at`, as YYYY-MM-DD (UTC): the key of a weekly recap. */
@@ -220,6 +226,7 @@ export async function ingest(userId, batch) {
         writes.push(db.addToSet(userId, 'seen', v.id), stat(v.id, 'views'), fstat(v, 'views'));
         bump(signals.formats, format, 'views'); bump(signals.topics, topic, 'views');
         session.viewed++;
+        signals.today = signals.today?.date === day(e.at) ? { date: day(e.at), n: signals.today.n + 1 } : { date: day(e.at), n: 1 }; // the daily goal
         if (v.readyKey) {
           writes.push(kv.zincrby('popular:units', 1, v.readyKey));
           const user = await db.getUser(userId);
@@ -364,6 +371,25 @@ export function recapOf(signals, key) {
   };
 }
 
+export const DAILY_GOAL = 3;
+
+/**
+ * Quiz difficulty on a topic, for the writer: when nearly everyone gets the quick checks right the
+ * questions are too easy; when most get them wrong they are unclear. Null until there is evidence.
+ */
+export async function quizGuidance(topic, { minAnswers = 20 } = {}) {
+  let right = 0, wrong = 0;
+  for (const f of FORMAT_IDS) {
+    const h = await kv.hgetall(`stats:format:${f}:${topic}`);
+    right += Number(h?.quizRight) || 0; wrong += Number(h?.quizWrong) || 0;
+  }
+  if (right + wrong < minAnswers) return null;
+  const acc = right / (right + wrong);
+  if (acc >= 0.88) return `Quick checks on this topic are answered right ${Math.round(acc * 100)}% of the time: make them harder. Distractors should be real misconceptions, and the question should apply the idea rather than restate it.`;
+  if (acc <= 0.45) return `Quick checks on this topic are answered wrong ${Math.round((1 - acc) * 100)}% of the time: make them clearer. Ask about the main idea in plain words, and make sure the video states the answer plainly before the question.`;
+  return null;
+}
+
 /** Headline numbers for the Profile and Library (stickers, tiles, the buddy's line). */
 export async function studentStats(userId, { watched = 0, progress = {}, masteryOf = () => 0, now = Date.now() } = {}) {
   const s = await getSignals(userId);
@@ -373,6 +399,9 @@ export async function studentStats(userId, { watched = 0, progress = {}, mastery
     watched, streak: streakOf(s), sessions: s.sessions || 0,
     quizN: s.quiz?.n || 0, quizRight: s.quiz?.right || 0,
     mastered: Object.values(progress).filter((st) => masteryOf(st) >= 0.7).length,
+    // The daily goal (lessons watched today) and what spaced repetition says is due right now.
+    today: s.today?.date === day(now) ? s.today.n : 0, goal: DAILY_GOAL,
+    due: Object.values(progress).filter((st) => st.lastSeen && st.due && st.due <= now && !(masteryOf(st) >= 0.7 && st.box >= 3)).length,
     week: recapOf(s, thisWeek), lastWeek: recapOf(s, lastWeek),
   };
 }

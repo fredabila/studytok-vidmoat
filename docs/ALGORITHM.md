@@ -75,6 +75,22 @@ loses people (today: exposed on `/api/stats` for tuning).
 `pickFormats()`, so Claude writes more of the formats students on that topic actually watch
 through, and fewer of the ones they skip.
 
+## Review sessions (retrieval practice)
+
+When stage 1 picks a unit because it is *due* (the `review` term is positive), stage 2 changes
+what "best video" means. Re-reading an explainer is weak revision; producing the answer is
+strong. So the pick is scored with a `retrieval` multiplier (`FORMAT_RETRIEVAL`: flashcards and
+true/false 1.5, ten-second challenge 1.45, exam drill 1.35, spot-the-mistake 1.3 … explainer
+0.7, story 0.7, ELI5 0.65), and the feed first looks in the unit's **review pool**: lessons
+written with `audience.review` set, which restricts the writer to `RETRIEVAL_FORMATS` and tells
+it to open with a recall prompt, make the student answer before the answer appears, and cover
+the two or three facts most likely to be forgotten. Review lessons are filed under their own
+lesson key (`…|review`) so they never replace a unit's first explanations.
+
+The writer also hears how quizzes on the topic are going (`quizGuidance`): when nine in ten
+quick checks on a topic are answered right it asks for harder distractors and application
+questions; when most are wrong it asks for plainer questions the video clearly answers.
+
 ## Breathers
 
 Short-video feeds keep people by changing the pace before they leave. StudyTok does the same,

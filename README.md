@@ -156,6 +156,13 @@ their signals); not the same format twice in a row; lighter formats late in a se
 formats after wrong answers and exam drills on a right streak; a small bonus for new videos.
 The *Why* sheet shows the parts.
 
+**Review sessions.** When spaced repetition brings a unit back, the feed serves retrieval
+practice (flashcards, true or false, a ten-second challenge, an exam drill) from a separate
+review pool written for recall, not another explainer; and the writer is told when a topic's
+quick checks are too easy or too hard. **Daily goal**: three lessons a day, shown as a ring on
+the Profile and Library, with Noti warning when a streak is about to lapse or units are due.
+See [docs/ALGORITHM.md](docs/ALGORITHM.md#review-sessions-retrieval-practice).
+
 ## Events
 
 The app reports everything a viewer does, plus coarse device context (with permission, a one-word
@@ -178,7 +185,9 @@ The full taxonomy is [docs/EVENTS.md](docs/EVENTS.md).
 * **Generate ahead**: each feed request also starts the units likely to come next
   (`STUDYTOK_READY_AHEAD`, default 3 per viewer).
 * **Caches**: stock imports, the sound-effects kit and a music pool are imported once and reused.
-* **Cron**: `/api/cron/topup` (daily on Vercel) keeps the most-watched units stocked.
+* **Cron**: `/api/cron/topup` (daily on Vercel) keeps the most-watched units stocked;
+  `/api/cron/remind` sends Web Push reminders (streak at risk, reviews due) to students who
+  installed the app and opted in (`docs/ARCHITECTURE.md`, "Reminders"; needs VAPID keys).
 * `npm run warm -- 1 cat:hs-biology --level=high-school --exam=WASSCE` pre-generates a course.
 
 ## Playback performance

@@ -81,6 +81,21 @@ player itself (resume the AudioContext on any pointer event inside the frame, an
 `play` message when the frame already has sticky activation); the app-side gate stays as a
 safety net.
 
+## Public lesson pages (`core/watch.js`, `public/watch.js`)
+
+`GET /v/:id` is the one page that needs no session: anyone with the link sees the lesson, with
+Open Graph / Twitter tags (title, hook, poster or the app icon) so the link unfurls in chats.
+`vercel.json` rewrites `/v/:id` to the function (`?__path=v/:id`, so it reaches `handleApi` as
+`/api/v/:id`); the local server forwards the bare path. The HTML is a template string in
+`core/watch.js` (every value escaped: titles come from an LLM), styled by `public/watch.css`
+and driven by `public/watch.js`, which fetches `GET /api/public/videos/:id` (a `publicVideo()`
+twin without viewer fields, `status === 'ready'` only) and plays the document through the same
+`player.js` wrapper as the app. Playback starts on the first tap (iOS audio) and the quick check
+holds the video like the feed does, without telemetry. Anything not ready is a branded 404.
+Each page view bumps `events:day:<date>.share_page_view` (the Daily tab's "Shared lesson
+views") and the video's `shareViews` stat. `?ref=<memberNo>` is carried into the call to
+action (`/?ref=N`) and shown as "Shared by member #N", never a name.
+
 ## 6. Learning from viewers (`public/telemetry.js`, `feed/events.js`)
 
 The app batches fine-grained events (impressions, heartbeats, scene changes, how a video was
@@ -119,6 +134,20 @@ appends milestones to a Joins tab; `syncDaily()` runs from the cron; `POST /api/
 rebuilds the Users tab from the `users` index. Every call is fire-and-forget through `waitUntil()`
 and never fails a request. Off unless `STUDYTOK_SHEET_URL` and `STUDYTOK_SHEET_SECRET` are set.
 
+## Reminders (`core/push.js`, `public/push.js`)
+
+Web Push for students who installed the app (Android/Chrome, desktop, iPhone 16.4+ from the home
+screen) and tapped *Enable reminders* on the Profile. `public/push.js` subscribes the device with
+the VAPID public key (`GET /api/push/key`) and registers it (`POST /api/push/subscribe`, up to
+five devices per student under `push:<userId>`); `public/sw.js` shows the notification and
+focuses or opens the app on tap. The cron (`/api/cron/remind` daily, and the top-up cron) runs
+`remindDue()`, which walks the `users` index and sends **at most one message per student per 20
+hours** (`push:last:<userId>`): *streak at risk* (a 2+ day streak, nothing watched today, between
+17:00 and 21:00 in the device's time zone) or *reviews due* (two or more units past their Leitner
+due time). Push services answering 404/410 remove that device. Deliveries are counted as
+`push_sent` in `events:day:*` (the sheet's *Reminders sent*). Off unless `STUDYTOK_VAPID_PUBLIC`
+and `STUDYTOK_VAPID_PRIVATE` are set: the routes answer `{ enabled: false }` and the cron does nothing.
+
 ## Who pays (`core/billing.js`)
 
 Each student's first videos are made on StudyTok's key; then they connect their own Vidmoat
@@ -136,7 +165,7 @@ Key families are listed at the top of `core/db.js` and `feed/events.js`.
 
 * **Vercel**: `api/index.js` is one Function serving every `/api/*` route (rewrite in
   `vercel.json`); `public/` is static; `waitUntil` keeps generation running after the
-  response; a daily cron tops up popular units.
+  response; a daily cron tops up popular units and a second one sends reminders.
 * **Anywhere else**: `node server/index.js` serves both.
 
 ## Costs, roughly

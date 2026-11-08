@@ -185,6 +185,8 @@ export function affinity(sig, rand = Math.random) {
 export const FORMAT_LIGHTNESS = { rapid: 1, flashcards: 0.9, truefalse: 0.9, wow: 0.9, onething: 0.95, mythbust: 0.8, eli5: 0.75, realworld: 0.7, chat: 0.7, mnemonic: 0.6, why: 0.5, whatif: 0.5, beforeafter: 0.5, explain: 0.4, story: 0.3, examdrill: 0.1 };
 // How much a format needs eyes on the screen (1 = dense cards to read, 0 = narration carries it).
 export const FORMAT_VISUAL_DENSITY = { mnemonic: 0.85, truefalse: 0.7, beforeafter: 0.6, realworld: 0.35, eli5: 0.35, whatif: 0.3, wow: 0.3, spotmistake: 1, examdrill: 0.95, tierlist: 0.8, flashcards: 0.8, thisorthat: 0.7, speedrun: 0.7, rapid: 0.6, countdown: 0.6, levels: 0.5, guess: 0.5, explain: 0.5, why: 0.45, chat: 0.4, mythbust: 0.4, hottake: 0.35, wyr: 0.35, story: 0.25, pov: 0.25 };
+// How much a format makes the student retrieve rather than re-read (review sessions: >1 wins, <1 loses).
+export const FORMAT_RETRIEVAL = { flashcards: 1.5, truefalse: 1.5, challenge: 1.45, examdrill: 1.35, spotmistake: 1.3, guess: 1.25, cheatsheet: 1.2, mnemonic: 1.2, thisorthat: 1.15, mistakes: 1.1, speedrun: 1.1, predict: 1, rapid: 1, mythbust: 1, countdown: 0.95, onething: 0.9, tierlist: 0.9, wyr: 0.9, realworld: 0.85, levels: 0.8, chat: 0.8, history: 0.8, hottake: 0.8, beforeafter: 0.8, why: 0.75, pov: 0.75, analogy: 0.75, whatif: 0.75, explain: 0.7, story: 0.7, wow: 0.7, eli5: 0.65 };
 // How gentle each format is, for difficulty adaptation (1 = gentlest).
 export const FORMAT_GENTLENESS = { explain: 1, eli5: 1, wow: 0.95, realworld: 0.9, why: 0.9, chat: 0.9, whatif: 0.85, story: 0.8, beforeafter: 0.8, mnemonic: 0.7, mythbust: 0.6, rapid: 0.6, truefalse: 0.5, flashcards: 0.4, examdrill: 0 };
 
@@ -196,7 +198,7 @@ export const FORMAT_GENTLENESS = { explain: 1, eli5: 1, wow: 0.95, realworld: 0.
  * @param session  { viewed, lastFormats, lastTopics, wrongStreak, rightStreak, earlyStreak }
  * @returns {{ score, parts }}
  */
-export function scoreVideo(video, stats, signals = {}, session = {}, { rand = Math.random, now = Date.now() } = {}) {
+export function scoreVideo(video, stats, signals = {}, session = {}, { rand = Math.random, now = Date.now(), review = false } = {}) {
   const format = video.format || 'explain';
   const quality = videoQuality(stats);
   const formatAffinity = affinity(signals.formats?.[format], rand);
@@ -226,6 +228,9 @@ export function scoreVideo(video, stats, signals = {}, session = {}, { rand = Ma
   if (session.posture === 'moving') context *= 1.25 - 0.5 * density;
   if (session.night && session.posture === 'flat') context *= 0.85 + 0.3 * gentle - 0.15 * ((FORMAT_LIGHTNESS[format] ?? 0.5) > 0.8 ? 1 : 0);
 
-  const score = quality * taste * diversity * fatigue * difficulty * freshness * context;
-  return { score, parts: { quality: +quality.toFixed(3), formatAffinity: +formatAffinity.toFixed(3), topicAffinity: +topicAffinity.toFixed(3), diversity, fatigue: +fatigue.toFixed(3), difficulty: +difficulty.toFixed(3), freshness: +freshness.toFixed(3), context: +context.toFixed(3) } };
+  // Review: a unit that is due again gets retrieval practice (flashcards, true/false, drills), not another explainer.
+  const retrieval = review ? FORMAT_RETRIEVAL[format] ?? 1 : 1;
+
+  const score = quality * taste * diversity * fatigue * difficulty * freshness * context * retrieval;
+  return { score, parts: { quality: +quality.toFixed(3), formatAffinity: +formatAffinity.toFixed(3), topicAffinity: +topicAffinity.toFixed(3), diversity, fatigue: +fatigue.toFixed(3), difficulty: +difficulty.toFixed(3), freshness: +freshness.toFixed(3), context: +context.toFixed(3), ...(review ? { retrieval } : {}) } };
 }
