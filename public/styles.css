@@ -224,7 +224,8 @@ body[data-view="feed"] .tabbtn[aria-current="page"] span { color: var(--ink); }
 /* The rail sits over the stage's right edge; on wide screens the stage is narrower than the slide, so its
    offset is computed from the stage width (the same expression as .stage above). */
 .rail { position: absolute; z-index: 6; right: max(10px, calc(50% - (100dvh - var(--tabbar) - var(--safe-b)) * 9 / 32 + 10px)); bottom: 120px; display: grid; gap: 14px; }
-@media (min-width: 760px) { .rail { right: calc(50% - (100dvh - var(--tabbar) - var(--safe-b) - 28px) * 9 / 32 + 10px); } }
+@media (min-width: 760px) { .rail { right: calc(50% - (100dvh - var(--tabbar) - var(--safe-b) - 28px) * 9 / 32 + 10px); }
+  .quiz { left: calc(50% - (100dvh - var(--tabbar) - var(--safe-b) - 28px) * 9 / 32 + 12px); right: calc(50% - (100dvh - var(--tabbar) - var(--safe-b) - 28px) * 9 / 32 + 70px); } }
 .side-brand, .side-foot { display: none; }
 .rail-btn { display: grid; justify-items: center; gap: 5px; border: 0; background: none; padding: 0; cursor: pointer; color: #fff; }
 .rail-btn .ic { width: 46px; height: 46px; border-radius: 50%; display: grid; place-items: center; background: rgba(13, 13, 14, .55); border: 1.5px solid rgba(255, 255, 255, .85); transition: transform .12s var(--ease), background .15s; }
@@ -239,10 +240,10 @@ body[data-view="feed"] .tabbtn[aria-current="page"] span { color: var(--ink); }
 @keyframes pop { 50% { transform: scale(1.18); } }
 
 .meta { position: absolute; z-index: 6; left: 0; right: 70px; bottom: 0; padding: 0 14px 18px; pointer-events: none; color: #fff; }
-.unit-pill { display: inline-flex; align-items: center; gap: 8px; max-width: 100%; font-family: var(--mono); font-size: 11.5px; font-weight: 600; padding: 5px 9px; border-radius: 5px; background: var(--hl); color: var(--ink); }
+.unit-pill { display: inline-flex; align-items: center; gap: 8px; min-width: 0; max-width: 100%; font-family: var(--mono); font-size: 11.5px; font-weight: 600; padding: 5px 9px; border-radius: 5px; background: var(--hl); color: var(--ink); }
 .unit-pill .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--ink); flex: none; }
 .unit-text { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.pills { display: flex; align-items: center; gap: 6px; max-width: 100%; }
+.pills { display: flex; align-items: center; gap: 6px; min-width: 0; max-width: 100%; }
 .fmt-badge { flex: none; font-family: var(--mono); font-size: 10.5px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; padding: 5px 8px; border-radius: 5px; border: 1.5px solid rgba(255,255,255,.75); color: #fff; }
 .fmt-badge:empty { display: none; }
 .title { margin: 9px 0 3px; font-size: 19px; font-weight: 600; line-height: 1.22; text-shadow: 0 1px 8px #000; }
@@ -252,7 +253,8 @@ body[data-view="feed"] .tabbtn[aria-current="page"] span { color: var(--ink); }
 .bar { height: 100%; background: var(--hl); transform-origin: left; transform: scaleX(0); }
 
 /* quiz: an exam slip */
-.quiz { position: absolute; z-index: 8; left: 12px; right: 70px; bottom: 112px; padding: 14px; border-radius: 12px; background: var(--paper); color: var(--ink); box-shadow: 4px 4px 0 var(--hl); animation: rise .3s var(--ease); }
+/* The quiz slip sits over the stage like the rail (same stage-width offsets); on wide screens it moves beside the video. */
+.quiz { position: absolute; z-index: 8; left: max(12px, calc(50% - (100dvh - var(--tabbar) - var(--safe-b)) * 9 / 32 + 12px)); right: max(70px, calc(50% - (100dvh - var(--tabbar) - var(--safe-b)) * 9 / 32 + 70px)); bottom: 112px; padding: 14px; border-radius: 12px; background: var(--paper); color: var(--ink); box-shadow: 4px 4px 0 var(--hl); animation: rise .3s var(--ease); }
 .quiz-label { margin: 0 0 10px; font-family: var(--mono); font-size: 11px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--ink-3); }
 .quiz-options { display: grid; gap: 7px; }
 .quiz-opt { display: flex; gap: 10px; align-items: center; padding: 10px 11px; border-radius: 9px; border: 1.5px solid var(--line-2); background: #fff; cursor: pointer; text-align: left; font-weight: 500; font-size: 14.5px; color: var(--ink); }
@@ -534,7 +536,7 @@ body.landing-on { background: var(--paper); }
    The dock becomes a dark sidebar with the brand, the video is a 9:16 column in the middle, and the
    rail and pager sit beside it, outside the picture, like a desktop short-video app. */
 @media (min-width: 900px) {
-  :root { --tabbar: 0px; --side: 236px; --stage-w: min(540px, calc((100dvh - 48px) * 9 / 16)); }
+  :root { --tabbar: 0px; --side: 236px; --stage-w: min(540px, calc((100dvh - 32px) * 9 / 16)); }
   .view { left: var(--side); bottom: 0; }
   .tabbar, body[data-view] .tabbar { position: fixed; left: 0; top: 0; bottom: 0; width: var(--side); height: auto; transform: none; border-radius: 0; border: 0; border-right: 1px solid var(--dark-line);
     box-shadow: none; padding: 22px 16px; background: var(--dark-2); color: #fff; display: flex; flex-direction: column; align-items: stretch; gap: 6px; }
@@ -562,11 +564,21 @@ body.landing-on { background: var(--paper); }
   .pager { right: auto; left: calc(50% + var(--stage-w) / 2 + 20px); top: calc(50% - var(--stage-w) * 8 / 9); transform: none; }
   .pager-btn { background: var(--dark-2); border-color: rgba(255, 255, 255, .25); }
   .meta { right: 14px; }
-  .quiz { right: 12px; }
+  .quiz { left: auto; right: calc(50% + var(--stage-w) / 2 + 18px); width: min(320px, calc(50% - var(--stage-w) / 2 - 40px)); bottom: calc(50% - var(--stage-w) * 8 / 9); box-shadow: 6px 6px 0 var(--hl); }
+  .quiz-hint::before { content: "· click an answer to continue"; }
+  .quiz-hint { font-size: 0; }
+  .quiz-hint::before { font-size: 11px; }
   .making { padding: 24px 20px 130px; }
   .swipe-hint { display: none; }
   .ptr { display: none; }
   .page { width: min(760px, 100%); padding-top: 28px; }
   .sheet-panel { top: 50%; bottom: auto; transform: translateY(-50%); border-radius: 18px; border: 1.5px solid var(--ink); max-height: min(80vh, 720px); animation: fade .2s; }
   .sheet-grip { display: none; }
+}
+@media (min-width: 900px) and (max-height: 760px) {
+  /* Short, wide windows (laptops with the browser chrome): keep the arrows and the rail apart. */
+  .pager { grid-auto-flow: column; }
+  .rail { gap: 8px; }
+  .rail-btn .ic { width: 44px; height: 44px; }
+  .rail-btn .count { font-size: 10px; }
 }

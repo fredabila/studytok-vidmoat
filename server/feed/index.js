@@ -318,6 +318,14 @@ export async function recordEvent(userId, event) {
 
 // ---------------------------------------------------------------- views for the browser
 /** What the browser gets. The Vidmoat document is included only once the video is ready. */
+/** Spot-the-mistake quizzes ask "which step is wrong?": name the steps, since the slip may cover the video. */
+function quizWithStepText(quiz, lesson) {
+  const steps = lesson?.exam?.steps;
+  if (!Array.isArray(steps) || !quiz.options?.every((o) => /^Step \d$/.test(o))) return quiz;
+  const short = (t) => { const s = String(t).replace(/\s+/g, ' ').trim(); return s.length > 64 ? `${s.slice(0, 62).trim()}…` : s; };
+  return { ...quiz, options: quiz.options.map((o, i) => (steps[i] ? `${o} · ${short(steps[i])}` : o)) };
+}
+
 export async function publicVideo(v, userId, { withDocument = true, why, pos, queuedFor } = {}) {
   const look = TOPIC_BY_ID[v.topic] || TOPIC_BY_ID.biology;
   const ready = v.status === 'ready';
@@ -342,7 +350,7 @@ export async function publicVideo(v, userId, { withDocument = true, why, pos, qu
     poster: v.poster || null,
     narrated: Boolean(v.narrated),
     // Videos made before the hold existed: their think pause started 3 s before the reveal.
-    quiz: ready && v.quiz ? { ...v.quiz, hold: v.quiz.hold ?? (v.quiz.reveal != null ? Math.max(v.quiz.from ?? 0, +(v.quiz.reveal - 3).toFixed(2)) : null) } : null,
+    quiz: ready && v.quiz ? quizWithStepText({ ...v.quiz, hold: v.quiz.hold ?? (v.quiz.reveal != null ? Math.max(v.quiz.from ?? 0, +(v.quiz.reveal - 3).toFixed(2)) : null) }, v.lesson) : null,
     scenes: ready ? v.scenes || [] : [],
     credits: v.credits || [],
     liked, saved,
