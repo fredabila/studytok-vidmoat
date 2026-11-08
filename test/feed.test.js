@@ -241,3 +241,27 @@ test('invite links: ?ref records the inviter once, counts their invites, never s
   const again = await saveProfile(friend.id, { profile, units: bio.units.map((u) => u.id) });
   assert.equal(again.referredBy, inviter.memberNo, 'kept across profile edits');
 });
+
+test('start fresh: resetting the feed forgets progress, history and misses but keeps the course and saved lessons; everything also clears those', async () => {
+  const { resetStudent } = await import('../server/feed/index.js');
+  const { recordMiss, getMisses } = await import('../server/feed/recall.js');
+  const user = await saveProfile(null, { profile, programKeys: ['cat:hs-biology'], units: bio.units.map((u) => u.id) });
+  const page = await nextItems(user.id, 2);
+  const v = page.items.find((x) => x.video).video;
+  await recordEvent(user.id, { videoId: v.id, type: 'view' });
+  await recordEvent(user.id, { videoId: v.id, type: 'save' });
+  await recordMiss(user.id, { ...v, quiz: { question: 'q', options: ['a', 'b', 'c'], answerIndex: 0 } });
+  assert.ok(Object.keys(await getProgress(user.id)).length > 0);
+  assert.equal((await library(user.id)).saved.length, 1);
+  const fresh = await resetStudent(user.id, 'feed');
+  assert.equal(fresh.resets, 1); assert.equal(fresh.setupDone, true); assert.ok(fresh.units.length > 0, 'course kept');
+  assert.deepEqual(await getProgress(user.id), {}); assert.equal((await getMisses(user.id)).length, 0);
+  assert.equal(await db.countSet(user.id, 'seen'), 0); assert.equal((await library(user.id)).history.length, 0);
+  assert.equal((await library(user.id)).saved.length, 1, 'saved lessons kept');
+  const again = await nextItems(user.id, 2);
+  assert.ok(again.items.some((x) => x.video?.id === v.id) || again.items.length > 0, 'the feed starts again');
+  const all = await resetStudent(user.id, 'everything');
+  assert.equal(all.setupDone, false); assert.deepEqual(all.units, []); assert.equal((await library(user.id)).saved.length, 0);
+  assert.equal(all.memberNo, user.memberNo, 'the member number stays');
+  assert.equal(await resetStudent('nobody', 'feed'), null);
+});

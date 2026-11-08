@@ -64,6 +64,7 @@ acceleration samples never leave the device, and nothing is recorded when permis
 | `moment_view` / `moment_cta` | `id`, `kind` / `id`, `action` | a card between lessons was seen / its button tapped |
 | `recall_view` / `recall_skip` | `id` (the lesson's video id) | a recall card was seen / skipped |
 | `recall_answer` | `id`, `correct`, `ms` | answered a recall card (right twice retires the question) |
+| `reset` | `scope` feed/everything | the student started over from the Profile |
 | `quiz_shown` / `quiz_hold` | `t` | options appeared / the video was held at the question |
 | `quiz_answer` | `choice`, `correct`, `ms` (time to answer) | tapped an option |
 | `quiz_skip` | `ms` | tapped Skip |

@@ -59,6 +59,7 @@ export const EVENT_SPECS = {
   recall_view: { fields: { id: 's' } },
   recall_answer: { fields: { id: 's', correct: 'b', ms: 'n' } },
   recall_skip: { fields: { id: 's' } },
+  reset: { fields: { scope: 's' } },
   invite_share: { fields: {} },
   refresh: { fields: { where: 's' } },
   skip: { video: true, fields: {} }, // legacy: an early leave

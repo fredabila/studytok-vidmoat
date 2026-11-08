@@ -13,7 +13,7 @@ import { lessonKey } from '../lessons/index.js';
 import { startVideo, readyKeyFor } from '../video/generator.js';
 import { pickUnits, mastery, scoreVideo, exploreRate, applyEvent, emptyState, examUrgency } from './ranking.js';
 import { pickRecall, noteRecall, recallItem, getMisses } from './recall.js';
-import { ingest, getSignals, getSession, noteServed, noteBreather, studentStats } from './events.js';
+import { ingest, getSignals, getSession, noteServed, noteBreather, studentStats, emptySignals } from './events.js';
 import { needsBreather, pickBreather, isBreatherUnit, BREATHER_REASONS } from './breathers.js';
 import { pickMoment, noteMoment, momentContext, momentItem } from './moments.js';
 import * as push from '../core/push.js';
@@ -442,6 +442,36 @@ export async function publicVideo(v, userId, { withDocument = true, why, pos, qu
     document: document || undefined,
   };
 }
+
+/**
+ * Starts a student over. `scope`:
+ *  - 'feed': forgets what the algorithm learned (progress, tastes, session, what was served and
+ *    seen, history, missed questions, moment and breather markers). Keeps the profile, units,
+ *    preferences, saved and liked lessons, member number, invites and billing.
+ *  - 'everything': the above plus saved, liked, preferences, course, units and interests; the
+ *    student sets up again. Identity, member number, invites and billing (the free allowance
+ *    already used) always stay.
+ * Returns the fresh user.
+ */
+export async function resetStudent(userId, scope = 'feed') {
+  const user = await db.getUser(userId);
+  if (!user) return null;
+  const k = (name) => `user:${userId}:${name}`;
+  const signals = await getSignals(userId);
+  await kv.del(k('progress'), k('session'), k('recentUnits'), k('generating'), k('served'), k('seen'), k('answered'), k('history'),
+    k('misses'), k('recallAt'), k('moments'), k('breather'));
+  // Keep what the device told us (platform, time zone) so moments and reminders still fit; forget the rest.
+  await kv.set(k('signals'), { ...emptySignalsFor(), device: signals.device || {}, lastSeenAt: 0 });
+  user.resetAt = new Date().toISOString();
+  user.resets = (user.resets || 0) + 1;
+  if (scope === 'everything') {
+    await kv.del(k('saved'), k('savedAt'), k('liked'));
+    Object.assign(user, { units: [], programKeys: [], interests: [], prefs: {}, unitGroups: {}, setupDone: false });
+  }
+  await db.saveUser(user);
+  return user;
+}
+const emptySignalsFor = () => emptySignals();
 
 /** Saved videos, watch history and course progress for the Library screen. */
 export async function library(userId) {

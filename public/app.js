@@ -1486,7 +1486,7 @@ function renderProfile() {
   }
 
   $('#studies-summary').replaceChildren(el('p', {}, [p.program, p.institution, p.country].filter(Boolean).join(' · ') || 'No course set'),
-    el('p', {}, [lvl?.label, p.exam && `Preparing for ${p.exam}`].filter(Boolean).join(' · ')), examChip(p));
+    el('p', {}, [lvl?.label, p.exam && `Preparing for ${p.exam}`].filter(Boolean).join(' · ')), ...[examChip(p)].filter(Boolean));
 }
 /** Who pays for new videos: the free allowance on StudyTok's account, or the student's own Vidmoat credits. */
 function renderCredits() {
@@ -1565,6 +1565,29 @@ function showView(next) {
   }
 }
 
+/** Starts over: 'feed' forgets what the algorithm learned; 'everything' also clears the course and setup. */
+async function resetMe(scope) {
+  const ask = scope === 'everything'
+    ? 'Reset everything? Your course, saved lessons, progress and settings are cleared and you set up again. Your account, member number, invites and free-lesson count stay.'
+    : 'Reset your feed? Progress, streak, history and what the algorithm learned about you are cleared. Your course, saved lessons and member number stay.';
+  if (!window.confirm(ask)) return;
+  track('reset', { scope });
+  flush(true);
+  try { await api('POST', '/api/me/reset', { scope }); } catch { toast("Couldn't reset. Try again."); return; }
+  me = (await api('GET', '/api/me')).user;
+  feed.items.splice(0).forEach((it) => { it.player?.destroy(); it.el.remove(); });
+  feed.active = -1;
+  nthVideo = 0;
+  if (scope === 'everything') {
+    toast('Everything cleared. Set up your studies again.');
+    await runOnboarding(me);
+    me = (await api('GET', '/api/me')).user;
+  } else toast('Fresh start. Your feed begins again.');
+  showView('feed');
+  await loadMore(3);
+  goTo(0, { animate: false });
+}
+
 async function editStudies() {
   track('studies_edit');
   feed.items[feed.active]?.player?.pause();
@@ -1588,6 +1611,8 @@ function wireChrome() {
     };
   });
   $('#edit-studies').onclick = editStudies;
+  $('#reset-feed').onclick = () => resetMe('feed');
+  $('#reset-all').onclick = () => resetMe('everything');
   $$('.refresh-btn').forEach((b) => { b.onclick = () => refreshView(b.dataset.refresh); });
   wirePullToRefresh();
   $('#open-tune').onclick = openTune;
