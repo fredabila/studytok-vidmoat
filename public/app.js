@@ -866,6 +866,51 @@ async function restartFeed() {
   goTo(0, { animate: false });
 }
 
+// ============================================================================ mascot & stickers
+// "Noti", the sticky-note study buddy: a yellow note with a highlighter. Moods change the face.
+function mascot(mood = 'happy', size = 96) {
+  const face = {
+    happy: '<path d="M38 44q3 4 6 0M60 44q3 4 6 0" stroke="#141414" stroke-width="3.5" fill="none" stroke-linecap="round"/><path d="M42 58q10 9 20 0" stroke="#141414" stroke-width="3.5" fill="none" stroke-linecap="round"/>',
+    cheer: '<path d="M37 45q4-6 8 0M59 45q4-6 8 0" stroke="#141414" stroke-width="3.5" fill="none" stroke-linecap="round"/><path d="M40 56q12 14 24 0z" fill="#141414"/><path d="M46 62q6 4 12 0" fill="#ff6b6b"/>',
+    think: '<circle cx="42" cy="45" r="3" fill="#141414"/><circle cx="63" cy="45" r="3" fill="#141414"/><path d="M44 60h16" stroke="#141414" stroke-width="3.5" stroke-linecap="round"/><path d="M30 34q8-6 16-2M74 34q-8-6-16-2" stroke="#141414" stroke-width="3" fill="none" stroke-linecap="round"/>',
+    sleepy: '<path d="M37 46q5 3 10 0M57 46q5 3 10 0" stroke="#141414" stroke-width="3.5" fill="none" stroke-linecap="round"/><ellipse cx="52" cy="60" rx="5" ry="4" fill="#141414"/><text x="74" y="26" font-family="var(--serif)" font-size="16" font-weight="700" fill="#141414">z</text><text x="84" y="16" font-family="var(--serif)" font-size="12" font-weight="700" fill="#141414">z</text>',
+  }[mood] || '';
+  const arms = mood === 'cheer' ? '<path d="M18 50l-10-16M86 50l10-16" stroke="#141414" stroke-width="5" stroke-linecap="round"/>' : '<path d="M18 56l-8 10M86 56l8 10" stroke="#141414" stroke-width="5" stroke-linecap="round"/>';
+  return `<svg class="sticker mascot" viewBox="0 0 104 104" width="${size}" height="${size}" aria-hidden="true">
+    <g transform="rotate(-4 52 52)">
+      <path d="M22 18h60a4 4 0 0 1 4 4v52l-14 14H22a4 4 0 0 1-4-4V22a4 4 0 0 1 4-4z" fill="#fff" stroke="#fff" stroke-width="10" stroke-linejoin="round"/>
+      <path d="M22 18h60a4 4 0 0 1 4 4v52l-14 14H22a4 4 0 0 1-4-4V22a4 4 0 0 1 4-4z" fill="#ffd93d" stroke="#141414" stroke-width="3" stroke-linejoin="round"/>
+      <path d="M72 88V78a4 4 0 0 1 4-4h10z" fill="#f2c200" stroke="#141414" stroke-width="3" stroke-linejoin="round"/>
+      <path d="M26 30h40" stroke="#141414" stroke-width="2" stroke-dasharray="3 5" opacity=".35"/>
+      ${arms}${face}
+      <path d="M88 8l8 8-26 26-11 3 3-11z" fill="#ff6b6b" stroke="#141414" stroke-width="3" stroke-linejoin="round"/>
+      <path d="M62 48l3-11 8 8z" fill="#141414"/>
+    </g>
+  </svg>`;
+}
+const svgEl = (markup) => { const t = document.createElement('template'); t.innerHTML = markup.trim(); return t.content.firstElementChild; };
+const sbadge = (text, { hot = false, r = -1 } = {}) => el('span', { class: `sbadge${hot ? ' hot' : ''}`, style: `--r:${r}deg` }, text);
+
+/** A line from Noti for the student's current state. */
+function buddyLine(stats) {
+  if (!stats) return "Let's learn something today.";
+  if (stats.streak >= 7) return `${stats.streak} days in a row. You're unstoppable.`;
+  if (stats.streak >= 3) return `${stats.streak}-day streak. Keep it going!`;
+  if (stats.quizN >= 5 && stats.quizRight / stats.quizN >= 0.8) return `${Math.round((stats.quizRight / stats.quizN) * 100)}% on quick checks. Show-off.`;
+  if (stats.mastered >= 1) return `${stats.mastered} unit${stats.mastered > 1 ? 's' : ''} mastered. On to the next.`;
+  if (stats.watched >= 5) return `${stats.watched} lessons in. It's sticking.`;
+  if (stats.watched >= 1) return 'First lessons done. Swipe for more.';
+  return "Your feed is ready. Let's go.";
+}
+function statTiles(stats) {
+  const acc = stats?.quizN ? `${Math.round((stats.quizRight / stats.quizN) * 100)}%` : '—';
+  return el('div', { class: 'tiles' },
+    el('div', { class: `tile${stats?.streak >= 3 ? ' hl' : ''}` }, el('i', {}, '🔥'), el('b', {}, String(stats?.streak || 0)), el('span', {}, 'day streak')),
+    el('div', { class: 'tile' }, el('i', {}, '🎬'), el('b', {}, String(stats?.watched || 0)), el('span', {}, 'lessons')),
+    el('div', { class: 'tile' }, el('i', {}, '🎯'), el('b', {}, acc), el('span', {}, 'quiz score')),
+    el('div', { class: 'tile' }, el('i', {}, '🏅'), el('b', {}, String(stats?.mastered || 0)), el('span', {}, 'mastered')));
+}
+
 // ============================================================================ library
 async function showLibrary() {
   const lib = await api('GET', '/api/library');
@@ -877,8 +922,15 @@ async function showLibrary() {
   }
   const course = $('#lib-course');
   course.replaceChildren();
+  const stats = me?.stats;
+  const due = lib.units.filter((u) => u.active && u.dueForReview).length;
+  course.append(el('div', { class: 'hero' }, svgEl(mascot(due ? 'think' : stats?.streak >= 3 ? 'cheer' : 'happy')),
+    el('div', {}, el('h3', {}, due ? `${due} unit${due > 1 ? 's' : ''} due for review` : 'Your syllabus'),
+      el('p', {}, due ? 'Spaced repetition says now is the moment. They are first in your feed.' : 'Untick what you have mastered; your feed follows what stays ticked.'),
+      el('div', { class: 'bubble' }, buddyLine(stats)))));
+  course.append(statTiles(stats));
   if (!lib.units.length) {
-    course.append(el('div', { class: 'empty' }, el('b', {}, 'No course yet'), 'Add your course or subjects in Profile, or add your own topics below.'));
+    course.append(el('div', { class: 'empty' }, svgEl(mascot('sleepy', 110)), el('b', {}, 'No course yet'), 'Add your course or subjects in Profile, or add your own topics below.'));
   }
   const activeIds = new Set(lib.units.filter((u) => u.active).map((u) => u.id));
   const saveUnits = () => patchMe({ units: lib.units.filter((u) => activeIds.has(u.id)).map((u) => u.id) }).catch(() => toast("Couldn't save that."));
@@ -912,7 +964,8 @@ async function showLibrary() {
       showLibrary();
     };
     input.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); add(); } });
-    course.append(el('div', { class: 'course-card' },
+    const corner = pct >= 70 ? sbadge('🏅 mastered', { hot: true, r: 6 }) : pct >= 30 ? sbadge('📈 on it', { r: 6 }) : null;
+    course.append(el('div', { class: 'course-card' }, corner ? Object.assign(corner, { className: corner.className + ' corner-badge' }) : null,
       el('div', { class: 'course-head' }, ring, el('div', {}, el('h3', {}, program?.name || (key === 'custom' ? 'My topics' : 'Your course')), el('p', {}, program?.basis || (key === 'custom' ? 'Topics you added' : `${units.length} units`)))),
       ...rows,
       el('div', { class: 'add-row' }, input, el('button', { type: 'button', class: 'btn small', onclick: add }, 'Add'))));
@@ -937,19 +990,27 @@ async function showLibrary() {
   }
   const card = (v) => el('button', { type: 'button', class: 'vcard', onclick: () => openVideo(v.id) },
     v.poster ? el('img', { src: v.poster, alt: '', loading: 'lazy' }) : el('div', { class: 'ph' }), el('span', {}, v.title || 'Untitled'), el('small', {}, v.unit || ''));
-  $('#lib-saved').replaceChildren(...(lib.saved.length ? lib.saved.map(card) : [el('div', { class: 'empty' }, el('b', {}, 'Nothing saved yet'), 'Tap the bookmark on any lesson to keep it here for revision.')]));
-  $('#lib-history').replaceChildren(...(lib.history.length ? lib.history.slice(0, 30).map(card) : [el('div', { class: 'empty' }, el('b', {}, 'No history yet'), 'Lessons you watch show up here.')]));
+  $('#lib-saved').replaceChildren(...(lib.saved.length ? lib.saved.map(card) : [el('div', { class: 'empty' }, svgEl(mascot('think', 110)), el('b', {}, 'Nothing saved yet'), 'Tap the bookmark on any lesson to keep it here for revision.')]));
+  $('#lib-history').replaceChildren(...(lib.history.length ? lib.history.slice(0, 30).map(card) : [el('div', { class: 'empty' }, svgEl(mascot('sleepy', 110)), el('b', {}, 'No history yet'), 'Lessons you watch show up here.')]));
 }
 
 // ============================================================================ profile
 function renderProfile() {
   const p = me?.profile || {};
   const lvl = cfg.levels.find((l) => l.id === p.level);
-  $('#profile-card').replaceChildren(
-    el('div', { class: 'avatar', 'aria-hidden': 'true' }, (me?.vidmoat?.name || 'S').trim().charAt(0).toUpperCase()),
+  const stats = me?.stats;
+  const badges = [];
+  if (stats?.streak >= 3) badges.push(sbadge(`🔥 ${stats.streak}-day streak`, { hot: true, r: -2 }));
+  if (stats?.quizN >= 5 && stats.quizRight / stats.quizN >= 0.8) badges.push(sbadge('🎯 quiz ace', { r: 2 }));
+  if (stats?.mastered >= 1) badges.push(sbadge(`🏅 ${stats.mastered} mastered`, { r: -1 }));
+  if (stats?.watched >= 25) badges.push(sbadge('🎬 binge learner', { r: 1 }));
+  if (me?.vidmoat) badges.push(sbadge(p.managedBy === 'guardian' ? '👪 set up by a guardian' : '✓ Vidmoat', { r: -1 }));
+  $('#profile-card').className = 'hero';
+  $('#profile-card').replaceChildren(svgEl(mascot(stats?.streak >= 3 ? 'cheer' : 'happy')),
     el('div', {}, el('h3', {}, me?.vidmoat?.name || 'Guest learner'), el('p', {}, [lvl?.label, p.institution, p.age ? `age ${p.age}` : null].filter(Boolean).join(' · ') || 'Exploring'),
-      me?.vidmoat ? el('span', { class: 'badge' }, p.managedBy === 'guardian' ? '✓ Set up by a parent or guardian' : '✓ Synced with Vidmoat') : null),
-  );
+      el('div', { class: 'bubble' }, buddyLine(stats)),
+      badges.length ? el('div', { class: 'badges' }, ...badges) : null));
+  $('#profile-tiles').replaceChildren(statTiles(stats));
 
   renderCredits();
   const account = $('#account-card');
@@ -1043,7 +1104,7 @@ function showView(next) {
   view = next;
   document.body.dataset.view = next;
   $$('.view').forEach((v) => { v.hidden = v.dataset.view !== next; });
-  $$('.tabbtn').forEach((t) => t.setAttribute('aria-current', t.dataset.tab === next ? 'page' : 'false'));
+  $$('.tabbtn').forEach((t, i) => { t.setAttribute('aria-current', t.dataset.tab === next ? 'page' : 'false'); if (t.dataset.tab === next) $('.tab-blob').style.setProperty('--tab', String(i)); });
   if (next === 'feed') {
     layout(false);
     syncPlayers();
@@ -1052,8 +1113,11 @@ function showView(next) {
   } else {
     feed.items[feed.active]?.player?.pause();
     history.replaceState(null, '', `#${next}`);
-    if (next === 'library') { track('library_open', { tab: 'course' }); showLibrary().catch(() => toast("Couldn't load your library.")); }
-    if (next === 'profile') { track('profile_open'); renderProfile(); }
+    // Fresh numbers for the stickers and tiles: send pending events, then re-read the profile.
+    flush();
+    const refresh = api('GET', '/api/me').then((r) => { me = { ...r.user, billing: r.user.billing || me?.billing }; }).catch(() => {});
+    if (next === 'library') { track('library_open', { tab: 'course' }); refresh.then(() => showLibrary()).catch(() => toast("Couldn't load your library.")); }
+    if (next === 'profile') { track('profile_open'); renderProfile(); refresh.then(renderProfile); }
   }
 }
 
