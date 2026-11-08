@@ -1486,7 +1486,7 @@ function renderProfile() {
   }
 
   $('#studies-summary').replaceChildren(el('p', {}, [p.program, p.institution, p.country].filter(Boolean).join(' · ') || 'No course set'),
-    el('p', {}, [lvl?.label, p.exam && `Preparing for ${p.exam}`].filter(Boolean).join(' · ')), examChip(p));
+    el('p', {}, [lvl?.label, p.exam && `Preparing for ${p.exam}`].filter(Boolean).join(' · ')), ...[examChip(p)].filter(Boolean));
 }
 /** Who pays for new videos: the free allowance on StudyTok's account, or the student's own Vidmoat credits. */
 function renderCredits() {
