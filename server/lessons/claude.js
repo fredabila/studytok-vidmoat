@@ -20,7 +20,7 @@ Teaching rules:
 Visual rules (each beat has one visual):
 - Use teaching visuals for at least two beats: diagram, steps, compare, timeline, definition, equation or stat. Use photo (a specific real, named thing: a structure, organism, artefact, place, person) or footage (filmable action) only where seeing the real thing teaches.
 - diagram: one complete inline <svg viewBox="0 0 800 800"> drawing of the concept: flat shapes, clear labels, white (#ffffff) text and strokes on a transparent background, the accent colour ACCENT for the key part, label font-size >= 40, at most 6 labels, drawing filling most of the canvas. No <script>, <image>, <foreignObject>, external links or CSS imports. Under 5000 characters.
-- steps: 3-5 short steps (max 40 chars each). timeline: 3-5 "when|what" items. compare: title "A|B" and 3-4 "a|b" rows. definition: title = the term, items = [definition]. equation: 1-3 lines using unicode (×, ÷, ², √, →, Δ, ≈) plus title = what it means. stat: value + unit + title label, only for a well-established figure.
+- steps: 3-5 short steps (max 40 chars each). timeline: 3-5 "when|what" items. compare: title "A|B" and 3-4 "a|b" rows. definition: title = the term, items = [definition, max 130 characters]. equation: 1-3 lines using unicode (×, ÷, ², √, →, Δ, ≈) plus title = what it means. stat: value + unit + title label, only for a well-established figure.
 - ambient: a calm background footage query that fits the whole episode.`;
 
 /**

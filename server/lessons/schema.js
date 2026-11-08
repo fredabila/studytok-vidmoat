@@ -52,7 +52,7 @@ function sanitizeVisual(v, beat) {
     kind,
     query: clip(v?.query || (kind === 'footage' || kind === 'photo' ? beat.visual || beat.keyTerm : ''), 50),
     title: clip(v?.title, 60),
-    items: (Array.isArray(v?.items) ? v.items : []).map((x) => clip(x, 90)).filter(Boolean).slice(0, 5),
+    items: (Array.isArray(v?.items) ? v.items : []).map((x) => clip(x, kind === 'definition' ? 150 : 90)).filter(Boolean).slice(0, 5),
     value: Number.isFinite(Number(v?.value)) ? Number(v.value) : 0,
     unit: clip(v?.unit, 10),
     svg: kind === 'diagram' ? String(v?.svg || '').slice(0, 14000) : '',

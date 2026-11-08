@@ -227,7 +227,7 @@ export function composeLesson(lesson, media = {}) {
       if (captions[i]?.length) {
         cmds.push({
           op: 'addCaptions', words: captions[i], keepExisting: true, maxWordsPerLine: 4, maxLineDuration: 2.6,
-          trackIndex: T.captions, y: teaching.length ? 545 : 260, ...emphasisFor(beat, look.accent),
+          trackIndex: T.captions, y: teaching.length ? 430 : 220, ...emphasisFor(beat, look.accent),
         });
       }
     }

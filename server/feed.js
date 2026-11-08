@@ -105,7 +105,9 @@ export async function nextItems(userId, count = 3) {
   const states = await getProgress(userId);
   const recent = (await kv.lrange(`user:${userId}:recentUnits`, 0, 9)) || [];
 
-  const picks = pickUnits(candidates, states, recent, count + 2, { hasCourse });
+  // No exploration for a new student's first videos: start them at the beginning of the syllabus.
+  const servedSoFar = Object.values(states).reduce((n, s) => n + (s.served || 0), 0);
+  const picks = pickUnits(candidates, states, recent, count + 2, { hasCourse, explore: servedSoFar < 8 ? 0 : 0.1 });
   const items = [];
   const pending = [];
   const taken = new Set();

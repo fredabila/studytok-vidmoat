@@ -32,7 +32,7 @@ feed request ─► algorithm picks units ─► unseen ready video for that uni
 4. **Reveal**: a ding, the correct option lights up, and the narrator explains why.
 5. **Remember**: the one-line takeaway. Then it loops.
 
-Sound: the narration (Vidmoat speech, Grok voice), whooshes on section changes, a pop on each key
+Sound: the narration (Vidmoat speech: the cheapest available voice), whooshes on section changes, a pop on each key
 term, a clock under the think pause, a ding on the answer, and a CC0 music bed ducked under the voice.
 
 ## The algorithm (`server/recommend.js`)
@@ -69,7 +69,7 @@ accuracy and completions.
 | --- | --- |
 | Lesson (Claude, ⅓ of a 3-episode call) | Anthropic API usage |
 | Course research (once per course, shared) | Anthropic API usage + web search |
-| Narration | 8 Vidmoat credits (Grok voice) |
+| Narration | 8 (Grok) or 15 (OpenAI) Vidmoat credits: `auto` picks the cheapest available, capped at `STUDYTOK_VOICE_MAX_CREDITS` |
 | Exact caption timing | 5 Vidmoat credits (`STUDYTOK_VOICE_TIMING=estimated` skips this) |
 | Stock search/import, projects, commands, preview, playback | Free (Vidmoat rate limit) |
 
