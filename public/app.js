@@ -588,6 +588,43 @@ function preferReady() {
 }
 
 // ============================================================================ feed: players
+// ---- iOS sound gate -------------------------------------------------------------------------------
+// The player's audio runs through a Web Audio context that iOS keeps suspended until a user gesture
+// happens inside the player's own (cross-origin) frame. Our gesture layer sits over the frame, so
+// until the first tap the frame would never see one. On iOS the first ready slide opens a hole in
+// the layer ("Tap here for sound"); when the tap lands in the frame (focus moves into it), the
+// document is re-sent so the audio pipeline restarts under that gesture. Once per page load.
+const IOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+let soundUnlocked = !IOS;
+let soundWatch = null;
+function soundGate(item) {
+  if (soundUnlocked || !item?.player || item.el.dataset.loaded !== 'true' || feed.items[feed.active] !== item) return;
+  if (item.el.classList.contains('sound-gate')) return;
+  $$('.slide.sound-gate').forEach((s) => { s.classList.remove('sound-gate'); $('.sound-chip', s).hidden = true; });
+  item.el.classList.add('sound-gate');
+  $('.sound-chip', item.el).hidden = false;
+  document.body.classList.add('sound-gated');
+  clearInterval(soundWatch);
+  const started = Date.now();
+  const check = () => {
+    if (soundUnlocked) { clearInterval(soundWatch); return; }
+    if (document.activeElement !== item.player?.iframe) { if (Date.now() - started > 120000) clearInterval(soundWatch); return; }
+    soundUnlocked = true;
+    clearInterval(soundWatch);
+    item.el.classList.remove('sound-gate');
+    $('.sound-chip', item.el).hidden = true;
+    document.body.classList.remove('sound-gated');
+    try { window.focus(); } catch { /* fine */ }
+    // Restart this video's audio pipeline now that the frame has had its gesture.
+    const t = Math.max(0, (item.player.time || 0) - 0.3);
+    item.player.load(item.data.document, t);
+    item.player.play();
+    track('sound_unlock', { videoId: item.data.id, t: Math.round(t) });
+  };
+  soundWatch = setInterval(check, 200);
+  window.addEventListener('blur', () => setTimeout(check, 0), { once: true });
+}
+
 function mountPlayer(item) {
   if (item.player || item.data.status !== 'ready') return;
   const duration = item.data.duration || 0;
@@ -595,6 +632,7 @@ function mountPlayer(item) {
     onLoaded: () => {
       item.el.dataset.loaded = 'true';
       if (feed.items[feed.active] === item && !feed.paused && view === 'feed') item.player.play();
+      soundGate(item);
     },
     onState: ({ time, playing }) => onState(item, time, playing, duration),
     onError: (msg) => { item.el.dataset.status = 'failed'; $('.making-hook', item.el).textContent = msg; sendEvent(item.data.id, 'player_error', { msg: String(msg).slice(0, 80) }); },
@@ -620,6 +658,7 @@ function syncPlayers() {
     if (!item.player) return;
     if (i === feed.active && !feed.paused && view === 'feed' && !item.held) item.player.play(); else item.player.pause();
   });
+  soundGate(feed.items[feed.active]);
 }
 function onState(item, time, playing, duration) {
   const isActive = feed.items[feed.active] === item;
@@ -731,7 +770,7 @@ function answer(item, i) {
 function openWhy(item) {
   const d = item.data, w = d.why || {};
   const reasons = [];
-  if (w.kind === 'breather') reasons.push(['☕', { 'leaving-early': 'You left the last couple of lessons early, so here is a quick fun one from next door to your subject. Your units are next.', 'tough-run': 'A few tricky questions in a row. Something light before we go back in.', 'long-session': 'You have been at it a while. A short detour, then back to your syllabus.' }[w.reason] || 'A short, fun detour next door to your subject. Your units are next.']);
+  if (d.breather) reasons.push(['☕', d.breather.text || 'A short, fun detour next door to your subject. Your units are next.']);
   if (w.starter) reasons.push(['⏱️', `A ready lesson from the library while yours is being made${d.queuedFor ? ` (${d.queuedFor})` : ''}.`]);
   if (w.explored) reasons.push(['🧭', 'Something a little different. A small share of your feed explores, so it never gets stale.']);
   if (w.kind === 'course' && w.progress >= 0.7) reasons.push(['📚', d.position ? `Next up in your syllabus: unit ${d.position.index} of ${d.position.total}.` : 'Next up in your syllabus.']);

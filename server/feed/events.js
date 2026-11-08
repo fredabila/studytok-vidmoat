@@ -49,6 +49,7 @@ export const EVENT_SPECS = {
   leave: { video: true, fields: { t: 'n', watched: 'n', maxT: 'n', pct: 'p', loops: 'i', dir: 's', early: 'b', watchedSec: 'n', posture: 's' } },
   drop: { fields: { videoId: 's', t: 'n' } },
   sensors: { fields: { motion: 'b', permission: 's' } },
+  sound_unlock: { video: true, fields: { t: 'n' } },
   refresh: { fields: { where: 's' } },
   skip: { video: true, fields: {} }, // legacy: an early leave
   rewatch: { video: true, fields: {} },
@@ -122,7 +123,7 @@ export function weekKey(at) {
   return d.toISOString().slice(0, 10);
 }
 const emptyWeek = () => ({ watched: 0, completes: 0, watchSec: 0, quizN: 0, quizRight: 0, units: {}, formats: {}, days: {}, mastered: [] });
-export const emptySession = () => ({ sid: '', startedAt: 0, lastAt: 0, served: 0, viewed: 0, lastFormats: [], lastTopics: [], wrongStreak: 0, rightStreak: 0, earlyStreak: 0, posture: 'unknown', hour: null, night: false, lastBreatherAt: 0, breathers: 0 });
+export const emptySession = () => ({ sid: '', startedAt: 0, lastAt: 0, served: 0, viewed: 0, lastFormats: [], lastTopics: [], wrongStreak: 0, rightStreak: 0, earlyStreak: 0, posture: 'unknown', hour: null, night: false });
 const POSTURES = new Set(['hand', 'flat', 'moving', 'unknown']);
 /** The scene a timeline time falls in (for drop-off curves), by kind. */
 const sceneKindAt = (video, t) => { const s = (video?.scenes || []).findLast((x) => t >= x.start); return s?.kind || null; };
@@ -374,13 +375,14 @@ export async function studentStats(userId, { watched = 0, progress = {}, mastery
   };
 }
 
-/** Records that a breather was just served, so the next one waits a few videos (feed/breathers.js). */
-export async function noteBreather(userId) {
-  const session = { ...emptySession(), ...((await kv.get(`user:${userId}:session`)) || {}) };
-  session.lastBreatherAt = session.viewed || 0;
-  session.breathers = (session.breathers || 0) + 1;
-  session.earlyStreak = 0; session.wrongStreak = 0; // the breather answers the signal; do not fire again on the same run
-  await kv.set(`user:${userId}:session`, session);
+/**
+ * Records that a breather was just served at `viewed` videos into the session, so the next one
+ * waits a few videos (feed/breathers.js). Kept in its own key: the session object is rewritten by
+ * every events batch and a concurrent one would lose the marker.
+ */
+export async function noteBreather(userId, viewed = 0) {
+  const mark = (await kv.get(`user:${userId}:breather`)) || { count: 0 };
+  await kv.set(`user:${userId}:breather`, { at: viewed, count: (mark.count || 0) + 1, lastAt: Date.now() });
 }
 
 /** Marks videos as served in the viewer's session (called by the feed, not by the app). */

@@ -13,7 +13,7 @@ import { lessonKey } from '../lessons/index.js';
 import { startVideo, readyKeyFor } from '../video/generator.js';
 import { pickUnits, mastery, scoreVideo, exploreRate, applyEvent, emptyState } from './ranking.js';
 import { ingest, getSignals, getSession, noteServed, noteBreather } from './events.js';
-import { needsBreather, pickBreather, isBreatherUnit } from './breathers.js';
+import { needsBreather, pickBreather, isBreatherUnit, BREATHER_REASONS } from './breathers.js';
 import { credentialFor } from '../core/billing.js';
 import { kv } from '../core/kv.js';
 import * as db from '../core/db.js';
@@ -186,8 +186,9 @@ async function generatingFor(userId) {
  * Starts a video for this student on whoever's Vidmoat account pays for it (core/billing.js).
  * @returns {Promise<{ video } | { blocked: 'allowance'|'exhausted'|'plan'|'reconnect' }>}
  */
-async function startFor(userId, unit, audience, pending) {
-  const credential = await credentialFor(userId);
+async function startFor(userId, unit, audience, pending, { onTheHouse = false } = {}) {
+  // A breather is StudyTok's idea, not the student's: it is never charged to them or to their free allowance.
+  const credential = onTheHouse ? { mode: 'house' } : await credentialFor(userId);
   if (credential.mode === 'exhausted') return { blocked: credential.reason };
   const started = await startVideo(unit, audience, { requestedBy: userId, credential });
   pending.push(started.done);
@@ -246,7 +247,8 @@ export async function nextItems(userId, count = 3) {
 
   // A breather: when the session says the student is about to drop off, the next slot is one
   // short, fun video from next door to their subject (feed/breathers.js), then back to the units.
-  const breatherReason = needsBreather(session, signals);
+  const breatherMark = (await kv.get(`user:${userId}:breather`)) || {};
+  const breatherReason = needsBreather({ ...session, lastBreatherAt: breatherMark.at || 0 }, signals);
   if (breatherReason) {
     const topics = [...new Set(candidates.map((c) => c.unit.topic))];
     const unit = pickBreather({ topics, lastTopic: session.lastTopics?.[0] || null, recentUnits: recent });
@@ -254,14 +256,16 @@ export async function nextItems(userId, count = 3) {
     let video = best?.video || null;
     if (!video) {
       const existing = inFlight.find((v) => v.readyKey === readyKeyFor(unit.id, audience) && !taken.has(v.id));
-      const result = existing ? { video: existing } : await startFor(userId, unit, audience, pending);
+      // Nothing ready: make one on the house, unless the student is on their own account (then only library breathers).
+      const ownAccount = user.billing?.mode === 'own' && Boolean(user.vidmoatTokens);
+      const result = existing ? { video: existing } : ownAccount ? {} : await startFor(userId, unit, audience, pending, { onTheHouse: true });
       video = result.video || null;
       if (video && !existing) generating++;
     }
     if (video) {
       taken.add(video.id);
       items.unshift({ video, unit, why: { kind: 'breather', reason: breatherReason, video: best?.parts }, pos: null });
-      await noteBreather(userId);
+      await noteBreather(userId, session.viewed || 0);
     }
   }
 
@@ -378,7 +382,7 @@ export async function publicVideo(v, userId, { withDocument = true, why, pos, qu
     liked, saved,
     likes: stats.likes,
     why: why || undefined,
-    breather: why?.kind === 'breather' ? { reason: why.reason } : undefined,
+    breather: why?.kind === 'breather' ? { reason: why.reason, text: BREATHER_REASONS[why.reason] || BREATHER_REASONS.default } : undefined,
     position: pos || undefined,
     starter: why?.starter ? true : undefined,
     queuedFor: queuedFor || undefined,

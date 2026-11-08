@@ -315,7 +315,7 @@ export function composeLesson(lesson, media = {}) {
 
     if (kind === 'sheet') {
       cmds.push(dim(uid('sheetDim'), start, d, T.quizDim, look.bg, 0.5));
-      cmds.push(...sheetCard(card(`sheet${seg.index}`, start, d + 0.05), { items: seg.items, upTo: seg.index }));
+      cmds.push(...sheetCard(card(`sheet${seg.index}`, start, d + 0.05), { items: seg.items, upTo: seg.index, title: seg.title }));
       cmds.push(...sfxClip(uid('pop'), sfx.pop, start + 0.1, 0.4));
     }
 

@@ -29,8 +29,6 @@ export const BREATHERS = {
   general: ['Things that sound fake but are true', 'Everyday objects with a surprising past', 'Questions kids ask that stump adults'],
 };
 
-const slug = (s) => s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
-
 /** The breather units for a topic (ids are stable, so videos are shared). */
 export function breatherUnits(topicId) {
   const t = TOPIC_BY_ID[topicId] ? topicId : 'general';
@@ -86,4 +84,5 @@ export const BREATHER_REASONS = {
   'leaving-early': 'You left the last couple of lessons early, so here is a quick fun one next door to your subject. Your units are next.',
   'tough-run': 'A few tricky questions in a row. Here is something light before we go back in.',
   'long-session': 'You have been at it a while. A short detour, then back to your syllabus.',
+  default: 'A short, fun detour next door to your subject. Your units are next.',
 };

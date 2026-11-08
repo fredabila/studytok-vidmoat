@@ -194,6 +194,16 @@ body[data-view="feed"] .tabbtn[aria-current="page"] span { color: var(--ink); }
 .player-host iframe { pointer-events: none; opacity: 0; transition: opacity .3s; background: transparent; }
 .slide[data-loaded="true"] .player-host iframe { opacity: 1; }
 .gesture { z-index: 3; cursor: pointer; }
+/* iOS sound gate: the player's audio can only start after a tap inside its own frame, so until
+   the first tap a hole in the gesture layer lets a tap in the middle reach the frame. Swipes at
+   the edges still work. */
+.slide.sound-gate .gesture { clip-path: polygon(evenodd, 0 0, 100% 0, 100% 100%, 0 100%, 0 0, 22% 34%, 78% 34%, 78% 62%, 22% 62%, 22% 34%); }
+.slide.sound-gate .player-host iframe { pointer-events: auto; }
+.sound-chip { position: absolute; z-index: 9; left: 22%; right: 22%; top: 34%; height: 28%; display: grid; place-items: center; align-content: center; gap: 12px; pointer-events: none; border-radius: 28px; border: 2px dashed rgba(255, 255, 255, .7); background: rgba(13, 13, 14, .35); animation: hint 2.4s var(--ease) infinite; }
+.sound-chip i { width: 64px; height: 64px; border-radius: 50%; background: var(--hl); display: grid; place-items: center; box-shadow: 3px 3px 0 var(--ink); }
+.sound-chip i::before { content: '👆'; font-size: 30px; }
+.sound-chip span { padding: 8px 14px; border-radius: 6px; background: var(--hl); color: var(--ink); font-size: 13px; font-weight: 600; }
+body.sound-gated .swipe-hint { display: none; }
 
 /* making: a paper ticket over the dark stage */
 .making { z-index: 2; display: grid; place-items: center; padding: 24px 70px 130px 20px; transition: opacity .3s; }

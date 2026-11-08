@@ -233,12 +233,12 @@ export function answerSteps({ id, start, duration, track, accent, theme = 'paper
 }
 
 /** Cheat sheet: a revision card whose lines fill in one by one; the newest line is highlighted. */
-export function sheetCard({ id, start, duration, track, accent, theme = 'paper' }, { items, upTo }) {
+export function sheetCard({ id, start, duration, track, accent, theme = 'paper' }, { items, upTo, title = 'Cheat sheet' }) {
   const t = themeOf(theme, accent);
   const list = items.slice(0, 6);
   const h = 900;
   return html(id, start, duration, track,
-    `<div class="c sh"><div class="h">Cheat sheet</div>${list.map((it, i) =>
+    `<div class="c sh"><div class="h">${esc(title)}</div>${list.map((it, i) =>
       `<div class="r${i < upTo ? ' done' : i === upTo ? ' on' : ''}"><b>${esc(it.title)}</b><span>${esc(it.text)}</span></div>`).join('')}</div>`,
     cardCss(accent, theme, `.sh{gap:16px;justify-content:flex-start}
 .r{display:grid;grid-template-columns:300px 1fr;gap:18px;align-items:start;padding:14px 16px;border-radius:18px;background:${t.cell};opacity:.18}
@@ -280,7 +280,7 @@ export function flashCard({ id, start, duration, track, accent, theme = 'paper' 
   const isA = side === 'a';
   const h = 760;
   return html(id, start, duration, track,
-    `<div class="c fc${isA ? ' a' : ''}"><div class="top"><span>${isA ? 'Answer' : 'Question'}</span><span>${index + 1} / ${total}</span></div><div class="tx">${esc(isA ? card.a : card.q)}</div><div class="bot">${isA ? '' : 'say it out loud…'}</div></div>`,
+    `<div class="c fc${isA ? ' a' : ''}"><div class="top"><span>${isA ? 'Answer' : esc(card.label || 'Question')}</span><span>${index + 1} / ${total}</span></div><div class="tx">${esc(isA ? card.a : card.q)}</div><div class="bot">${isA ? '' : esc(card.hint ?? 'say it out loud…')}</div></div>`,
     cardCss(accent, theme, `.fc{justify-content:space-between;text-align:center;border-radius:60px}
 .fc.a{background:${accent};color:${t.onAccent};border-color:${accent}}
 .top,.bot{display:flex;justify-content:space-between;font-size:38px;font-weight:800;letter-spacing:3px;text-transform:uppercase;opacity:.75}.bot{justify-content:center;font-style:italic;text-transform:none;letter-spacing:0}

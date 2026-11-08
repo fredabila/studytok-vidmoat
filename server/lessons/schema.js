@@ -106,7 +106,7 @@ function sanitizeQuiz(q) {
 export function sanitizeLesson(raw, topicId, meta = {}) {
   let format = FORMAT_IDS.includes(raw.format) ? raw.format : 'explain';
   const beats = sanitizeBeats(raw.beats, 4);
-  const items = list(raw.items, 6, (it) => (it && it.text ? { title: clip(it.title || it.text, 28), text: clip(it.text, 140), visual: clip(it.visual || it.title, 50), tier: ['S', 'A', 'B', 'C'].includes(String(it.tier || '').toUpperCase()) ? String(it.tier).toUpperCase() : '' } : null));
+  const items = list(raw.items, 6, (it) => (it && it.text ? { title: clip(it.title || it.text, String(it.title || '').includes('|') ? 44 : 28), text: clip(it.text, 140), visual: clip(it.visual || it.title, 50), tier: ['S', 'A', 'B', 'C'].includes(String(it.tier || '').toUpperCase()) ? String(it.tier).toUpperCase() : '' } : null));
   const cards = list(raw.cards, 4, (c) => (c && c.q && c.a ? { q: clip(c.q, 80), a: clip(c.a, 70) } : null));
   const ex = raw.exam || {};
   // exam: a question with options and/or worked steps (examdrill needs both, guess needs options,
