@@ -221,7 +221,11 @@ body[data-view="feed"] .tabbtn[aria-current="page"] span { color: var(--ink); }
 .heart-burst.go { animation: burst .8s var(--ease) forwards; }
 @keyframes burst { 0% { opacity: 0; transform: scale(.3) rotate(-12deg); } 20% { opacity: 1; transform: scale(1.15) rotate(6deg); } 60% { opacity: 1; transform: scale(1) rotate(0); } 100% { opacity: 0; transform: translateY(-60px) scale(.9); } }
 
-.rail { position: absolute; z-index: 6; right: 10px; bottom: 120px; display: grid; gap: 14px; }
+/* The rail sits over the stage's right edge; on wide screens the stage is narrower than the slide, so its
+   offset is computed from the stage width (the same expression as .stage above). */
+.rail { position: absolute; z-index: 6; right: max(10px, calc(50% - (100dvh - var(--tabbar) - var(--safe-b)) * 9 / 32 + 10px)); bottom: 120px; display: grid; gap: 14px; }
+@media (min-width: 760px) { .rail { right: calc(50% - (100dvh - var(--tabbar) - var(--safe-b) - 28px) * 9 / 32 + 10px); } }
+.side-brand, .side-foot { display: none; }
 .rail-btn { display: grid; justify-items: center; gap: 5px; border: 0; background: none; padding: 0; cursor: pointer; color: #fff; }
 .rail-btn .ic { width: 46px; height: 46px; border-radius: 50%; display: grid; place-items: center; background: rgba(13, 13, 14, .55); border: 1.5px solid rgba(255, 255, 255, .85); transition: transform .12s var(--ease), background .15s; }
 .rail-btn:active .ic { transform: scale(.88); }
@@ -525,3 +529,44 @@ body.landing-on { background: var(--paper); }
 .ld-links { margin: 0; font-size: 14px; color: var(--ink-3); }
 .ld-foot .fine { max-width: 520px; margin: 16px auto 0; }
 body.landing-on { background: var(--paper); }
+
+/* ---------------------------------------------------------------------------- desktop (wide screens)
+   The dock becomes a dark sidebar with the brand, the video is a 9:16 column in the middle, and the
+   rail and pager sit beside it, outside the picture, like a desktop short-video app. */
+@media (min-width: 900px) {
+  :root { --tabbar: 0px; --side: 236px; --stage-w: min(540px, calc((100dvh - 48px) * 9 / 16)); }
+  .view { left: var(--side); bottom: 0; }
+  .tabbar, body[data-view] .tabbar { position: fixed; left: 0; top: 0; bottom: 0; width: var(--side); height: auto; transform: none; border-radius: 0; border: 0; border-right: 1px solid var(--dark-line);
+    box-shadow: none; padding: 22px 16px; background: var(--dark-2); color: #fff; display: flex; flex-direction: column; align-items: stretch; gap: 6px; }
+  .side-brand { display: block; padding: 6px 10px 22px; }
+  .side-brand svg { overflow: visible; width: 172px; height: 39px; }
+  .side-brand p { margin: 8px 0 0; font-size: 12.5px; color: rgba(255, 255, 255, .55); }
+  .tabbtn { flex: none; max-width: none; display: flex; align-items: center; justify-content: flex-start; gap: 13px; height: 48px; padding: 0 14px; border-radius: 12px; font-size: 15px; opacity: .72; }
+  .tabbtn:hover { opacity: 1; }
+  .tabbtn svg { width: 22px; height: 22px; }
+  .tabbtn[aria-current="page"] svg { transform: none; animation: none; }
+  .tabbtn[aria-current="page"], body[data-view="feed"] .tabbtn[aria-current="page"], .tabbtn[aria-current="page"] span, body[data-view="feed"] .tabbtn[aria-current="page"] span { color: var(--ink); opacity: 1; }
+  .tab-blob { top: 106px; bottom: auto; left: 16px; width: calc(100% - 32px); height: 48px; transform: translateY(calc(var(--tab, 0) * 54px)); box-shadow: none; }
+  .side-foot { display: block; margin: auto 0 0; padding: 0 10px; font-size: 12px; color: rgba(255, 255, 255, .45); line-height: 1.5; }
+  .side-foot a { color: rgba(255, 255, 255, .75); text-decoration-color: var(--hl); text-decoration-thickness: 2px; text-underline-offset: 2px; }
+
+  .view-feed { background: var(--dark) radial-gradient(circle at 100% 0, rgba(255, 217, 61, .14), transparent 48%); }
+  .view-feed::before { content: ""; position: absolute; inset: 0; background-image: radial-gradient(rgba(255, 255, 255, .09) 1px, transparent 1.2px); background-size: 26px 26px; pointer-events: none; }
+  .slide { background: transparent; }
+  .stage { width: var(--stage-w); height: calc(var(--stage-w) * 16 / 9); border-radius: 22px; border: 1px solid rgba(255, 255, 255, .12); box-shadow: 0 30px 80px rgba(0, 0, 0, .55), 0 0 0 6px rgba(255, 255, 255, .03); }
+  .feed-head { left: 50%; right: auto; width: var(--stage-w); top: calc(50% - var(--stage-w) * 8 / 9); transform: translateX(-50%); padding: 14px 14px 28px; border-radius: 22px 22px 0 0; }
+  .feed-head .wordmark { visibility: hidden; }
+  .rail { right: auto; left: calc(50% + var(--stage-w) / 2 + 18px); bottom: calc(50% - var(--stage-w) * 8 / 9); gap: 16px; }
+  .rail-btn .ic { width: 50px; height: 50px; background: var(--dark-2); border-color: rgba(255, 255, 255, .25); }
+  .rail-btn:hover .ic { border-color: #fff; }
+  .pager { right: auto; left: calc(50% + var(--stage-w) / 2 + 20px); top: calc(50% - var(--stage-w) * 8 / 9); transform: none; }
+  .pager-btn { background: var(--dark-2); border-color: rgba(255, 255, 255, .25); }
+  .meta { right: 14px; }
+  .quiz { right: 12px; }
+  .making { padding: 24px 20px 130px; }
+  .swipe-hint { display: none; }
+  .ptr { display: none; }
+  .page { width: min(760px, 100%); padding-top: 28px; }
+  .sheet-panel { top: 50%; bottom: auto; transform: translateY(-50%); border-radius: 18px; border: 1.5px solid var(--ink); max-height: min(80vh, 720px); animation: fade .2s; }
+  .sheet-grip { display: none; }
+}
