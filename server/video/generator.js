@@ -22,6 +22,9 @@ import { composeLesson } from './compose.js';
 import { format as formatOf } from './formats.js';
 import { createProject, getDocument as fetchDocument, deleteProject, fileProject, withCredential } from '../core/vidmoat.js';
 import { noteProblem, problemFromError } from '../core/billing.js';
+import { kv } from '../core/kv.js';
+
+const dayCounter = (field) => kv.hincrby(`events:day:${new Date().toISOString().slice(0, 10)}`, field, 1).catch(() => {});
 import { saveVideo, updateVideo, setDocument, markReady } from '../core/db.js';
 
 // ---- A small promise queue so a burst of scrolling cannot fire unbounded API work
@@ -63,6 +66,7 @@ export async function startVideo(unit, audience, { requestedBy, credential = { m
   await saveVideo(video);
   const done = enqueue(() => withCredential(credential.token, () => buildWithRetry(video, unit, audience, credential))).catch(async (err) => {
     console.error(`[generator] ${video.id} failed:`, err);
+    await dayCounter('gen_failed');
     await updateVideo(video.id, { status: 'failed', error: String(err.message || err), errorCode: err.billingProblem || err.code || null }).catch(() => {});
   });
   return { video, done };
@@ -131,6 +135,7 @@ async function buildVideo(video, unit, audience) {
   if (config.vidmoat.deleteProjectsAfterCache) await deleteProject(projectId).catch((e) => console.warn('[generator] delete failed', e.message));
 
   const credits = [media.ambient, ...media.beatMedia, ...(media.itemMedia || []), music].filter(Boolean).map((m) => ({ by: m.credit, source: m.sourceUrl, provider: m.provider }));
+  await dayCounter('gen_ready');
   const ready = await updateVideo(video.id, {
     status: 'ready',
     projectId: config.vidmoat.deleteProjectsAfterCache ? null : projectId,

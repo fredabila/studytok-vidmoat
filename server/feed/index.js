@@ -55,7 +55,24 @@ export function cleanPrefs(p = {}, base = DEFAULT_PREFS) {
   return out;
 }
 
-/** body: { profile, programKeys?, units?: string[], interests?: string[], prefs? } */
+/**
+ * Invite links: ?ref=<member number>. Recorded once, on the first profile save, never for the
+ * student's own number; the inviter's count goes up. Returns the inviter's member number or null.
+ */
+export async function recordReferral(user, ref) {
+  const no = Number(ref);
+  if (!user || user.referredBy || !Number.isInteger(no) || no <= 0 || no === user.memberNo) return null;
+  const inviterId = await db.userIdByMemberNo(no);
+  if (!inviterId || inviterId === user.id) return null;
+  user.referredBy = no;
+  user.referredAt = new Date().toISOString();
+  await db.saveUser(user);
+  await kv.hincrby('referrals', String(no), 1);
+  await kv.hincrby(`events:day:${new Date().toISOString().slice(0, 10)}`, 'referred', 1);
+  return no;
+}
+
+/** body: { profile, programKeys?, units?: string[], interests?: string[], prefs?, ref? } */
 export async function saveProfile(userId, body) {
   const existing = userId ? await db.getUser(userId) : null;
   const profile = cleanProfile(body.profile || existing?.profile);
@@ -81,7 +98,10 @@ export async function saveProfile(userId, body) {
   };
   // A student needs something to watch: with nothing chosen, fall back to all interest topics.
   if (!user.units.length && !user.interests.length) user.interests = INTEREST_TOPICS.map((t) => t.id);
+  if (existing?.referredBy) { user.referredBy = existing.referredBy; user.referredAt = existing.referredAt; }
   await db.saveUser(user);
+  await db.indexMember(user);
+  if (body.ref != null && !user.referredBy) await recordReferral(user, body.ref);
   return user;
 }
 
@@ -476,6 +496,7 @@ export async function linkVidmoat(currentUserId, identity) {
     ? { ...current, vidmoat }
     : { id: randomUUID(), createdAt: new Date().toISOString(), memberNo: await db.nextMemberNo(), profile: cleanProfile(), programKeys: [], units: [], interests: [], vidmoat, setupDone: false };
   await db.saveUser(user);
+  await db.indexMember(user);
   await kv.set(`vidmoat:${identity.id}`, user.id);
   return { user, restored: false };
 }

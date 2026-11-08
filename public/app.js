@@ -244,7 +244,7 @@ async function buildSyllabus() {
 
 function profileBody() {
   const units = ob.programs.flatMap((p) => p.program.units.map((u) => u.id)).filter((id) => ob.selected.has(id));
-  return { profile: { ...ob.profile, level: ob.level, age: ageOf(), managedBy: ob.who === 'child' ? 'guardian' : 'self' }, guardianConsent: ob.who === 'child' && $('#ob-consent-box').checked, programKeys: ob.programs.map((p) => p.program.key), units, interests: [...ob.interests] };
+  return { profile: { ...ob.profile, level: ob.level, age: ageOf(), managedBy: ob.who === 'child' ? 'guardian' : 'self' }, guardianConsent: ob.who === 'child' && $('#ob-consent-box').checked, programKeys: ob.programs.map((p) => p.program.key), units, interests: [...ob.interests], ref: captureRef() || undefined };
 }
 
 async function runOnboarding(prefill) {
@@ -1004,7 +1004,7 @@ function nextBurst() {
       const blob = await renderCard({ kind: 'levelup', kicker: 'Level up', title: `I just mastered ${item.title}`, mark: item.title, subtitle: 'Quick checks passed, unit learned.',
         stats: [{ value: me?.stats?.mastered ?? 1, label: 'mastered', hl: true }, { value: me?.stats?.streak ?? 0, label: 'day streak' }, { value: me?.stats?.watched ?? 0, label: 'lessons' }],
         line: 'Another one down. Who is next?', mascot: mascot('cheer', 300), memberNo: me?.memberNo, accent: '#34d399', chips: [item.title], chipsLabel: 'Mastered' });
-      const how = await shareCard(blob, { text: `I just mastered ${item.title} on StudyTok. studytok.vidmoat.com`, filename: 'studytok-level-up.png' });
+      const how = await shareCard(blob, { text: `I just mastered ${item.title} on StudyTok. Join me: ${inviteLink()}`, filename: 'studytok-level-up.png' });
       if (how === 'saved') toast('Card saved to your device.');
     } catch { toast("Couldn't make the card."); }
     close();
@@ -1027,7 +1027,7 @@ function recapCard(stats) {
   const fmt = cfg.formats?.find((f) => f.id === r.topFormat)?.name;
   const line = r.mastered.length ? `${r.mastered.length} unit${r.mastered.length > 1 ? 's' : ''} mastered: ${r.mastered.slice(0, 2).join(', ')}.`
     : r.days >= 4 ? `${r.days} study days. That is a habit now.` : r.watched >= 5 ? `${r.unitCount} unit${r.unitCount > 1 ? 's' : ''} explored. Keep going.` : 'A start is a start. Swipe a few more.';
-  const text = `My StudyTok week: ${r.watched} lessons, ${r.minutes} min${acc ? `, ${acc} on quick checks` : ''}${r.mastered.length ? `, ${r.mastered.length} unit${r.mastered.length > 1 ? 's' : ''} mastered` : ''}. studytok.vidmoat.com`;
+  const text = `My StudyTok week: ${r.watched} lessons, ${r.minutes} min${acc ? `, ${acc} on quick checks` : ''}${r.mastered.length ? `, ${r.mastered.length} unit${r.mastered.length > 1 ? 's' : ''} mastered` : ''}. Join me: ${inviteLink()}`;
   const share = el('button', { type: 'button', class: 'btn ghost', onclick: async () => {
     track('recap_share', { week: r.week });
     share.disabled = true;
@@ -1202,7 +1202,7 @@ function renderProfile() {
         subtitle: `${me?.vidmoat?.name || 'A student'} · ${[lvl?.label, p.program].filter(Boolean).join(' · ') || 'learning every day'}`,
         stats: [{ value: stats?.streak ?? 0, label: 'day streak', hl: (stats?.streak ?? 0) >= 3 }, { value: stats?.watched ?? 0, label: 'lessons' }, { value: stats?.quizN ? `${Math.round((stats.quizRight / stats.quizN) * 100)}%` : '—', label: 'quizzes' }, { value: stats?.mastered ?? 0, label: 'mastered' }],
         line: buddyLine(stats), mascot: mascot(stats?.streak >= 3 ? 'cheer' : 'happy', 300), memberNo: me?.memberNo, chips: [p.program, p.exam ? `Preparing for ${p.exam}` : null, ...(me?.interests || []).slice(0, 3).map((t) => cfg.topics.find((x) => x.id === t)?.label)].filter(Boolean), chipsLabel: 'Studying' });
-      const how = await shareCard(blob, { text: `I'm member #${me?.memberNo} on StudyTok, short study videos made for my syllabus. studytok.vidmoat.com`, filename: 'studytok-member.png' });
+      const how = await shareCard(blob, { text: inviteText(), filename: 'studytok-member.png' });
       if (how === 'saved') toast('Card saved to your device.');
     } catch { toast("Couldn't make the card."); }
   } }, svgEl(svg_share), 'Share my card');
@@ -1214,6 +1214,7 @@ function renderProfile() {
   $('#profile-tiles').replaceChildren(...[statTiles(stats), recapCard(stats)].filter(Boolean));
 
   renderCredits();
+  renderInvite();
   const account = $('#account-card');
   if (me?.vidmoat) {
     account.replaceChildren(el('h3', {}, 'Vidmoat account'),
@@ -1406,11 +1407,55 @@ function renderLanding(notice) {
   install.hidden = Boolean(standalone) || (!installPrompt && !ios);
   install.onclick = () => (installPrompt ? doInstall() : toast('On iPhone or iPad: tap Share in Safari, then "Add to Home Screen".'));
   if (!cfg.vidmoatSignIn) $$('.ld-go, .ld-signin').forEach((a) => { a.setAttribute('aria-disabled', 'true'); a.onclick = (e) => { e.preventDefault(); toast('Sign-in is not configured on this server yet.'); }; });
+  const ref = captureRef();
+  const invited = $('#ld-invited');
+  invited.hidden = !ref;
+  if (ref) invited.replaceChildren('Invited by member ', el('b', {}, `#${ref}`));
+  funnel('landing', ref ? { ref } : {});
+  $$('.ld-go, .ld-signin').forEach((a) => a.addEventListener('click', () => funnel('signin_click'), { once: true }));
   $('#landing').hidden = false;
   $('#onboard').hidden = true;
   $('#app').hidden = true;
   document.body.classList.add('landing-on');
   if (notice) toast(notice);
+}
+
+// ============================================================================ invites
+// ?ref=<member number> on any visit is remembered (cookie for the server's sign-in callback,
+// localStorage for the profile save) and stripped from the URL.
+function captureRef() {
+  const ref = new URLSearchParams(location.search).get('ref');
+  if (ref && /^\d{1,7}$/.test(ref)) {
+    try { localStorage.setItem('st_ref', ref); } catch { /* fine */ }
+    document.cookie = `st_ref=${ref}; Max-Age=${60 * 60 * 24 * 30}; Path=/; SameSite=Lax${location.protocol === 'https:' ? '; Secure' : ''}`;
+    const url = new URL(location.href); url.searchParams.delete('ref'); history.replaceState(null, '', url.pathname + url.search + url.hash);
+  }
+  try { return localStorage.getItem('st_ref'); } catch { return null; }
+}
+const inviteLink = () => `${location.origin}/?ref=${me?.memberNo}`;
+const inviteText = () => `I'm member #${me?.memberNo} on StudyTok: short study videos made for your syllabus. Join me: ${inviteLink()}`;
+/** A funnel step counted on the server by day (landing seen, sign-in tapped, install). */
+const funnel = (step, extra = {}) => { try { navigator.sendBeacon?.('/api/funnel', new Blob([JSON.stringify({ step, ...extra })], { type: 'text/plain' })) || fetch('/api/funnel', { method: 'POST', body: JSON.stringify({ step, ...extra }), keepalive: true }); } catch { /* fine */ } };
+
+function renderInvite() {
+  const card = $('#invite-card');
+  if (!me?.memberNo) { card.hidden = true; return; }
+  card.hidden = false;
+  const link = inviteLink();
+  const count = me.invites || 0;
+  const share = async () => {
+    track('invite_share', {});
+    try {
+      if (navigator.share) { await navigator.share({ title: 'StudyTok', text: inviteText(), url: link }); toast('Thanks for spreading the word!'); return; }
+    } catch (err) { if (err?.name === 'AbortError') return; }
+    try { await navigator.clipboard.writeText(inviteText()); toast('Invite copied. Paste it anywhere.'); } catch { toast(link); }
+  };
+  const copy = async () => { try { await navigator.clipboard.writeText(link); toast('Link copied.'); } catch { toast(link); } };
+  card.replaceChildren(el('h3', {}, 'Invite a friend'),
+    el('p', { class: 'muted' }, `Your link carries your member number. Friends who join with it are counted here${me.referredBy ? `, like you were by #${me.referredBy}` : ''}.`),
+    el('div', { class: 'invite-link' }, el('code', {}, link.replace(/^https?:\/\//, '')), el('button', { type: 'button', class: 'btn small ghost', onclick: copy }, 'Copy')),
+    el('div', { class: 'badges' }, el('button', { type: 'button', class: 'btn small primary', onclick: share }, svgEl(svg_share), 'Share invite')),
+    el('p', { class: 'invite-count' }, count ? `${count} friend${count === 1 ? '' : 's'} joined with your link` : 'Nobody yet. Be the one who got them started.'));
 }
 
 // ============================================================================ boot
@@ -1438,7 +1483,9 @@ async function boot() {
     let hadController = Boolean(navigator.serviceWorker.controller);
     navigator.serviceWorker.addEventListener('controllerchange', () => { if (hadController) location.reload(); hadController = true; });
   }
-  window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); installPrompt = e; if (view === 'profile') renderProfile(); if (!$('#landing').hidden) $('#ld-install').hidden = false; });
+  window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); installPrompt = e; funnel('install_prompt'); if (view === 'profile') renderProfile(); if (!$('#landing').hidden) $('#ld-install').hidden = false; });
+  window.addEventListener('appinstalled', () => funnel('installed'));
+  captureRef();
 
   cfg = await api('GET', '/api/config');
   wireChrome();

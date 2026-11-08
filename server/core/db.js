@@ -81,6 +81,11 @@ export const getCovered = (topic) => kv.lrange(`covered:${topic}`, 0, 199);
 export const getUser = (id) => kv.get(`user:${id}`);
 /** The next member number (#1 was the first student to join). Atomic across instances. */
 export const nextMemberNo = () => kv.hincrby('members', 'count', 1);
+/** member number -> user id, so invite links (?ref=12) resolve. */
+export const indexMember = (user) => (user?.memberNo ? kv.set(`member:${user.memberNo}`, user.id) : null);
+export const userIdByMemberNo = (no) => (Number.isInteger(no) && no > 0 ? kv.get(`member:${no}`) : null);
+/** Referrals: who invited whom, and how many each member has brought in. */
+export const referralCount = async (memberNo) => Number((await kv.hgetall('referrals'))?.[String(memberNo)]) || 0;
 /** Gives a user without a number the next one (students from before numbers existed, in order of their next visit). */
 export async function ensureMemberNo(user) {
   if (!user || user.memberNo) return user;
@@ -89,6 +94,7 @@ export async function ensureMemberNo(user) {
   if (fresh.memberNo) return fresh;
   const next = { ...fresh, memberNo };
   await kv.set(`user:${user.id}`, next);
+  await indexMember(next);
   return next;
 }
 export const saveUser = (u) => kv.set(`user:${u.id}`, u);

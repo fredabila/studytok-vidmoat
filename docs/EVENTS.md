@@ -97,6 +97,23 @@ acceleration samples never leave the device, and nothing is recorded when permis
 `watch fraction` (`pct`) is `max(furthest point reached, seconds watched) / duration`, so a
 viewer who looped counts as 1.0, not 2.0.
 
+## Funnel and operations counters (`events:day:{date}`)
+
+Besides the client events, a few server-side counters land in the same daily hash and surface in
+the Google Sheet's Daily tab: `funnel_landing` (and `funnel_landing_ref` when the visitor came
+with an invite link), `funnel_signin_click`, `funnel_joined` / `funnel_signed_in` (the OAuth
+callback), `funnel_setup` (first profile save with units), `funnel_install_prompt` /
+`funnel_installed`, `referred` (a sign-up credited to an invite), `gen_ready` / `gen_failed`
+(video generation outcomes) and `breather_view`. The landing steps arrive through
+`POST /api/funnel` before there is a session; they carry no identifier.
+
+## Invite links
+
+`?ref=<member number>` on any URL is remembered by the app (a cookie for the sign-in round trip,
+localStorage for the profile save) and recorded once on the new student's user record as
+`referredBy`; the inviter's count is in the `referrals` hash. Shown on the Profile ("Invite a
+friend") and in the Users sheet (Invited by, Invites).
+
 ## Reading the data
 
 * `GET /api/stats` (public, anonymous): per-format completion rate, mean watch fraction, quiz

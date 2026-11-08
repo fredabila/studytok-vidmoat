@@ -223,3 +223,18 @@ test('a flagging session gets one breather first, which never touches progress, 
   const next = await nextItems(user.id, 3);
   assert.ok(next.items.every((x) => x.why.kind !== 'breather'), 'no second breather right away');
 });
+
+test('invite links: ?ref records the inviter once, counts their invites, never self or unknown numbers', async () => {
+  const { recordReferral } = await import('../server/feed/index.js');
+  const inviter = await saveProfile(null, { profile, programKeys: ['cat:hs-biology'], units: bio.units.map((u) => u.id) });
+  assert.equal(await db.userIdByMemberNo(inviter.memberNo), inviter.id, 'member numbers resolve to users');
+  const friend = await saveProfile(null, { profile, programKeys: ['cat:hs-biology'], units: bio.units.map((u) => u.id), ref: String(inviter.memberNo) });
+  assert.equal(friend.referredBy, inviter.memberNo);
+  assert.equal(await db.referralCount(inviter.memberNo), 1);
+  assert.equal(await recordReferral(await db.getUser(friend.id), inviter.memberNo), null, 'only once');
+  assert.equal(await recordReferral(await db.getUser(inviter.id), inviter.memberNo), null, 'never yourself');
+  assert.equal(await recordReferral(await db.getUser(inviter.id), 999999), null, 'unknown numbers are ignored');
+  assert.equal(await db.referralCount(inviter.memberNo), 1);
+  const again = await saveProfile(friend.id, { profile, units: bio.units.map((u) => u.id) });
+  assert.equal(again.referredBy, inviter.memberNo, 'kept across profile edits');
+});

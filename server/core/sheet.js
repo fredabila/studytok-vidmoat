@@ -43,8 +43,8 @@ export async function post(ops) {
 
 /** Everything the sheet shows about one student, as a flat { column: value } row. */
 export async function userRow(user) {
-  const [signals, progress, seen, liked, saved] = await Promise.all([
-    getSignals(user.id), getProgress(user.id), db.countSet(user.id, 'seen'), db.countSet(user.id, 'liked'), db.countSet(user.id, 'saved'),
+  const [signals, progress, seen, liked, saved, invites] = await Promise.all([
+    getSignals(user.id), getProgress(user.id), db.countSet(user.id, 'seen'), db.countSet(user.id, 'liked'), db.countSet(user.id, 'saved'), user.memberNo ? db.referralCount(user.memberNo) : 0,
   ]);
   const stats = await studentStats(user.id, { watched: seen, progress, masteryOf: mastery });
   const p = user.profile || {};
@@ -82,6 +82,8 @@ export async function userRow(user) {
     'Likes': liked,
     'Saves': saved,
     'Shares': signals.shares || 0,
+    'Invited by': user.referredBy ? `#${user.referredBy}` : '',
+    'Invites': invites,
     'Billing mode': user.vidmoatTokens && b.mode === 'own' ? 'own account' : 'free allowance',
     'Free lessons used': Math.min(b.houseUsed || 0, config.billing.freeVideos),
     'Own account': user.vidmoatTokens ? `connected ${iso(b.connectedAt).slice(0, 10)}` : '',
@@ -139,6 +141,16 @@ export async function dailyRow(date, { now = Date.now() } = {}) {
     'Shares': n('recap_share') + n('levelup_share') + n('profile_share'),
     'Drops': n('drop'),
     'Breathers': n('breather_view'),
+    'Landing views': n('funnel_landing'),
+    'From invite links': n('funnel_landing_ref'),
+    'Sign-in taps': n('funnel_signin_click'),
+    'Signed in (new)': n('funnel_joined'),
+    'Signed in (returning)': n('funnel_signed_in'),
+    'Set up': n('funnel_setup'),
+    'Referred sign-ups': n('referred'),
+    'Installs': n('funnel_installed'),
+    'Videos made': n('gen_ready'),
+    'Videos failed': n('gen_failed'),
     'Library size': await db.readyCount(),
     'Updated': iso(now),
   };
@@ -163,6 +175,7 @@ export async function resyncAll() {
     const user = await db.getUser(id);
     if (!user) continue;
     await db.indexUser(user);
+    await db.indexMember(user);
     rows.push(await userRow(user));
   }
   rows.sort((a, b) => (a['Member #'] || 1e9) - (b['Member #'] || 1e9));
