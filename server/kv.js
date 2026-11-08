@@ -9,10 +9,32 @@ import { join } from 'node:path';
 import { Redis } from '@upstash/redis';
 import { config } from './config.js';
 
-export const usingRedis = Boolean(
-  (process.env.UPSTASH_REDIS_REST_URL || process.env.KV_REST_API_URL) &&
-  (process.env.UPSTASH_REDIS_REST_TOKEN || process.env.KV_REST_API_TOKEN),
-);
+// Find Upstash REST credentials under any prefix. The Vercel Marketplace integration sets
+// KV_REST_API_URL / KV_REST_API_TOKEN by default, but lets you pick a custom prefix
+// (e.g. STORAGE_KV_REST_API_URL), and Upstash's own docs use UPSTASH_REDIS_REST_URL / _TOKEN.
+export function findRedisCredentials(env = process.env) {
+  const pairs = [
+    ['UPSTASH_REDIS_REST_URL', 'UPSTASH_REDIS_REST_TOKEN'],
+    ['KV_REST_API_URL', 'KV_REST_API_TOKEN'],
+  ];
+  for (const name of Object.keys(env).sort()) {
+    const m = /^(.*?)(KV_REST_API_URL|REDIS_REST_URL|REST_API_URL)$/.exec(name);
+    if (m && !pairs.some(([u]) => u === name)) pairs.push([name, `${m[1]}${m[2].replace(/URL$/, 'TOKEN')}`]);
+  }
+  for (const [urlVar, tokenVar] of pairs) {
+    const url = env[urlVar], token = env[tokenVar];
+    if (url && token && /^https:\/\//.test(url)) return { url, token, urlVar, tokenVar };
+  }
+  return null;
+}
+
+/** Names (never values) of environment variables that look like Redis settings, for /api/health. */
+export const redisLikeVarNames = (env = process.env) =>
+  Object.keys(env).filter((k) => /REDIS|KV_|UPSTASH/i.test(k)).sort();
+
+const redisCreds = findRedisCredentials();
+export const usingRedis = Boolean(redisCreds);
+export const redisSource = redisCreds ? redisCreds.urlVar : null;
 
 class LocalKV {
   constructor(file) {
@@ -76,7 +98,7 @@ if (process.env.VERCEL && !usingRedis) {
 }
 
 export const kv = usingRedis
-  ? Redis.fromEnv()
+  ? new Redis({ url: redisCreds.url, token: redisCreds.token })
   : new LocalKV(process.env.STUDYTOK_KV_FILE === 'memory' ? null : join(config.dataDir, 'kv.json'));
 
 /** Write pending local changes to disk (no-op for Redis). */

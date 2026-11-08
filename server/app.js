@@ -5,7 +5,7 @@
 import { waitUntil } from '@vercel/functions';
 import { config } from './config.js';
 import { TOPICS } from './topics.js';
-import { usingRedis } from './kv.js';
+import { usingRedis, redisSource, redisLikeVarNames } from './kv.js';
 import * as db from './db.js';
 import { createUser, setInterests, nextItems, recordEvent, publicVideo } from './feed.js';
 import { queueStats } from './generator.js';
@@ -63,6 +63,16 @@ async function cookieUser(req) {
 }
 const userCookie = (req, id) => `st_uid=${id}; Path=/; HttpOnly; SameSite=Lax; Max-Age=31536000${isHttps(req) ? '; Secure' : ''}`;
 
+// Storage status for /api/health. Only variable NAMES are reported, never values.
+function storageInfo() {
+  if (usingRedis) return { storage: 'redis', storageVar: redisSource };
+  return {
+    storage: 'local',
+    storageWarning: process.env.VERCEL ? 'Upstash Redis not found: data is per-instance and will be lost. Connect Upstash for Redis to this project and redeploy.' : undefined,
+    redisLikeVars: redisLikeVarNames(),
+  };
+}
+
 /** Handles every /api/* route. */
 export async function handleApi(req, res) {
   const url = apiUrl(req);
@@ -108,11 +118,11 @@ async function route(req, res, url) {
       const me = await getMe();
       return send(res, 200, {
         ok: true, plan: me.account.plan.id, environment: me.credential.environment, credits: me.account.credits.remaining,
-        lessons: config.anthropic.enabled ? 'claude' : 'bank', storage: usingRedis ? 'redis' : 'local',
+        lessons: config.anthropic.enabled ? 'claude' : 'bank', ...storageInfo(),
         queue: queueStats(), library: await db.readyCount(TOPICS.map((t) => t.id)),
       });
     } catch (err) {
-      return send(res, 503, { ok: false, storage: usingRedis ? 'redis' : 'local', error: err.code || err.message });
+      return send(res, 503, { ok: false, ...storageInfo(), error: err.code || err.message });
     }
   }
 

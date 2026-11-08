@@ -95,3 +95,14 @@ test('a generation stuck for minutes reads as failed', async () => {
   await db.saveVideo(v);
   assert.equal((await db.getVideo(v.id)).status, 'failed');
 });
+
+test('finds Upstash credentials under default, Upstash and custom prefixes', async () => {
+  const { findRedisCredentials } = await import('../server/kv.js');
+  const u = 'https://x.upstash.io';
+  assert.equal(findRedisCredentials({ KV_REST_API_URL: u, KV_REST_API_TOKEN: 't' }).urlVar, 'KV_REST_API_URL');
+  assert.equal(findRedisCredentials({ UPSTASH_REDIS_REST_URL: u, UPSTASH_REDIS_REST_TOKEN: 't' }).urlVar, 'UPSTASH_REDIS_REST_URL');
+  assert.equal(findRedisCredentials({ STORAGE_KV_REST_API_URL: u, STORAGE_KV_REST_API_TOKEN: 't' }).urlVar, 'STORAGE_KV_REST_API_URL');
+  assert.equal(findRedisCredentials({ MYDB_REST_API_URL: u, MYDB_REST_API_TOKEN: 't' }).urlVar, 'MYDB_REST_API_URL');
+  assert.equal(findRedisCredentials({ KV_REST_API_URL: u }), null, 'needs a token');
+  assert.equal(findRedisCredentials({ REDIS_URL: 'rediss://x' }), null, 'TCP URLs are not REST credentials');
+});
