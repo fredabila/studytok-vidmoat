@@ -62,6 +62,7 @@ export async function saveProfile(userId, body) {
   const user = {
     id: existing?.id || randomUUID(),
     createdAt: existing?.createdAt || new Date().toISOString(),
+    memberNo: existing?.memberNo || (await db.nextMemberNo()),
     profile,
     guardianConsentAt: profile.managedBy === 'guardian' ? existing?.guardianConsentAt || new Date().toISOString() : null,
     // One or more courses (e.g. several high-school subjects).
@@ -438,7 +439,7 @@ export async function linkVidmoat(currentUserId, identity) {
   const current = currentUserId ? await db.getUser(currentUserId) : null;
   const user = current
     ? { ...current, vidmoat }
-    : { id: randomUUID(), createdAt: new Date().toISOString(), profile: cleanProfile(), programKeys: [], units: [], interests: [], vidmoat, setupDone: false };
+    : { id: randomUUID(), createdAt: new Date().toISOString(), memberNo: await db.nextMemberNo(), profile: cleanProfile(), programKeys: [], units: [], interests: [], vidmoat, setupDone: false };
   await db.saveUser(user);
   await kv.set(`vidmoat:${identity.id}`, user.id);
   return { user, restored: false };

@@ -250,7 +250,7 @@ async function route(req, res, url) {
   if (signInRequired() && !(await signedIn(userId))) return send(res, 401, { error: 'Sign in with Vidmoat to continue', signin: true });
 
   if (key === 'GET /api/me') {
-    const [u, seen, liked] = await Promise.all([db.getUser(userId), db.countSet(userId, 'seen'), db.countSet(userId, 'liked')]);
+    const [u, seen, liked] = await Promise.all([db.getUser(userId).then(db.ensureMemberNo), db.countSet(userId, 'seen'), db.countSet(userId, 'liked')]);
     // Legacy profiles (before setupDone existed) count as set up when they have content.
     const setupDone = u.setupDone ?? Boolean(u.units?.length || u.interests?.length);
     const [billing, stats] = await Promise.all([billingStatus(u, { fetchMe: getMeAs }), studentStats(userId, { watched: seen, progress: await getProgress(userId), masteryOf: mastery })]);
