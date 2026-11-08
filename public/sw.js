@@ -1,8 +1,9 @@
-// StudyTok service worker: makes the app installable and opens the shell instantly/offline.
-// - App shell (HTML, JS, CSS, icons): stale-while-revalidate, so updates arrive on the next open.
-// - Navigations: network first, falling back to the cached shell when offline.
+// StudyTok service worker: makes the app installable and keeps the shell available offline.
+// - App shell (HTML, JS, CSS, icons): network first, falling back to the cache when offline, so
+//   every open gets the HTML, JS and CSS of the same deploy (stale-while-revalidate served the
+//   previous deploy's CSS under the new HTML for one open, which broke layouts after releases).
 // - /api/*, the Vidmoat player and media: never cached (always live).
-const VERSION = 'studytok-v5';
+const VERSION = 'studytok-v6';
 const SHELL = ['/', '/index.html', '/app.js', '/player.js', '/telemetry.js', '/styles.css', '/manifest.webmanifest', '/icon.svg',
   '/icons/icon-192.png', '/icons/icon-512.png', '/icons/apple-touch-icon.png', '/icons/favicon-32.png'];
 
@@ -28,9 +29,13 @@ self.addEventListener('fetch', (event) => {
   }
   event.respondWith(
     caches.open(VERSION).then(async (cache) => {
-      const cached = await cache.match(req);
-      const network = fetch(req).then((res) => { if (res.ok) cache.put(req, res.clone()); return res; }).catch(() => cached);
-      return cached || network;
+      try {
+        const res = await fetch(req);
+        if (res.ok) cache.put(req, res.clone());
+        return res;
+      } catch {
+        return (await cache.match(req)) || Response.error();
+      }
     }),
   );
 });
