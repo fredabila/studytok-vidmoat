@@ -229,6 +229,7 @@ async function runOnboarding(prefill) {
   $('#ob-signin-hint').hidden = !cfg.vidmoatSignIn || Boolean(me?.vidmoat);
   $('#onboard').hidden = false;
   $('#app').hidden = true;
+  document.body.classList.add('onboarding');
   showStep(1);
 
   $('.ob-back').onclick = () => showStep(Math.max(1, ob.step - 1));
@@ -249,6 +250,7 @@ async function runOnboarding(prefill) {
   me = user;
   $('#onboard').hidden = true;
   $('#app').hidden = false;
+  document.body.classList.remove('onboarding');
 }
 
 // ============================================================================ feed: state
@@ -742,6 +744,7 @@ async function doInstall() {
 // ============================================================================ views
 function showView(next) {
   view = next;
+  document.body.dataset.view = next;
   $$('.view').forEach((v) => { v.hidden = v.dataset.view !== next; });
   $$('.tabbtn').forEach((t) => t.setAttribute('aria-current', t.dataset.tab === next ? 'page' : 'false'));
   if (next === 'feed') {
