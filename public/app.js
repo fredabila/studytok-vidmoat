@@ -50,7 +50,7 @@ let recovering = false;
 function sessionLost() {
   if (recovering) return;
   recovering = true;
-  toast("Your session expired. Let's set up your feed again.");
+  toast('Your session expired. Please sign in again.');
   setTimeout(() => location.replace('/'), 1200);
 }
 const sendEvent = (videoId, type, extra = {}) => api('POST', '/api/events', { videoId, type, ...extra }).catch(() => {});
@@ -958,6 +958,44 @@ function wireChrome() {
   });
 }
 
+// ============================================================================ landing
+// Sample cards: one per format, so a new visitor sees how varied the feed is before signing in.
+const SAMPLE_HOOKS = {
+  explain: { topic: 'Biology', accent: '#34d399', hook: 'Why your cells never <em>run out</em> of energy', card: ['Diagram', 'Mitochondrion · ATP cycle'] },
+  mythbust: { topic: 'Physics', accent: '#8fc1ff', hook: 'Drop a <em>hammer</em> and a feather', stamp: 'Myth', card: ['Everyone says', 'Heavier things fall faster'] },
+  rapid: { topic: 'Economics', accent: '#f5b971', hook: '5 things that move <em>exchange rates</em>', card: ['03 / 05', 'Interest rates'] },
+  examdrill: { topic: 'Maths', accent: '#f472b6', hook: 'This one costs <em>marks</em> every year', card: ['Exam question', 'Solve 2x² − 5x − 3 = 0'] },
+  story: { topic: 'History', accent: '#fbbf24', hook: 'In 1665 a university <em>closed its doors</em>', card: ['Chapter 2', '1666 · The year of wonders'] },
+  flashcards: { topic: 'Chemistry', accent: '#a78bfa', hook: 'Say it before it <em>appears</em>', card: ['Question 1 / 4', 'Unit of amount of substance?'] },
+  why: { topic: 'Geography', accent: '#60a5fa', hook: 'Why does it rain <em>more</em> near the equator?', card: ['Because', 'Hot air rises and cools'] },
+  chat: { topic: 'Computer science', accent: '#2dd4bf', hook: 'Is recursion just a <em>loop</em> in disguise?', card: ['Tutor Ama', 'Not quite. Every call gets its own frame…'] },
+};
+function renderLanding(notice) {
+  const wrap = $('#ld-samples');
+  wrap.replaceChildren(...(cfg.formats || []).map((f, i) => {
+    const s = SAMPLE_HOOKS[f.id] || { topic: 'Study', accent: '#ffd93d', hook: f.blurb, card: [f.tag, ''] };
+    const card = el('article', { class: 'sample', 'data-f': f.id, style: `--accent:${s.accent};animation-delay:${i * 60}ms`, 'aria-label': `${f.name} sample` },
+      el('span', { class: 's-chip' }, `${s.topic} · ${f.tag}`),
+      el('div', { class: 's-hook' }, el('span', {})),
+      s.stamp ? el('span', { class: 's-stamp' }, s.stamp) : null,
+      el('div', { class: 's-card' }, el('b', {}, s.card[0]), s.card[1]),
+      el('div', { class: 's-foot' }, el('span', {}, f.name), el('span', {}, '▶ 0:38')));
+    $('.s-hook span', card).innerHTML = s.hook; // trusted static copy above
+    return card;
+  }));
+  const install = $('#ld-install');
+  const standalone = matchMedia('(display-mode: standalone)').matches || navigator.standalone;
+  const ios = /iphone|ipad|ipod/i.test(navigator.userAgent);
+  install.hidden = Boolean(standalone) || (!installPrompt && !ios);
+  install.onclick = () => (installPrompt ? doInstall() : toast('On iPhone or iPad: tap Share in Safari, then "Add to Home Screen".'));
+  if (!cfg.vidmoatSignIn) $$('.ld-go, .ld-signin').forEach((a) => { a.setAttribute('aria-disabled', 'true'); a.onclick = (e) => { e.preventDefault(); toast('Sign-in is not configured on this server yet.'); }; });
+  $('#landing').hidden = false;
+  $('#onboard').hidden = true;
+  $('#app').hidden = true;
+  document.body.classList.add('landing-on');
+  if (notice) toast(notice);
+}
+
 // ============================================================================ boot
 function authNotice() {
   const auth = new URLSearchParams(location.search).get('auth');
@@ -974,7 +1012,7 @@ function authNotice() {
 
 async function boot() {
   if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(() => {});
-  window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); installPrompt = e; if (view === 'profile') renderProfile(); });
+  window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); installPrompt = e; if (view === 'profile') renderProfile(); if (!$('#landing').hidden) $('#ld-install').hidden = false; });
 
   cfg = await api('GET', '/api/config');
   wireChrome();
@@ -988,6 +1026,12 @@ async function boot() {
     me = (await api('GET', '/api/me')).user;
   } catch (err) {
     if (err.status !== 401) throw err;
+  }
+  // Sign in with Vidmoat is the way in: the landing page explains StudyTok and hands over to
+  // Vidmoat; the callback brings the viewer back here signed in.
+  if (cfg.signInRequired && !me?.vidmoat) {
+    renderLanding(notice);
+    return;
   }
   if (!me || !me.setupDone) {
     await runOnboarding(me);

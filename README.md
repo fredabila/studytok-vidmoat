@@ -21,19 +21,35 @@ feed request ─► algorithm picks units ─► unseen ready video for that uni
    -> commands -> POST /v1/projects (1 call) -> GET ?view=document -> Redis -> /embed/player
 ```
 
-## What a video looks like (25 to 45 seconds)
+## Eight video formats (25 to 50 seconds each)
 
-1. **Hook**: a surprising true line, narrated, with the key phrase in the topic colour.
-2. **3 to 4 beats**: a big key term, a **teaching visual** (a labelled diagram, numbered steps,
-   a timeline, a comparison table, an equation, a stat counter, or a real photo from Wikimedia
-   Commons when seeing the real thing teaches), and word-by-word captions synced to the voice.
-3. **Quick check**: the question is read out, then a 3-second think pause with a ticking clock.
-   Viewers can **tap their answer** in the app.
-4. **Reveal**: a ding, the correct option lights up, and the narrator explains why.
-5. **Remember**: the one-line takeaway. Then it loops.
+Every lesson is written in one of eight **formats** (`server/formats.js`), each with its own
+structure, typography, caption preset, colour grade, transitions, music mood, narrator voice and
+card theme, so the feed feels like TikTok rather than one template on repeat:
 
-Sound: the narration (Vidmoat speech: the cheapest available voice), whooshes on section changes, a pop on each key
-term, a clock under the think pause, a ding on the answer, and a CC0 music bed ducked under the voice.
+| Format | What happens on screen |
+| --- | --- |
+| **Explainer** | Hook, 3-4 beats each with a teaching visual (diagram, steps, timeline, compare, definition, equation, stat, or a real photo), quick check, takeaway. Montserrat, karaoke captions, lo-fi piano. |
+| **Myth vs fact** | A belief stamped MYTH, the truth stamped FACT, two reasons why, a myth-or-fact check. Anton, boxed captions, moody grade, glitch cuts, suspense music. |
+| **5 things** | Rapid-fire facts with a numbered counter over full-bleed footage, a ticked recap, a check. Bungee, comic captions, whip-pans, upbeat music. |
+| **Exam drill** | A real exam-style question on a paper card, a pause to try it, the worked solution step by step, the common mistake, a marks tip. Oswald, calm piano. |
+| **Story** | Chapters with datelines and real photos, letterboxed, cinematic grade, serif titles, orchestral music. |
+| **Flash drill** | Four question/answer cards with a beat to answer each; paper cards that flip to the accent colour. Handwritten captions, lo-fi beat. |
+| **Why?** | One big why, answered as BECAUSE → WHICH MEANS → SO. Archivo Black, teal grade, zoom cuts. |
+| **DM thread** | A student texts a tutor; the answer unfolds bubble by bubble. Inter, matte grade, push cuts. |
+
+Claude writes each batch of episodes in a rotation of formats weighted by topic (maths leans on
+exam drills, history on stories) and steered away from what the unit used most recently; the
+feed also never serves the same format twice in a row. Each video carries a format badge.
+
+**Quick check**: the question and options are read out, then the app **holds the video** until
+the viewer taps an answer (or Skip), so the answer is never spoken before they have tried.
+Questions must be self-contained and specific; options parallel and plausible.
+
+Sound: the narration (a different Vidmoat/OpenAI voice per format), whooshes on cuts, a pop on
+each key term, a clock under think pauses, a ding on the answer, and a CC0 music bed in the
+format's mood, ducked under the voice. `npm run preview -- --format=<id>` builds the sample
+lesson of any format (`server/lessons/samples.js`) into a real project and saves frames.
 
 ## The app
 
@@ -48,11 +64,14 @@ term, a clock under the think pause, a ding on the answer, and a CC0 music bed d
 * **Tabs**: For You · Library (course progress rings, saved, history) · Profile (sign-in,
   install, edit studies). Each lesson shows "Unit n of N", and a *Why* sheet explains why the
   algorithm picked it.
-* **Sign in with Vidmoat** (optional): identity only. StudyTok requests just the read-only
-  `account.read` scope, reads the account's name and email once and discards the tokens, so it
-  can never spend a student's Vidmoat credits. Signing in links the current profile to the
-  Vidmoat account; signing in on another device restores it. Without sign-in, StudyTok works
-  as a guest with a one-year cookie.
+* **Landing page**: new visitors see what StudyTok is (sample cards of every format, how it
+  works, what's inside), an *Install the app* button and *Continue with Vidmoat*, with a footer
+  crediting Vidmoat, a Buzz Innovations Ltd. company, and linking to this repository.
+* **Sign in with Vidmoat** (required by default): identity only. StudyTok requests just the
+  read-only `account.read` scope, reads the account's name and email once and discards the
+  tokens, so it can never spend a student's Vidmoat credits. The account is the student's
+  identity across devices. Set `STUDYTOK_REQUIRE_SIGNIN=false` to allow guest profiles again
+  (local development without a Vidmoat account).
 
 ## Personalization
 
@@ -170,7 +189,8 @@ route (`vercel.json`). Generation and research keep running after the response v
 | `server/visuals.js` | Teaching-visual templates (HTML/CSS/inline SVG via `addHtmlElement`, stat counters) and the SVG sanitizer. |
 | `server/voice.js` | Narration script, Vidmoat speech + transcription, section alignment to pauses, credit floor. |
 | `server/sfx.js`, `server/media.js` | CC0 sound kit; stock/Commons media ranking, import cache, music pool. |
-| `server/compose.js` | Lesson + media + voice → Vidmoat commands (audio-driven timeline, think pause, captions, quiz, sfx, ducked music). |
+| `server/formats.js` | The eight formats: scene builders, skins (fonts, captions, grade, transitions, music, voice, card theme), weighted rotation. |
+| `server/compose.js` | Scenes + media + voice → Vidmoat commands (audio-driven timeline with pauses, per-skin rendering, captions, quiz timing, sfx, ducked music). |
 | `server/recommend.js`, `server/feed.js` | The algorithm; profiles, feed pages, generate-ahead, events → progress, library, cron top-up. |
 | `server/generator.js` | The build pipeline with retries. |
 | `server/kv.js`, `server/db.js` | Upstash Redis (or a local file with the same commands) and the data model. |

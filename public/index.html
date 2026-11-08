@@ -21,6 +21,59 @@
   <link rel="stylesheet" href="/styles.css">
 </head>
 <body>
+  <!-- ================================================================ Landing -->
+  <section id="landing" class="landing" hidden aria-label="Welcome to StudyTok">
+    <header class="ld-bar">
+      <span class="ld-brand"><span class="ld-logo" aria-hidden="true"></span>StudyTok</span>
+      <a class="ld-signin" href="/api/auth/vidmoat/start">Sign in</a>
+    </header>
+
+    <div class="ld-hero">
+      <p class="ld-kicker">Made with the Vidmoat API</p>
+      <h1>Your syllabus,<br>as a feed you <mark>can't stop scrolling.</mark></h1>
+      <p class="lead">Short narrated videos written for your actual course, level and exam. Explainers, myth-busts, exam drills, flashcards, stories, chats: a new kind of lesson every swipe, with a quick check so it sticks.</p>
+      <div class="ld-cta">
+        <a class="btn primary ld-go" href="/api/auth/vidmoat/start"><span class="vm-logo" aria-hidden="true">V</span>Continue with Vidmoat</a>
+        <button type="button" class="btn ghost" id="ld-install" hidden>Install the app</button>
+      </div>
+      <p class="ld-trust">Sign in with your free Vidmoat account. We read only your name and email and never touch your credits.</p>
+    </div>
+
+    <div class="ld-section">
+      <h2>A few of the videos</h2>
+      <p class="muted">Every format has its own look, pace and narrator. Here is what a feed looks like.</p>
+      <div class="ld-samples" id="ld-samples"></div>
+    </div>
+
+    <div class="ld-section">
+      <h2>How it works</h2>
+      <ol class="ld-steps">
+        <li><b>1</b><span><strong>Tell us what you study.</strong> Level, country, school and course. If your course isn't in our catalog, StudyTok researches what your institution actually teaches.</span></li>
+        <li><b>2</b><span><strong>Swipe through your syllabus.</strong> Videos are written and produced for each unit, in order, while you scroll. Nothing is pre-recorded.</span></li>
+        <li><b>3</b><span><strong>Answer the quick check.</strong> Right answers move you on; wrong ones bring the unit back after 1, 3, 7 and 21 days.</span></li>
+      </ol>
+    </div>
+
+    <div class="ld-section">
+      <h2>What's inside</h2>
+      <div class="ld-grid">
+        <div class="ld-feat"><i>🎙️</i><strong>Narrated, captioned</strong><span>A different voice for each format, with karaoke captions.</span></div>
+        <div class="ld-feat"><i>📐</i><strong>Real teaching visuals</strong><span>Diagrams, steps, timelines, equations and comparisons, not just stock footage.</span></div>
+        <div class="ld-feat"><i>🧭</i><strong>Follows your course</strong><span>Built-in catalogs for common programs, web research for everything else.</span></div>
+        <div class="ld-feat"><i>🔁</i><strong>Remembers for you</strong><span>Spaced repetition and a recommendation engine that learns what you like.</span></div>
+        <div class="ld-feat"><i>🎛️</i><strong>Tune it</strong><span>Add your own topics, pick visuals and video length, remove what you've mastered.</span></div>
+        <div class="ld-feat"><i>📱</i><strong>Installs like an app</strong><span>Add it to your home screen and it opens full screen.</span></div>
+      </div>
+      <a class="btn primary ld-go ld-go-2" href="/api/auth/vidmoat/start"><span class="vm-logo" aria-hidden="true">V</span>Continue with Vidmoat</a>
+    </div>
+
+    <footer class="ld-foot">
+      <p class="ld-built">Built by <a href="https://www.vidmoat.com" target="_blank" rel="noopener noreferrer">Vidmoat</a>, a Buzz Innovations Ltd. company.</p>
+      <p class="ld-links"><a href="https://github.com/fredabila/studytok-vidmoat" target="_blank" rel="noopener noreferrer">Source on GitHub</a> · <a href="https://developer.vidmoat.com" target="_blank" rel="noopener noreferrer">Vidmoat developer API</a></p>
+      <p class="fine">Videos are generated on the fly and played live in Vidmoat's player. Stock footage and music from Pexels, Pixabay, Wikimedia Commons and Freesound.</p>
+    </footer>
+  </section>
+
   <!-- ================================================================ Onboarding -->
   <section id="onboard" class="onboard" hidden aria-label="Set up StudyTok">
     <div class="ob-top">

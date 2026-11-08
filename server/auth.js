@@ -22,6 +22,8 @@ const REGISTER = 'https://api.vidmoat.com/api/oauth/register';
 export const SCOPE = 'account.read';
 
 export const signInEnabled = () => config.oauth.enabled;
+/** Students must sign in with Vidmoat before they can set up a feed. */
+export const signInRequired = () => config.oauth.enabled && config.oauth.required;
 
 /** The OAuth client for this redirect URI: configured, stored, or registered now. */
 export async function oauthClient(redirect) {

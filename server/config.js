@@ -28,6 +28,9 @@ export const config = {
     // On by default: without client credentials StudyTok registers its own client with Vidmoat
     // (dynamic client registration). Set STUDYTOK_VIDMOAT_SIGNIN=false to hide sign-in.
     enabled: bool(process.env.STUDYTOK_VIDMOAT_SIGNIN, true),
+    // Sign-in is the only way in (guests cannot set up a feed). Set STUDYTOK_REQUIRE_SIGNIN=false
+    // to allow guest profiles again, e.g. for local development without a Vidmoat account.
+    required: bool(process.env.STUDYTOK_REQUIRE_SIGNIN, true),
     clientName: process.env.STUDYTOK_OAUTH_CLIENT_NAME || 'StudyTok',
     clientId: process.env.VIDMOAT_OAUTH_CLIENT_ID || '',
     clientSecret: process.env.VIDMOAT_OAUTH_CLIENT_SECRET || '',
