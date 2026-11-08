@@ -41,7 +41,8 @@ const text = PARTS.map((p) => p.text).join(' ');
 console.log('narrating…');
 const speech = await createSpeech({ text, provider: 'openai', voiceId: 'marin', maxCredits: 25, instructions: 'A founder launching something they love: warm, confident, energetic, brisk but clear. Tiny pause after each sentence.' });
 const tr = await transcribe({ src: speech.url, language: 'en' });
-const words = (tr.words || []).filter((w) => Number.isFinite(w.start) && Number.isFinite(w.end));
+const BRAND = [[/^stardy ?talk|^study ?tok|^studytalk/i, 'StudyTok'], [/^vid ?mo(a|)te?\.?$/i, 'Vidmoat.'], [/^vidmote$/i, 'Vidmoat']];
+const words = (tr.words || []).filter((w) => Number.isFinite(w.start) && Number.isFinite(w.end)).map((w) => { const fix = BRAND.find(([re]) => re.test(w.text)); return fix ? { ...w, text: /[.,]$/.test(w.text) && !/[.,]$/.test(fix[1]) ? fix[1] + w.text.slice(-1) : fix[1] } : w; });
 const voiceDur = tr.mediaSeconds || words.at(-1)?.end;
 const { parts } = alignParts(PARTS.map((p) => ({ ...p, pauseBefore: 0 })), voiceDur, words);
 const at = Object.fromEntries(parts.map((p) => [p.id, p]));
@@ -135,7 +136,7 @@ for (const [id, track] of [['pinImg', T.image], ['pinScrim', T.scrim], ['pinCard
   picture(shots.feed, s, d, { scale: 0.72, y: -40, zoom: 1.03, motion: 'slide-up' });
   whoosh(s - 0.1);
   label('MADE FOR YOUR SYLLABUS', s + 0.3, d - 0.3, { fontFamily: SANS, fontWeight: 800, fontSize: 52, letterSpacing: 8, color: HL, animIn: 'fade-in' }, -860);
-  captions(at.how1, 800);
+  captions(at.how1, 740);
 }
 // how2: how it is made, as a steps card over the dimmed app.
 {
@@ -144,7 +145,7 @@ for (const [id, track] of [['pinImg', T.image], ['pinScrim', T.scrim], ['pinCard
   dim(s, d, 0.6, T.dim);
   whoosh(s - 0.1);
   cmds.push(...teachingVisual({ kind: 'steps', title: 'While you scroll', items: ['An AI writes the lesson', 'A narrator reads it', 'Real footage and diagrams', 'Plays about a minute later'], query: '', value: 0, unit: '', svg: '' }, { id: 'steps', start: s + 0.1, duration: d - 0.1, track: T.card, accent: HL, theme: 'paper' }));
-  captions(at.how2, 800);
+  captions(at.how2, 740);
 }
 // formats: a fast montage of real frames.
 {
@@ -152,9 +153,9 @@ for (const [id, track] of [['pinImg', T.image], ['pinScrim', T.scrim], ['pinCard
   const each = d / frames.length;
   frames.forEach((f, i) => { picture(f, s + i * each, each + 0.05, { scale: coverScale(1080, 1920), zoom: 1.04 }); whoosh(s + i * each - 0.08, 0.3); });
   dim(s, d, 0.25);
-  cmds.push({ op: 'addShapeClip', clipId: uid('cap'), kind: 'capsule', start: r2(s + 0.2), duration: r2(d - 0.2), trackIndex: T.chrome, style: { fill: HL, width: 820, height: 150 }, patch: { y: -865 } });
-  label('32 FORMATS', s + 0.2, d - 0.2, { fontFamily: 'Bungee', fontWeight: 400, fontSize: 108, color: INK, shadow: false, animIn: 'bounce', animInDuration: 0.5 }, -865, T.chrome + 1);
-  captions(at.formats, 820);
+  cmds.push({ op: 'addShapeClip', clipId: uid('cap'), kind: 'capsule', start: r2(s + 0.2), duration: r2(d - 0.2), trackIndex: T.chrome, style: { fill: HL, width: 820, height: 140 }, patch: { y: -835 } });
+  label('32 FORMATS', s + 0.2, d - 0.2, { fontFamily: 'Bungee', fontWeight: 400, fontSize: 92, color: INK, shadow: false, animIn: 'bounce', animInDuration: 0.5 }, -835, T.chrome + 1);
+  // no captions here: the frames carry their own and the capsule says it
 }
 // quiz: the hold.
 {
@@ -163,7 +164,7 @@ for (const [id, track] of [['pinImg', T.image], ['pinScrim', T.scrim], ['pinCard
   picture(shots.quiz, s, d, { scale: 0.72, y: -40, zoom: 1.03, motion: 'slide-up' });
   ding(s + 0.4);
   label('HOLDS UNTIL YOU ANSWER', s + 0.3, d - 0.3, { fontFamily: 'Anton', fontWeight: 400, fontSize: 96, color: HL, animIn: 'word-slam', animInDuration: 0.5, outline: '#000000', outlineWidth: 6 }, -860);
-  captions(at.quiz, 800);
+  captions(at.quiz, 740);
 }
 // deal: three ticks over the students.
 {
