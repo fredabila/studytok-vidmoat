@@ -192,7 +192,16 @@ it smooth:
   the project frame rate.
 * **No blur filters** in HTML cards (`backdrop-filter` is expensive on mobile GPUs).
 
-**Audio and video in step.** Inside the embed player every clip is its own media element
+**Audio and video in step.** Vidmoat fixed the player in November 2026: the narration's audio
+clock is the master, video elements are nudged to it, `seek` keeps the playing state, and the
+`state` message carries `audioTime`. The app now measures the gap between the player's time and
+its audio clock on every state tick and sends one `drift` event per view when it exceeds a
+quarter second (worst gap, in seconds), counted per platform in `calib:drift:<platform>` and
+as "Sync drift" in the Daily sheet, so the fix is verified by students' phones rather than
+assumed. Sound effects stay off by default on phones until that count is quiet. What follows
+describes the player before the fix, kept for the record.
+
+Inside the embed player every clip is its own media element
 slaved to a 33 ms master clock; an element is only corrected once it is more than 0.5 s off
 (1.5 s on the mobile path), and at most six upcoming clips are preloaded (fewer on mobile), so a
 late clip stalls the picture while narration carries on. The app reduces the load it can: sound

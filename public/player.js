@@ -50,7 +50,8 @@ export class VidmoatPlayer {
       } else if (m.type === 'state' && Number.isFinite(m.time)) {
         this.time = m.time;
         this.playing = !!m.playing;
-        this.handlers.onState?.({ time: m.time, playing: !!m.playing });
+        // audioTime: the player's audio clock (vidmoat.player.v1 since Nov 2026); null when no audio is running.
+        this.handlers.onState?.({ time: m.time, playing: !!m.playing, audioTime: Number.isFinite(m.audioTime) ? m.audioTime : null });
       } else if (m.type === 'error') {
         const message = String(m.message || 'The player could not load this video.');
         // "The media is taking too long to load": the player waited 15 s for every clip at the

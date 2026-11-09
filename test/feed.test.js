@@ -9,6 +9,7 @@ import { join } from 'node:path';
 process.env.STUDYTOK_DATA_DIR = mkdtempSync(join(tmpdir(), 'studytok-feed-')) + '/';
 process.env.STUDYTOK_KV_FILE = 'memory';
 process.env.STUDYTOK_READY_AHEAD = '0';
+process.env.STUDYTOK_EXPERIMENTS = 'off'; // every student in arm A: the designed thresholds
 for (const k of Object.keys(process.env)) if (/REST_API_URL|REDIS_REST_URL/.test(k)) delete process.env[k];
 
 const { kv, usingRedis, findRedisCredentials } = await import('../server/core/kv.js');
