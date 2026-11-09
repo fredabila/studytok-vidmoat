@@ -119,6 +119,15 @@ export const EVENT_SPECS = {
   unsave: { video: true, fields: {} },
   less: { video: true, fields: { t: 'n' } },
   why_open: { video: true, fields: {} },
+  // asking, discussing, exam practice
+  ask_open: { video: true, fields: {} },
+  ask: { video: true, fields: { len: 'i', onTopic: 'b' } },
+  ask_follow: { video: true, fields: {} },
+  comments_open: { video: true, fields: {} },
+  comment_post: { video: true, fields: {} },
+  exam_open: { fields: { days: 'i' } },
+  mock_start: { fields: { n: 'i' } },
+  mock_done: { fields: { n: 'i', correct: 'i' } },
   // quiz
   quiz_shown: { video: true, fields: { t: 'n' } },
   quiz_hold: { video: true, fields: { t: 'n' } },
@@ -374,6 +383,9 @@ export async function ingest(userId, batch) {
       }
       case 'less': writes.push(stat(v.id, 'less'), fstat(v, 'less')); bump(signals.formats, format, 'less'); bump(signals.topics, topic, 'less'); if (isBreatherUnit(v.unitId)) { signals.breathers ||= { n: 0, pctSum: 0, less: 0 }; signals.breathers.less++; } unitEvent('less'); break;
       case 'why_open': writes.push(stat(v.id, 'whyOpens')); break;
+      // A question means something in this lesson did not land: counted per lesson for the writers.
+      case 'ask': writes.push(stat(v.id, 'asks')); break;
+      case 'comment_post': writes.push(stat(v.id, 'comments')); break;
       case 'quiz_shown': writes.push(stat(v.id, 'quizShown')); break;
       case 'quiz_hold': writes.push(stat(v.id, 'quizHeld')); break;
       case 'quiz_answer': {

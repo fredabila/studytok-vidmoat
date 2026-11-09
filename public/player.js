@@ -24,6 +24,10 @@ export class VidmoatPlayer {
     this.wantPlay = false;
     this.time = 0;
     this.playing = false;
+    // Playback speed of the document last sent (retime.js): the frame runs on its own, shorter
+    // timeline; every time in and out of this wrapper is in lesson seconds.
+    this.rate = 1;
+    this.sentRate = 1;
 
     const iframe = document.createElement('iframe');
     iframe.src = `${origin}/embed/player?parentOrigin=${encodeURIComponent(location.origin)}`;
@@ -48,10 +52,11 @@ export class VidmoatPlayer {
         this.handlers.onLoaded?.();
         if (this.wantPlay) this.play();
       } else if (m.type === 'state' && Number.isFinite(m.time)) {
-        this.time = m.time;
+        const r = this.sentRate || 1;
+        this.time = m.time * r;
         this.playing = !!m.playing;
         // audioTime: the player's audio clock (vidmoat.player.v1 since Nov 2026); null when no audio is running.
-        this.handlers.onState?.({ time: m.time, playing: !!m.playing, audioTime: Number.isFinite(m.audioTime) ? m.audioTime : null });
+        this.handlers.onState?.({ time: this.time, playing: !!m.playing, audioTime: Number.isFinite(m.audioTime) ? m.audioTime * r : null });
       } else if (m.type === 'error') {
         const message = String(m.message || 'The player could not load this video.');
         // "The media is taking too long to load": the player waited 15 s for every clip at the
@@ -88,7 +93,8 @@ export class VidmoatPlayer {
     if (!this.ready) { this.pending = doc; return; }
     this.pending = null;
     this.loaded = false;
-    this.post({ type: 'document', document: doc, revision: ++this.revision, time });
+    this.sentRate = this.rate || 1;
+    this.post({ type: 'document', document: doc, revision: ++this.revision, time: time / this.sentRate });
   }
 
   play() {
@@ -102,7 +108,7 @@ export class VidmoatPlayer {
   }
 
   seek(time) {
-    if (this.loaded) this.post({ type: 'seek', time });
+    if (this.loaded) this.post({ type: 'seek', time: time / (this.sentRate || 1) });
   }
 
   destroy() {

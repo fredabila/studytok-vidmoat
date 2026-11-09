@@ -7,6 +7,7 @@
 //  - PWA: service worker + install prompt.
 
 import { VidmoatPlayer } from './player.js';
+import { retimeClips, SPEEDS } from './retime.js';
 import { track, flush, WatchTracker } from './telemetry.js';
 import * as sensors from './sensors.js';
 import { renderCard, shareCard } from './share.js';
@@ -600,6 +601,10 @@ function addSlide(data, { at } = {}) {
   $('.share', node).onclick = () => shareLesson(item);
   wireChannelChip(item);
   $('.more', node).onclick = () => openMore(item);
+  // Comments are for adults only (server/core/safety.js): the button is not even shown to minors.
+  const talk = $('.comments', node);
+  talk.hidden = true; // shown by renderSlide once the lesson is ready
+  talk.onclick = () => openComments(item);
   $('.up-next', node).onclick = () => { track('upnext_tap', { videoId: item.data.id }); go(1); };
   if (data.status === 'generating') poll(item);
   return item;
@@ -925,6 +930,8 @@ function renderSlide(item) {
   node.style.setProperty('--accent', d.topic.accent);
   node.dataset.status = d.status;
   node.dataset.id = d.id;
+  const talk = $('.comments', node);
+  if (talk) talk.hidden = !me?.can?.comments || d.status !== 'ready' || Boolean(item.moment);
   $('.making-topic', node).textContent = unitLabel(d);
   $('.making-hook', node).textContent = d.status === 'failed' ? "This one didn't work out. Swipe for the next lesson." : d.hook || '';
   const stage = d.status === 'ready' ? 3 : d.title ? 1 : 0;
@@ -1057,7 +1064,11 @@ function unmountPlayer(item) {
 // Sound effects are separate audio elements (five to eight per lesson); phones keep audio and
 // video in step better with fewer of them, so they are off there unless the student turns them on.
 const PHONE = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-const PLAY_DEFAULTS = { captions: 'on', music: 'on', voice: 'on', sfx: PHONE ? 'off' : 'on', gaps: 'review' }; // gaps: off | review | all
+const PLAY_DEFAULTS = { captions: 'on', music: 'on', voice: 'on', sfx: PHONE ? 'off' : 'on', gaps: 'review', speed: '1', data: 'auto' }; // gaps: off | review | all
+/** Playback speed the student chose (retime.js). */
+/** Data saver: chosen, or Auto and the phone asks to save data (Chrome/Android Save-Data). */
+const dataSaver = () => playPref('data') === 'on' || (playPref('data') === 'auto' && Boolean(navigator.connection?.saveData));
+const speedPref = () => { const r = Number(playPref('speed')); return SPEEDS.includes(r) ? r : 1; };
 const playPref = (k) => store.get(`st_play_${k}`) || PLAY_DEFAULTS[k];
 const CAPTION_TRACK = 6;
 const isCaption = (c) => c.type === 'text' && c.trackIndex === CAPTION_TRACK;
@@ -1083,7 +1094,7 @@ function prepareDocument(item, { reveal = false } = {}) {
   const clips = [];
   for (const c of src.clips) {
     if (isCaption(c) && playPref('captions') === 'off') continue;
-    if (isMusic(c) && playPref('music') === 'off') continue;
+    if (isMusic(c) && (playPref('music') === 'off' || dataSaver())) continue;
     if (isSfx(c) && playPref('sfx') === 'off') continue;
     if (isVoice(c) && voiceOff) continue;
     let out = c;
@@ -1098,7 +1109,10 @@ function prepareDocument(item, { reveal = false } = {}) {
     clips.push(out);
   }
   if (item.stamp) clips.push(item.stamp);
-  return { ...src, clips };
+  // Speed: the frame gets a retimed copy and the wrapper converts its times back to lesson seconds.
+  const rate = speedPref();
+  if (item.player) item.player.rate = rate;
+  return { ...src, clips: retimeClips(clips, rate) };
 }
 /** Re-sends the active lesson's document with the current choices, keeping the time. */
 function reloadDocument(item, opts = {}) {
@@ -1182,7 +1196,8 @@ function syncPlayers({ light = false } = {}) {
   // lesson is only preloaded once the active one has actually loaded; on desktop it starts at once.
   const phone = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
   const activeLoaded = Boolean(active?.player) && active.el.dataset.loaded === 'true';
-  const preloadNext = !active || active.data.status !== 'ready' || active.preloadNext || (!phone && !active.player) || (phone && activeLoaded);
+  // Data saver: the next lesson is never fetched ahead (only when it becomes the one on screen).
+  const preloadNext = !dataSaver() && (!active || active.data.status !== 'ready' || active.preloadNext || (!phone && !active.player) || (phone && activeLoaded));
   feed.items.forEach((item, i) => {
     const keep = feed.active >= 0 && (i === feed.active || (i === feed.active + 1 && preloadNext));
     if (keep) mountPlayer(item); else unmountPlayer(item);
@@ -1572,6 +1587,8 @@ async function openTune() {
     ['voice', 'Narration audio', [['on', 'On'], ['off', 'Off']]],
     ['music', 'Music', [['on', 'On'], ['off', 'Off']]],
     ['sfx', 'Sound effects', [['on', 'On'], ['off', 'Off']], PHONE ? 'Off on phones by default: fewer sounds keep the narration and the picture in step.' : null],
+    ['speed', 'Speed', SPEEDS.map((r) => [String(r), `${r}×`])],
+    ['data', 'Data saver', [['auto', 'Auto'], ['on', 'On'], ['off', 'Off']], 'Saves mobile data: the next lesson only loads when you reach it, and the music is left out. Auto turns it on when your phone is in data-saving mode.'],
   ];
   for (const [key, label, options, hint] of PLAY) {
     const row = el('div', { class: 'pref-row' }, el('span', { class: 'pref-label' }, label));
@@ -1840,6 +1857,7 @@ async function showLibrary() {
       examChip(me?.profile),
       el('div', { class: 'bubble' }, buddyLine(stats)))));
   course.append(Object.assign(statTiles(stats), { className: 'tiles search-hide' }));
+  course.append(examCard());
   if (lib.misses?.length) {
     const due = lib.misses.length;
     course.append(el('div', { class: 'lib-strip fix-strip search-hide' }, svgEl(mascot('think', 64)),
@@ -2854,6 +2872,7 @@ function openMore(item) {
     el('span', { class: 'set-ic', 'aria-hidden': 'true' }, icon), el('span', { class: 'set-text' }, el('strong', {}, title), sub ? el('small', {}, sub) : null));
   const rows = [
     d.channel ? row(d.topic?.emoji || '📚', d.channel.name || 'Course', `@${d.channel.handle}`, () => openChannel(d.channel.handle, { source: 'more' })) : null,
+    d.status === 'ready' ? row('🙋', 'Ask about this lesson', 'A private question to the tutor', () => openAsk(item)) : null,
     row('💡', "Why you're seeing this", 'What the algorithm used', () => { sendEvent(d.id, 'why_open'); openWhy(item); }),
     d.notes ? row('📝', 'Lesson notes', 'Points, definitions and the quick check', () => openNotes(item)) : null,
     row('🙈', 'Show me less of this', d.unit?.title || d.topic?.label || '', () => {
@@ -3250,3 +3269,151 @@ boot().catch((err) => {
   console.error(err);
   toast('StudyGraph could not start. Is the server running?');
 });
+
+// ============================================================================ ask, talk, exam
+// Ask: a private question to a tutor that has the lesson in front of it (server/feed/ask.js).
+const ASK_STARTERS = ['Explain it more simply', 'Give me another example', 'Why is that the answer?', 'How would this come up in an exam?'];
+function openAsk(item) {
+  const d = item.data;
+  sendEvent(d.id, 'ask_open');
+  const input = el('textarea', { class: 'ask-input', rows: '3', maxlength: '300', placeholder: 'What would you like to understand better?' });
+  const out = el('div', { class: 'ask-out', 'aria-live': 'polite' });
+  const send = el('button', { type: 'button', class: 'btn primary' }, 'Ask');
+  const ask = async (q) => {
+    q = String(q || '').trim();
+    if (q.length < 3) { input.focus(); return; }
+    send.disabled = true;
+    out.replaceChildren(el('p', { class: 'muted' }, el('span', { class: 'spinner' }), ' Thinking…'));
+    try {
+      const r = await api('POST', `/api/videos/${d.id}/ask`, { q });
+      sendEvent(d.id, 'ask', { len: q.length, onTopic: r.onTopic });
+      out.replaceChildren(el('div', { class: 'ask-q' }, q), el('div', { class: 'ask-a' }, r.answer));
+      if (r.followUp) {
+        out.append(el('button', { type: 'button', class: 'btn small', onclick: async (e) => {
+          const b = e.currentTarget;
+          b.disabled = true;
+          sendEvent(d.id, 'ask_follow');
+          if (await addCustomTopic(r.followUp)) b.textContent = `Lessons on "${r.followUp}" are coming to your feed`;
+          else b.disabled = false;
+        } }, `Make me lessons on "${r.followUp}"`));
+      }
+      input.value = '';
+    } catch (err) {
+      out.replaceChildren(el('p', { class: 'ask-err' }, err.message || "Couldn't ask right now."));
+    } finally { send.disabled = false; }
+  };
+  send.onclick = () => ask(input.value);
+  input.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); ask(input.value); } });
+  const body = el('div', { class: 'ask' },
+    el('p', { class: 'muted' }, `About "${d.title || d.unit?.title || 'this lesson'}". Only you see your questions.`),
+    el('div', { class: 'chips' }, ...ASK_STARTERS.map((t) => el('button', { type: 'button', class: 'chip-btn', onclick: () => ask(t) }, t))),
+    input, el('div', { class: 'ask-actions' }, send), out);
+  openSheet('Ask about this lesson', body);
+  setTimeout(() => input.focus(), 50);
+}
+
+// Talk: comments under a lesson, adults only (the server refuses minors whatever the app shows).
+const timeAgo = (iso) => {
+  const s = Math.max(0, (Date.now() - Date.parse(iso)) / 1000);
+  return s < 60 ? 'now' : s < 3600 ? `${Math.floor(s / 60)}m` : s < 86400 ? `${Math.floor(s / 3600)}h` : `${Math.floor(s / 86400)}d`;
+};
+async function openComments(item) {
+  const d = item.data;
+  sendEvent(d.id, 'comments_open');
+  const list = el('ul', { class: 'talk-list' }, el('li', { class: 'muted' }, el('span', { class: 'spinner' })));
+  const input = el('input', { type: 'text', class: 'talk-input', maxlength: '300', placeholder: 'Add a comment about the lesson…', 'aria-label': 'Comment' });
+  const post = el('button', { type: 'button', class: 'btn primary small' }, 'Post');
+  const note = el('p', { class: 'talk-note', 'aria-live': 'polite' });
+  const row = (c) => {
+    const li = el('li', { class: 'talk-row' },
+      el('div', { class: 'talk-head' }, el('b', {}, c.name), el('span', { class: 'muted' }, timeAgo(c.at))),
+      el('p', {}, c.text));
+    const act = c.mine
+      ? el('button', { type: 'button', class: 'talk-act', onclick: async () => { try { await api('DELETE', `/api/comments/${c.id}`); li.remove(); } catch { toast("Couldn't delete that."); } } }, 'Delete')
+      : el('button', { type: 'button', class: 'talk-act', onclick: async (e) => { const b = e.currentTarget; try { await api('POST', `/api/comments/${c.id}/report`); b.textContent = 'Reported'; b.disabled = true; } catch { toast("Couldn't report that."); } } }, 'Report');
+    li.append(act);
+    return li;
+  };
+  const load = async () => {
+    try {
+      const r = await api('GET', `/api/videos/${d.id}/comments`);
+      list.replaceChildren(...(r.comments.length ? r.comments.map(row) : [el('li', { class: 'muted talk-empty' }, 'No comments yet. Ask a question or share a tip.')]));
+    } catch (err) { list.replaceChildren(el('li', { class: 'muted' }, err.message || "Couldn't load comments.")); }
+  };
+  const submit = async () => {
+    const text = input.value.trim();
+    if (text.length < 2) return;
+    post.disabled = true; note.textContent = 'Checking…';
+    try {
+      const { comment } = await api('POST', `/api/videos/${d.id}/comments`, { text });
+      sendEvent(d.id, 'comment_post');
+      input.value = ''; note.textContent = '';
+      $('.talk-empty', list)?.remove();
+      list.prepend(row(comment));
+    } catch (err) { note.textContent = err.message || "Couldn't post that."; }
+    finally { post.disabled = false; }
+  };
+  post.onclick = submit;
+  input.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); submit(); } });
+  openSheet('Comments', el('div', { class: 'talk' },
+    el('p', { class: 'pref-hint' }, 'Be kind and keep it about the lesson. No links or contact details. Comments are checked before they appear.'),
+    el('div', { class: 'talk-compose' }, input, post), note, list));
+  load();
+}
+
+// Exam mode: countdown, readiness per unit, today's focus and a mock exam (server/feed/exam.js).
+function examCard() {
+  const card = el('div', { class: 'card exam-card search-hide' }, el('h3', {}, 'Exam mode'), el('p', { class: 'muted' }, el('span', { class: 'spinner' })));
+  api('GET', '/api/exam').then((x) => {
+    track('exam_open', { days: x.days ?? -1 });
+    const pct = Math.round(x.readiness * 100);
+    const head = x.days != null && x.days >= 0
+      ? `${x.exam || 'Your exam'} ${x.days === 0 ? 'is today' : x.days === 1 ? 'is tomorrow' : `in ${x.days} days`}`
+      : 'Practice like it is the exam';
+    const parts = [el('h3', {}, head),
+      el('div', { class: 'exam-ready' }, el('div', { class: 'exam-bar' }, el('i', { style: `width:${pct}%` })), el('b', {}, `${pct}% ready`))];
+    if (x.focus.length) {
+      parts.push(el('p', { class: 'muted' }, x.days != null && x.days >= 0 ? 'Today, focus on:' : 'Your weakest units:'),
+        el('ul', { class: 'exam-focus' }, ...x.focus.map((u) => el('li', {}, el('span', {}, u.title), el('small', { class: `exam-tag ${u.label.replace(/\s/g, '-')}` }, u.label)))));
+    } else parts.push(el('p', { class: 'muted' }, 'Pick a course in your profile and your readiness per unit shows here.'));
+    if (!x.examDate) parts.push(el('p', { class: 'pref-hint' }, 'Add your exam date in Profile → Edit studies for a countdown and a daily plan.'));
+    parts.push(el('button', { type: 'button', class: 'btn primary small', onclick: () => openMockExam() }, 'Take a mock exam'));
+    card.replaceChildren(...parts);
+  }).catch(() => card.remove());
+  return card;
+}
+
+async function openMockExam() {
+  let qs;
+  try { qs = (await api('GET', '/api/exam/mock?n=10')).questions; } catch { return toast("Couldn't start the mock exam."); }
+  if (!qs.length) return toast('Watch a few lessons first: the mock exam is made from questions in lessons you have seen.');
+  track('mock_start', { n: qs.length });
+  let i = 0, right = 0;
+  const missed = [];
+  const body = el('div', { class: 'mock' });
+  const show = () => {
+    if (i >= qs.length) {
+      track('mock_done', { n: qs.length, correct: right });
+      const pct = Math.round((right / qs.length) * 100);
+      body.replaceChildren(el('div', { class: 'mock-done' }, svgEl(mascot(pct >= 70 ? 'cheer' : 'think')), el('h3', {}, `${right} of ${qs.length} right (${pct}%)`),
+        el('p', { class: 'muted' }, pct >= 70 ? 'Strong. Your feed keeps the weaker units coming.' : 'The ones you missed are back in your feed for review, weakest first.'),
+        missed.length ? el('ul', { class: 'mock-missed' }, ...missed.map((q) => el('li', {}, el('b', {}, q.question), el('span', {}, `Answer: ${q.options[q.answerIndex]}`), q.explanation ? el('small', {}, q.explanation) : null))) : null,
+        el('button', { type: 'button', class: 'btn primary', onclick: () => closeSheet() }, 'Done')));
+      return;
+    }
+    const q = qs[i];
+    const started = performance.now();
+    const opts = q.options.map((o, k) => el('button', { type: 'button', class: 'mock-opt', onclick: () => {
+      const correct = k === q.answerIndex;
+      if (correct) right++; else missed.push(q);
+      // The same evidence as a quick check in the video: it moves mastery and the feed.
+      sendEvent(q.videoId, 'quiz_answer', { choice: k, correct, ms: Math.round(performance.now() - started) });
+      opts.forEach((b, j) => { b.disabled = true; b.classList.toggle('ok', j === q.answerIndex); b.classList.toggle('bad', j === k && !correct); });
+      body.append(el('div', { class: 'mock-next' }, q.explanation ? el('p', { class: 'muted' }, q.explanation) : null,
+        el('button', { type: 'button', class: 'btn primary small', onclick: () => { i++; show(); } }, i + 1 < qs.length ? 'Next' : 'See my score')));
+    } }, `${'ABCD'[k]}. ${o}`));
+    body.replaceChildren(el('p', { class: 'mock-meta' }, `Question ${i + 1} of ${qs.length}${q.unit ? ` · ${q.unit}` : ''}`), el('h3', { class: 'mock-q' }, q.question), el('div', { class: 'mock-opts' }, ...opts));
+  };
+  openSheet('Mock exam', body);
+  show();
+}
