@@ -109,7 +109,7 @@ labelled and yours to give.
 ## How StudyTok uses a pack
 
 * Each `### Unit` becomes a unit with the id `pack:<slug>:<n>`. A student adds the whole pack
-  from Library › Community packs or by opening `?pack=<slug>`. The units then sit in their
+  from the Explore tab or by opening `?pack=<slug>`. The units then sit in their
   course like any other, with mastery, spaced repetition and the quick checks.
 * Lessons are written per unit from the summary, its bullets and the pack's Facts, pitched at
   the student's level. The writer is told the pack's title and author and names it once.

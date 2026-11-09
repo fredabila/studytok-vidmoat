@@ -73,6 +73,7 @@ acceleration samples never leave the device, and nothing is recorded when permis
 | `pack_add` / `pack_remove` | `slug`, `by` library/link | a community pack joined or left the course |
 | `pack_link` | `slug` | the pack's call to action was tapped |
 | `library_search` | `q` | typed in the Library search box |
+| `explore_open` / `explore_search` | / `q` | opened the Explore tab / searched the packs |
 | `quiz_shown` / `quiz_hold` | `t` | options appeared / the video was held at the question |
 | `quiz_answer` | `choice`, `correct`, `ms` (time to answer) | tapped an option |
 | `quiz_skip` | `ms` | tapped Skip |
