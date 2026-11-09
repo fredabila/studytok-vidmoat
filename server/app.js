@@ -40,6 +40,10 @@ import { getAvatar } from './core/avatars.js';
 import { fillSearchGaps } from './feed/gaps.js';
 import * as discover from './feed/discover.js';
 import { noteProfileVisit } from './feed/index.js';
+import { capabilitiesOf, requireCap } from './core/safety.js';
+import { askAboutLesson } from './feed/ask.js';
+import * as comments from './feed/comments.js';
+import { examPlan, mockExam } from './feed/exam.js';
 
 
 export const SECURITY_HEADERS = {
@@ -502,7 +506,7 @@ async function route(req, res, url) {
     waitUntil(syncUser(userId)); // keeps the admin sheet's row fresh (throttled)
     const invites = u.memberNo ? await db.referralCount(u.memberNo) : 0;
     const learning = learningProfile(await getSignals(userId), u.styles);
-    return send(res, 200, { user: { ...safe, setupDone, seen, liked, billing, stats, invites, following, region: regionOf(u.profile?.country) || null, learning: { ...learning, insight: insightOf(learning) } } });
+    return send(res, 200, { user: { ...safe, setupDone, seen, liked, billing, stats, invites, following, region: regionOf(u.profile?.country) || null, learning: { ...learning, insight: insightOf(learning) }, can: capabilitiesOf(u) } });
   }
 
   // Credits: switch between the free allowance and the student's own account, or disconnect it.
@@ -608,12 +612,13 @@ async function route(req, res, url) {
   const avatarSetMatch = /^\/api\/channels\/([a-z0-9._-]{3,40})\/avatar$/.exec(path);
   if (avatarSetMatch && (req.method === 'POST' || req.method === 'DELETE')) {
     try {
+      if (req.method === 'POST') requireCap(await db.getUser(userId), 'courseAvatar'); // a public picture: adults only
       const ch = req.method === 'POST'
         ? await channels.setChannelAvatar(userId, avatarSetMatch[1], (await readJson(req, 400 * 1024)).image)
         : await channels.clearChannelAvatar(userId, avatarSetMatch[1]);
       return send(res, 200, { channel: await channels.publicChannel(ch, { userId, withUnits: true }) });
     } catch (err) {
-      if (err.status) return send(res, err.status, { error: err.message });
+      if (err.status) return send(res, err.status, { error: err.message, code: err.code });
       throw err;
     }
   }
@@ -657,6 +662,45 @@ async function route(req, res, url) {
     if (pending.length) waitUntil(Promise.allSettled(pending));
     const states = await getProgress(userId);
     return send(res, 200, { items: await Promise.all(items.map((x) => (x.moment ? x.moment : publicVideo(x.video, userId, { why: x.why, pos: x.pos, queuedFor: x.queuedFor, unitMastery: x.video.unitId && states[x.video.unitId] ? mastery(states[x.video.unitId]) : 0 })))), credits: credits || undefined });
+  }
+
+  // ---- Asking, discussing, exam practice (core/safety.js decides who may use what) ----
+  const lessonActMatch = /^\/api\/videos\/([0-9a-f-]{36})\/(ask|comments)$/.exec(path);
+  const commentMatch = /^\/api\/comments\/([0-9a-f-]{36})(\/report)?$/.exec(path);
+  if (lessonActMatch || commentMatch || path.startsWith('/api/exam')) {
+    try {
+      const me = await db.getUser(userId);
+      if (lessonActMatch) {
+        const [, videoId, what] = lessonActMatch;
+        const v = await db.getVideo(videoId);
+        if (!v || v.status !== 'ready') return send(res, 404, { error: 'Lesson not found' });
+        if (what === 'ask' && req.method === 'POST') {
+          requireCap(me, 'ask');
+          const body = await readJson(req, 4096);
+          return send(res, 200, await askAboutLesson({ userId, video: v, question: body.q, audience: audienceFor(me) }));
+        }
+        if (what === 'comments' && req.method === 'GET') {
+          requireCap(me, 'comments');
+          return send(res, 200, await comments.listComments(videoId, userId));
+        }
+        if (what === 'comments' && req.method === 'POST') {
+          requireCap(me, 'commentPost');
+          const body = await readJson(req, 4096);
+          return send(res, 200, { comment: await comments.postComment({ user: me, videoId, text: body.text }) });
+        }
+      }
+      if (commentMatch) {
+        requireCap(me, 'comments');
+        if (commentMatch[2] && req.method === 'POST') return send(res, 200, await comments.reportComment({ userId, id: commentMatch[1] }));
+        if (!commentMatch[2] && req.method === 'DELETE') return send(res, 200, await comments.deleteComment({ userId, id: commentMatch[1] }));
+      }
+      if (key === 'GET /api/exam') return send(res, 200, await examPlan(me));
+      if (key === 'GET /api/exam/mock') return send(res, 200, { questions: await mockExam(me, { n: Math.min(20, Math.max(3, Number(url.searchParams.get('n')) || 10)) }) });
+      return send(res, 404, { error: 'Not found' });
+    } catch (err) {
+      if (err.status) return send(res, err.status, { error: err.message, code: err.code });
+      throw err;
+    }
   }
 
   const videoMatch = /^\/api\/videos\/([0-9a-f-]{36})$/.exec(path);

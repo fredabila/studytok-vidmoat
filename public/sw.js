@@ -3,8 +3,8 @@
 //   every open gets the HTML, JS and CSS of the same deploy (stale-while-revalidate served the
 //   previous deploy's CSS under the new HTML for one open, which broke layouts after releases).
 // - /api/*, the Vidmoat player and media: never cached (always live).
-const VERSION = 'studygraph-v41';
-const SHELL = ['/', '/index.html', '/app.js', '/player.js', '/telemetry.js', '/sensors.js', '/share.js', '/push.js', '/styles.css', '/manifest.webmanifest', '/icon.svg',
+const VERSION = 'studygraph-v42';
+const SHELL = ['/', '/index.html', '/app.js', '/player.js', '/retime.js', '/telemetry.js', '/sensors.js', '/share.js', '/push.js', '/styles.css', '/manifest.webmanifest', '/icon.svg',
   '/icons/icon-192.png', '/icons/icon-512.png', '/icons/apple-touch-icon.png', '/icons/favicon-32.png'];
 
 self.addEventListener('install', (event) => {

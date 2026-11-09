@@ -174,6 +174,31 @@ is a worked example.
   identity across devices. Set `STUDYTOK_REQUIRE_SIGNIN=false` to allow guest profiles again
   (local development without a Vidmoat account).
 
+## Learning tools
+
+* **Ask about this lesson** (⋯ menu): a private question to a tutor that has the lesson in front
+  of it (`server/feed/ask.js`): short answers, school-safe, gentler for under-13s, 30 a day. When
+  a short extra lesson would help, one tap turns it into a topic in the student's feed. Every
+  question is counted per lesson (`asks`), a sign that something in it did not land.
+* **Exam mode** (Library): a countdown to the exam date from setup, readiness per unit (mastery),
+  today's focus (more units a day as the exam nears) and a **mock exam** of up to 10 questions
+  from lessons the student has watched, weakest units first. Answers count like quick checks.
+* **Speed** (Tune): 0.75x to 1.5x. The lesson's document is retimed in the app
+  (`public/retime.js`) and the player wrapper converts times back, so no new video is made.
+* **Data saver** (Tune, or Auto with the phone's data-saving mode): the next lesson is not
+  preloaded and the music is left out. Offline viewing is not possible: lessons are played live
+  from their media, there are no MP4 files to store.
+* **Comments** (adults only): under each lesson, checked before they appear (no links or contact
+  details, then a model that fails closed), rate-limited, hidden after three reports, deletable
+  by their author (`server/feed/comments.js`).
+
+## Age rules
+
+`server/core/safety.js` decides, the API enforces it and the app hides what does not apply
+(`/api/me` → `user.can`). Under 18 (always set up by a parent or guardian): no comments (neither
+reading nor writing), no uploaded course pictures; Ask is available. Under 13 also get gentler
+lessons and tutor answers.
+
 ## Personalization
 
 * **Your own topics**: any topic in the student's own words ("Python decorators", "The Ashanti

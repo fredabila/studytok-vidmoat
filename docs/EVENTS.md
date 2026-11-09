@@ -183,3 +183,16 @@ friend") and in the Users sheet (Invited by, Invites).
 2. A `case` in `ingest()` if it should change an aggregate.
 3. `track('your_event', {...})` in `public/app.js`.
 4. A row in the table above and a test in `test/events.test.js`.
+
+## Asking, comments, exam practice
+
+| Event | Fields | Meaning |
+|---|---|---|
+| `ask_open` | videoId | Opened "Ask about this lesson" |
+| `ask` | videoId, len, onTopic | Asked the tutor a question (counted per lesson as `asks`) |
+| `ask_follow` | videoId | Turned the tutor's suggestion into lessons |
+| `comments_open` | videoId | Opened the comments (adults only) |
+| `comment_post` | videoId | Posted a comment that passed moderation |
+| `exam_open` | days | Saw the exam card (days to the exam, -1 without a date) |
+| `mock_start` | n | Started a mock exam of n questions |
+| `mock_done` | n, correct | Finished it; each answer is also a `quiz_answer` |
