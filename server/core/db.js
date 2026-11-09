@@ -1,4 +1,4 @@
-// StudyTok's data model on top of kv.js. All functions are async and safe to call from
+// StudyGraph's data model on top of kv.js. All functions are async and safe to call from
 // separate serverless instances: counters use HINCRBY, memberships use sets.
 //
 // Keys

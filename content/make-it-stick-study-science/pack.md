@@ -3,9 +3,9 @@ title: How to study so it sticks
 kind: notes
 topic: psychology
 level: high-school
-by: StudyTok team
+by: StudyGraph team
 link: https://github.com/fredabila/studytok-vidmoat/blob/main/docs/ALGORITHM.md
-cta: See how StudyTok uses this
+cta: See how StudyGraph uses this
 language: en
 license: CC-BY-4.0
 tags: [study-skills, memory, revision, exams, learning-science]
@@ -15,7 +15,7 @@ tags: [study-skills, memory, revision, exams, learning-science]
 Most revision advice is folklore. This pack is the small set of findings from cognitive psychology
 that hold up in experiment after experiment: testing yourself beats rereading, spacing beats
 cramming, mixing topics beats blocking them, and the feeling of fluency is a trap. Each unit
-explains one finding, why it works, and how to use it this week. StudyTok's own feed is built on
+explains one finding, why it works, and how to use it this week. StudyGraph's own feed is built on
 these ideas, so you will recognise them in how lessons come back.
 
 ## Units

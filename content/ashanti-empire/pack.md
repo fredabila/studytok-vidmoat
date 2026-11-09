@@ -3,7 +3,7 @@ title: The Ashanti Empire
 kind: notes
 topic: history
 level: high-school
-by: StudyTok team
+by: StudyGraph team
 link: https://en.wikipedia.org/wiki/Ashanti_Empire
 cta: Read more on Wikipedia
 language: en

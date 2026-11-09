@@ -3,7 +3,7 @@ title: Meditations, the ideas
 kind: book
 topic: psychology
 level: lifelong
-by: StudyTok examples
+by: StudyGraph examples
 link: https://www.gutenberg.org/ebooks/2680
 cta: Read it free on Gutenberg
 language: en
@@ -78,4 +78,4 @@ opening the book.
 ## Assets
 | file | kind | shows | credit | license | size | duration |
 | --- | --- | --- | --- | --- | --- | --- |
-| cover.png | image | A dark cover card: a gold laurel wreath and the words Meditations, Marcus Aurelius | StudyTok examples | CC0-1.0 | 1080x1350 | |
+| cover.png | image | A dark cover card: a gold laurel wreath and the words Meditations, Marcus Aurelius | StudyGraph examples | CC0-1.0 | 1080x1350 | |

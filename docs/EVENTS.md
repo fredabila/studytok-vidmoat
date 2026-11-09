@@ -30,7 +30,7 @@ A **drop** (near free-fall followed by a hard impact) pauses the video and is co
 acceleration samples never leave the device, and nothing is recorded when permission is refused.
 * Every event has `type`, `at` (ms epoch) and `seq`; video events have `videoId`. Unknown
   types and fields are dropped, numbers are clamped, strings truncated (`cleanEvent`).
-* Nothing identifies a person beyond the StudyTok user id (the cookie). Nothing is sent to a
+* Nothing identifies a person beyond the StudyGraph user id (the cookie). Nothing is sent to a
   third party.
 
 ## Taxonomy

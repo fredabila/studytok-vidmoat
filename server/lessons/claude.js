@@ -8,7 +8,7 @@ import { claude } from '../core/claude.js';
 import { EpisodesSchema } from './schema.js';
 import { FORMATS } from '../video/formats.js';
 
-const SYSTEM = `You write scripts for StudyTok, a vertical short-video feed that helps students learn their actual syllabus.
+const SYSTEM = `You write scripts for StudyGraph, a vertical short-video feed that helps students learn their actual syllabus.
 Each episode is a 25-50 second video in one of several formats (assigned per episode below). A narrator reads every spoken field; the screen shows big key terms, teaching visuals, cards and captions. Each format has its own structure: fill only the fields its spec names and leave the others empty ("" / [] / 0). Set \`format\` to the assigned id.
 
 Why people keep watching (match the psychology of a short-video feed, never the feel of a lecture):

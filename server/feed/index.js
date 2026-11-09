@@ -49,7 +49,7 @@ export function cleanProfile(p = {}) {
 export function checkAgeRules(profile, { guardianConsent = false, existing = null } = {}) {
   if (profile.age == null) return;
   if (profile.age < 18 && profile.managedBy !== 'guardian') {
-    throw Object.assign(new Error('Vidmoat accounts are for adults (18+). A parent or guardian signs in and sets StudyTok up for anyone under 18.'), { status: 400, code: 'minor' });
+    throw Object.assign(new Error('Vidmoat accounts are for adults (18+). A parent or guardian signs in and sets StudyGraph up for anyone under 18.'), { status: 400, code: 'minor' });
   }
   if (profile.managedBy === 'guardian' && !guardianConsent && !existing?.guardianConsentAt) {
     throw Object.assign(new Error('Please confirm you are the parent or guardian.'), { status: 400, code: 'consent' });
@@ -239,7 +239,7 @@ async function generatingFor(userId) {
  * @returns {Promise<{ video } | { blocked: 'allowance'|'exhausted'|'plan'|'reconnect' }>}
  */
 async function startFor(userId, unit, audience, pending, { onTheHouse = false } = {}) {
-  // A breather is StudyTok's idea, not the student's: it is never charged to them or to their free allowance.
+  // A breather is StudyGraph's idea, not the student's: it is never charged to them or to their free allowance.
   const credential = onTheHouse ? { mode: 'house' } : await credentialFor(userId);
   if (credential.mode === 'exhausted') return { blocked: credential.reason };
   const started = await startVideo(unit, audience, { requestedBy: userId, credential });
@@ -652,7 +652,7 @@ export async function topUpLibrary({ units = 8, min = 4 } = {}) {
 }
 
 /**
- * Links a Vidmoat identity to a StudyTok profile (Sign in with Vidmoat).
+ * Links a Vidmoat identity to a StudyGraph profile (Sign in with Vidmoat).
  *  - identity already linked to a profile  -> that profile is restored on this device
  *  - otherwise                            -> the current guest profile (or a new one) is linked
  * Only { id, name, email } is kept: no tokens, nothing that can spend credits.

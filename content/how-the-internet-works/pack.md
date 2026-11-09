@@ -3,7 +3,7 @@ title: How the internet actually works
 kind: course
 topic: computer-science
 level: high-school
-by: StudyTok team
+by: StudyGraph team
 language: en
 license: CC-BY-4.0
 tags: [networking, internet, dns, http, tcp-ip]

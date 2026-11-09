@@ -1,6 +1,6 @@
 // Who pays for a student's videos (docs/BILLING.md).
 //
-// Every student starts on the HOUSE account: StudyTok's own Vidmoat key makes their first
+// Every student starts on the HOUSE account: StudyGraph's own Vidmoat key makes their first
 // `config.billing.freeVideos` videos. After that they connect their OWN Vidmoat account
 // (OAuth with the generation scopes) and every video they trigger is made on their account,
 // with their credits; when those run out, Vidmoat's 402 tells us and the app points them to

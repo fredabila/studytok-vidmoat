@@ -1,4 +1,4 @@
-/* ============================================================================ StudyTok
+/* ============================================================================ StudyGraph
    A study notebook. Paper surfaces and ink type for setup, Library and Profile; the feed
    is dark ink. One accent: highlighter yellow, used like a highlighter.
    ========================================================================================= */
@@ -174,9 +174,9 @@ body[data-view="feed"] .tabbtn[aria-current="page"] span { color: var(--ink); }
 .wordmark text { font-family: var(--serif); font-weight: 600; font-size: 21px; letter-spacing: -.01em; font-variation-settings: 'opsz' 48; }
 .wm-fill { fill: #fff; }
 /* Tracing lights: two bright dashes run around the letter outlines, one half a lap behind. */
-.wm-trace { fill: none; stroke: url(#wm-trace); stroke-width: 2; stroke-linejoin: round; stroke-dasharray: 26 220; stroke-dashoffset: 0; opacity: .95; animation: wm-run 5.5s linear infinite; filter: drop-shadow(0 0 3px rgba(255, 217, 61, .9)); }
+.wm-trace { fill: none; stroke: url(#wm-trace); stroke-width: 2; stroke-linejoin: round; stroke-dasharray: 30 270; stroke-dashoffset: 0; opacity: .95; animation: wm-run 5.5s linear infinite; filter: drop-shadow(0 0 3px rgba(255, 217, 61, .9)); }
 .wm-trace-2 { animation-delay: -2.75s; opacity: .6; stroke-width: 1.1; }
-@keyframes wm-run { to { stroke-dashoffset: -246; } }
+@keyframes wm-run { to { stroke-dashoffset: -300; } }
 @media (prefers-reduced-motion: reduce) { .wm-trace { animation: none; opacity: 0; } }
 .feed-title { font-weight: 600; font-size: 14px; padding-bottom: 3px; border-bottom: 2px solid var(--hl); }
 /* clip, not hidden: a hidden container can still be scrolled by the browser to keep a focused button in view, which shifts every slide */
@@ -575,7 +575,7 @@ body.landing-on { background: var(--paper); }
   .tabbar, body[data-view] .tabbar { position: fixed; left: 0; top: 0; bottom: 0; width: var(--side); height: auto; transform: none; border-radius: 0; border: 0; border-right: 1px solid var(--dark-line);
     box-shadow: none; padding: 22px 16px; background: var(--dark-2); color: #fff; display: flex; flex-direction: column; align-items: stretch; gap: 6px; }
   .side-brand { display: block; padding: 6px 10px 22px; }
-  .side-brand svg { overflow: visible; width: 172px; height: 39px; }
+  .side-brand svg { overflow: visible; width: 190px; height: 34px; }
   .side-brand p { margin: 8px 0 0; font-size: 12.5px; color: rgba(255, 255, 255, .55); }
   .tabbtn { flex: none; max-width: none; display: flex; align-items: center; justify-content: flex-start; gap: 13px; height: 48px; padding: 0 14px; border-radius: 12px; font-size: 15px; opacity: .72; }
   .tabbtn:hover { opacity: 1; }

@@ -2,7 +2,7 @@
 //  - Upstash Redis (production / Vercel): used when UPSTASH_REDIS_REST_URL + _TOKEN, or the
 //    KV_REST_API_URL + _TOKEN pair that Vercel's Upstash integration sets, are present.
 //  - A local in-memory store persisted to data/kv.json (development, tests), which mimics the
-//    handful of Redis commands StudyTok uses, with the same return shapes as @upstash/redis.
+//    handful of Redis commands StudyGraph uses, with the same return shapes as @upstash/redis.
 
 import { mkdirSync, readFileSync, writeFileSync, renameSync, existsSync } from 'node:fs';
 import { join } from 'node:path';

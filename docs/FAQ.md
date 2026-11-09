@@ -1,11 +1,11 @@
-# StudyTok — Help & FAQ
+# StudyGraph — Help & FAQ
 
 Plain answers for students, parents and the curious. For the technical side see
 [ARCHITECTURE.md](ARCHITECTURE.md); for how we use data see [Privacy](#privacy) below.
 
 ## The basics
 
-**What is StudyTok?**
+**What is StudyGraph?**
 A feed of short, narrated study videos made for *your* syllabus. You swipe like on TikTok, but
 every video teaches one thing from your course, in one of 32 formats (explainers, myth-busts,
 exam drills, flashcards, stories, chats, tier lists…), and most end with a quick check.
@@ -17,13 +17,13 @@ in Vidmoat's player. Nothing is pre-recorded; videos already made are kept in a 
 the next student on that unit gets them instantly.
 
 **Why do I need a Vidmoat account?**
-StudyTok runs on Vidmoat's video technology and Vidmoat is the identity it trusts. Signing in
+StudyGraph runs on Vidmoat's video technology and Vidmoat is the identity it trusts. Signing in
 asks only to read your name and email, keeps your course and progress across devices, and later
 lets you make lessons on your own Vidmoat credits if you want to.
 
 **It says "Vidmoat accounts are for adults". I'm 15.**
 Vidmoat accounts are 18+. A parent or guardian signs in with *their* Vidmoat account, chooses
-"My child", enters your age and ticks the consent box. StudyTok then pitches lessons at your
+"My child", enters your age and ticks the consent box. StudyGraph then pitches lessons at your
 level and age, and under-13s get gentler lessons without opinion-led formats.
 
 ## Using the feed
@@ -78,7 +78,7 @@ Day streak (days in a row with at least one lesson), lessons watched, quick-chec
 mastered. Badges appear for a 3-day streak, 80%+ on quizzes, mastered units and 25+ lessons.
 
 **Why do old units come back as flashcards and quizzes instead of lessons?**
-That is review. When spaced repetition brings a unit back, StudyTok serves retrieval practice
+That is review. When spaced repetition brings a unit back, StudyGraph serves retrieval practice
 (flashcards, true or false, a ten-second challenge, an exam drill) rather than explaining it
 again, because recalling an answer yourself is what makes it stick. Tap **Why** on the video to
 see "due for review".
@@ -102,7 +102,7 @@ next session), with the explanation if you miss it again and a button to rewatch
 it right twice, a couple of days apart, and it is retired. Your Library shows how many are
 waiting under "questions to fix".
 
-**Can StudyTok plan around my exam date?**
+**Can StudyGraph plan around my exam date?**
 Yes. Add the date when you set up (or edit) your studies. From 45 days out your feed leans
 towards revision of the units you have started, more lessons become retrieval practice
 (flashcards, true or false, drills), and a countdown appears on your Library and Profile.
@@ -124,7 +124,7 @@ set up again. Your account, member number, invites and free-lesson count always 
 **What is "How you learn best"?**
 Your learning profile, on your Profile: how well you do with lessons you see (diagrams,
 cards), hear (stories, analogies), read (flashcards, notes) and do (guessing first,
-challenges, games). You can tell StudyTok how you like to learn when you set up, but the
+challenges, games). You can tell StudyGraph how you like to learn when you set up, but the
 profile follows what you actually finish and get right, so it can surprise you. Your feed
 leans towards your stronger ways in, a little, and keeps checking that it helps.
 
@@ -138,7 +138,7 @@ lesson you miss comes back for review. Play one any time from Library › Practi
 Tap *Why* on the video, then *Lesson notes*: what the lesson set out to teach, its points,
 definitions, the quick check with the answer and the one-line takeaway. *Copy notes* puts it on
 your clipboard as text, with the lesson's link. In the Library, tap a unit's title to see the
-study plan StudyTok follows for it and which concepts are covered so far.
+study plan StudyGraph follows for it and which concepts are covered so far.
 
 **Are the lessons checked?**
 Every batch of scripts is written against the unit's study plan and then read by a reviewer
@@ -162,7 +162,7 @@ project does). Search them, filter by topic, open "What you will learn", and *Ad
 puts the pack's units in your course. The Library only shows what you have added.
 
 **Can I bring my own material, or promote what I am doing?**
-Yes. StudyTok is open source: add a *pack*, one Markdown file in the repo with the ideas of a
+Yes. StudyGraph is open source: add a *pack*, one Markdown file in the repo with the ideas of a
 book, your course notes or what your project does, written in your own words, plus optional
 labelled images or clips. Once merged, anyone can add it from the Explore tab or your
 link `studytok.vidmoat.com/?pack=<slug>`, lessons are made from it, and every lesson shows your
@@ -170,11 +170,11 @@ name, link and call to action. The format and the rules are in
 [content/README.md](https://github.com/fredabila/studytok-vidmoat/blob/main/content/README.md).
 
 **What are the cards from Noti between videos?**
-*Moments*: a tip about StudyTok, a piece of news or an offer, shown at most every six lessons and
+*Moments*: a tip about StudyGraph, a piece of news or an offer, shown at most every six lessons and
 three times a day. Tap anywhere on one (or swipe) to carry on. Each appears once, then not again
 for weeks.
 
-**Can I share a video with someone who doesn't have StudyTok?**
+**Can I share a video with someone who doesn't have StudyGraph?**
 Yes. *Share lesson* on any video copies a public link (`studytok.vidmoat.com/v/…`) that opens
 without an account: the lesson plays in the browser, with the quick check, and the page says it
 was shared by your member number (never your name). Whoever taps "Get lessons for your own
@@ -187,7 +187,7 @@ reviews are due, and sleeps when a list is empty.
 ## Credits
 
 **Is it free?**
-Your first lessons (15 by default) are made on StudyTok's Vidmoat credits. Watching anything
+Your first lessons (15 by default) are made on StudyGraph's Vidmoat credits. Watching anything
 already in the library is always free.
 
 **What happens after the free lessons?**
@@ -195,7 +195,7 @@ Connect your own Vidmoat account (Profile → Credits → *Use my Vidmoat accoun
 trigger are then made with your credits, about 20 each. If you run out, the app points you to
 credit packs or a plan upgrade on Vidmoat, and everything already made keeps playing.
 
-**Does StudyTok spend my credits without asking?**
+**Does StudyGraph spend my credits without asking?**
 No. Only lessons you trigger spend credits, only after you connect your account, and it never
 renders, exports, or touches your Speech Lab voices or Cast. You can disconnect any time.
 
@@ -206,7 +206,7 @@ Yes. On Android/Chrome and desktop, tap *Install the app* on the landing page or
 iPhone, open it in Safari, tap Share, then *Add to Home Screen*. It opens full screen and keeps
 your sign-in.
 
-**Can StudyTok remind me?**
+**Can StudyGraph remind me?**
 Yes, if you want it to. Install the app, open your Profile and tap *Enable reminders*. You get at
 most one notification a day, and only when it matters: your streak is about to end and you have
 not studied yet today (sent in the early evening, your time), or two or more units are due for a
@@ -239,7 +239,7 @@ permission off for the site at any time; the app works the same without it.
 No. There is no face or gaze tracking and no audio recording.
 
 **Is any of this sold or shared?**
-No. Events stay on StudyTok's own server (Upstash Redis), tied to your StudyTok user id, and are
+No. Events stay on StudyGraph's own server (Upstash Redis), tied to your StudyGraph user id, and are
 used only to rank videos and improve the lessons. Public statistics at `/api/stats` are
 aggregated across everyone with no personal data.
 
@@ -255,5 +255,5 @@ remove your profile, progress and events. (A self-service button is on the roadm
 ## Still stuck?
 
 Open an issue at https://github.com/fredabila/studytok-vidmoat/issues with your phone/browser
-and what you expected. StudyTok is open source (MIT), built by Vidmoat, a Buzz Innovations Ltd.
+and what you expected. StudyGraph is open source (MIT), built by Vidmoat, a Buzz Innovations Ltd.
 company.

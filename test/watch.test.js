@@ -78,7 +78,7 @@ test('watchPage escapes the lesson text and carries the Open Graph / Twitter tag
   assert.ok(html.includes(escapeHtml(TITLE)));
   assert.ok(html.includes(`<meta property="og:title" content="${escapeHtml(TITLE)}">`));
   assert.ok(html.includes('<meta property="og:type" content="video.other">'));
-  assert.ok(html.includes('<meta property="og:site_name" content="StudyTok">'));
+  assert.ok(html.includes('<meta property="og:site_name" content="StudyGraph">'));
   assert.ok(html.includes(`<meta property="og:url" content="https://studytok.example/v/${ready.id}">`));
   assert.ok(html.includes('<meta property="og:image" content="https://cdn.example/poster.jpg">'));
   assert.ok(html.includes('<meta name="twitter:card" content="summary_large_image">'));

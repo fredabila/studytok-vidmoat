@@ -25,7 +25,7 @@ export const PlanSchema = z.object({
   glossary: z.array(z.object({ term: z.string(), meaning: z.string().describe('max 90 chars') })).describe('5-12 terms used across the unit, defined once, consistently'),
 });
 
-const SYSTEM = `You design the study plan for one unit of a student's syllabus, for StudyTok (short study videos). Think like an experienced teacher preparing the unit: what is the core idea, what builds on what, where do students go wrong, what does the exam actually ask. Be accurate and specific to the level and exam; never invent facts. Order the concepts so each one is needed by the next.`;
+const SYSTEM = `You design the study plan for one unit of a student's syllabus, for StudyGraph (short study videos). Think like an experienced teacher preparing the unit: what is the core idea, what builds on what, where do students go wrong, what does the exam actually ask. Be accurate and specific to the level and exam; never invent facts. Order the concepts so each one is needed by the next.`;
 
 const key = (lessonKey) => `plan:${lessonKey}`;
 const clip = (s, n) => String(s ?? '').replace(/\s+/g, ' ').trim().slice(0, n);

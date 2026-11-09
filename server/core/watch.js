@@ -6,7 +6,7 @@
 import { format as formatOf } from '../video/formats.js';
 import { TOPIC_BY_ID } from '../curriculum/topics.js';
 
-export const SITE_NAME = 'StudyTok';
+export const SITE_NAME = 'StudyGraph';
 export const FALLBACK_IMAGE = 'https://studytok.vidmoat.com/icons/icon-512.png';
 
 const FONTS = 'https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,500;0,9..144,600;0,9..144,700;1,9..144,500&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600&display=swap';
@@ -96,7 +96,7 @@ ${body}
 }
 
 const brand = (homeHref) => `<header class="top">
-  <a class="brand" href="${escapeHtml(homeHref)}"><span class="brand-mark" aria-hidden="true"></span><span class="serif">StudyTok</span></a>
+  <a class="brand" href="${escapeHtml(homeHref)}"><span class="brand-mark" aria-hidden="true"></span><span class="serif">StudyGraph</span></a>
 </header>`;
 
 /**
@@ -105,7 +105,7 @@ const brand = (homeHref) => `<header class="top">
  */
 export function watchPage(v, { url, ref = null, playerOrigin }) {
   const e = escapeHtml;
-  const title = v.lesson?.title || v.unitTitle || 'A StudyTok lesson';
+  const title = v.lesson?.title || v.unitTitle || 'A StudyGraph lesson';
   const description = v.lesson?.hook || v.lesson?.takeaway || `A short ${formatOf(v.format).name.toLowerCase()} lesson from ${SITE_NAME}.`;
   const image = posterUrl(v.poster);
   const home = ref ? `/?ref=${ref}` : '/';
@@ -148,10 +148,10 @@ export function notFoundPage({ url, ref = null }) {
   const body = `${brand(home)}
 <main class="watch">
   <h1 class="title">This lesson isn't here.</h1>
-  <p class="hook">It may still be in the making, or the link is incomplete. StudyTok lessons are made while students scroll, so there is always a fresh one waiting.</p>
+  <p class="hook">It may still be in the making, or the link is incomplete. StudyGraph lessons are made while students scroll, so there is always a fresh one waiting.</p>
   <section class="cta">
     <a class="btn primary" href="${escapeHtml(home)}">Get lessons for your own syllabus</a>
   </section>
 </main>`;
-  return shell({ title: 'Lesson not found', description: 'This StudyTok lesson is not available.', image: FALLBACK_IMAGE, url, body, noindex: true, ref });
+  return shell({ title: 'Lesson not found', description: 'This StudyGraph lesson is not available.', image: FALLBACK_IMAGE, url, body, noindex: true, ref });
 }

@@ -1,4 +1,4 @@
-// Builds the StudyTok launch promo (9:16, ~45 s) as a real Vidmoat project, using the same
+// Builds the StudyGraph launch promo (9:16, ~45 s) as a real Vidmoat project, using the same
 // helpers the lesson composer uses: Vidmoat speech + transcription for a narrator with word
 // timings, stock footage, a CC0 music bed, SFX, and the app's own card builders. Prints the
 // project id; render it from the Vidmoat editor or with the MCP render tool.
@@ -30,7 +30,7 @@ const T = { footage: 0, image: 1, scrim: 3, card: 4, dim: 5, captions: 6, text: 
 const PARTS = [
   { id: 'hook', text: "You can't stop scrolling." },
   { id: 'turn', text: 'So we made the feed teach your course.' },
-  { id: 'how1', text: 'StudyTok writes a short video for your exact syllabus, while you scroll.' },
+  { id: 'how1', text: 'StudyGraph writes a short video for your exact syllabus, while you scroll.' },
   { id: 'how2', text: 'An AI drafts the lesson, a narrator reads it, real footage and diagrams are cut under it, and it plays about a minute later.' },
   { id: 'formats', text: 'Thirty-two formats, so it never feels the same twice.' },
   { id: 'quiz', text: 'And every video holds at a quick check until you answer.' },
@@ -41,7 +41,7 @@ const text = PARTS.map((p) => p.text).join(' ');
 console.log('narrating…');
 const speech = await createSpeech({ text, provider: 'openai', voiceId: 'marin', maxCredits: 25, instructions: 'A founder launching something they love: warm, confident, energetic, brisk but clear. Tiny pause after each sentence.' });
 const tr = await transcribe({ src: speech.url, language: 'en' });
-const BRAND = [[/^stardy ?talk|^study ?tok|^studytalk/i, 'StudyTok'], [/^vid ?mo(a|)te?\.?$/i, 'Vidmoat.'], [/^vidmote$/i, 'Vidmoat']];
+const BRAND = [[/^stardy ?talk|^study ?tok|^studytalk/i, 'StudyGraph'], [/^vid ?mo(a|)te?\.?$/i, 'Vidmoat.'], [/^vidmote$/i, 'Vidmoat']];
 const words = (tr.words || []).filter((w) => Number.isFinite(w.start) && Number.isFinite(w.end)).map((w) => { const fix = BRAND.find(([re]) => re.test(w.text)); return fix ? { ...w, text: /[.,]$/.test(w.text) && !/[.,]$/.test(fix[1]) ? fix[1] + w.text.slice(-1) : fix[1] } : w; });
 const voiceDur = tr.mediaSeconds || words.at(-1)?.end;
 const { parts } = alignParts(PARTS.map((p) => ({ ...p, pauseBefore: 0 })), voiceDur, words);
@@ -127,7 +127,7 @@ for (const [id, track] of [['pinImg', T.image], ['pinScrim', T.scrim], ['pinCard
   dim(s, d, 0.55);
   whoosh(s - 0.1);
   cmds.push({ op: 'addShapeClip', clipId: uid('cap'), kind: 'capsule', start: r2(s + 0.1), duration: r2(d - 0.1), trackIndex: T.chrome, style: { fill: HL, width: 760, height: 150 }, patch: { y: -520 } });
-  label('StudyTok', s + 0.1, d - 0.1, { fontFamily: SERIF, fontWeight: 700, fontSize: 118, color: INK, shadow: false, animIn: 'pop', animInDuration: 0.4 }, -520, T.chrome + 1);
+  label('StudyGraph', s + 0.1, d - 0.1, { fontFamily: SERIF, fontWeight: 700, fontSize: 118, color: INK, shadow: false, animIn: 'pop', animInDuration: 0.4 }, -520, T.chrome + 1);
   label('So we made the feed\nteach your course.', s + 0.5, d - 0.5, { fontFamily: SANS, fontWeight: 900, fontSize: 112, maxWidth: 0.9, lineHeight: 1.1, animIn: 'word-pop', animInDuration: 0.6, spans: [{ from: 5, to: 7, color: HL }] }, 60);
 }
 // how1: the app itself.
@@ -183,7 +183,7 @@ for (const [id, track] of [['pinImg', T.image], ['pinScrim', T.scrim], ['pinCard
   dim(s, d, 0);
   footage(campus, s, d, { filter: 'Cinematic', zoom: 1.08, opacity: 0.45 });
   whoosh(s - 0.1);
-  label('StudyTok', s + 0.1, d - 0.1, { fontFamily: SERIF, fontWeight: 700, fontSize: 210, animIn: 'pop', animInDuration: 0.5 }, -700);
+  label('StudyGraph', s + 0.1, d - 0.1, { fontFamily: SERIF, fontWeight: 700, fontSize: 210, animIn: 'pop', animInDuration: 0.5 }, -700);
   cmds.push(...stampCard({ id: 'member', start: s + 0.6, duration: d - 0.6, track: T.card, accent: HL, theme: 'dark' }, { label: '#1', text: 'was first. What number will you be?', color: HL }));
   cmds.push({ op: 'addShapeClip', clipId: uid('cap'), kind: 'capsule', start: r2(s + 1.2), duration: r2(d - 1.2), trackIndex: T.chrome, style: { fill: HL, width: 940, height: 150 }, patch: { y: 660 } });
   label('studytok.vidmoat.com', s + 1.2, d - 1.2, { fontFamily: MONO, fontWeight: 700, fontSize: 72, color: INK, shadow: false, animIn: 'fade-in' }, 660, T.chrome + 1);
@@ -198,7 +198,7 @@ if (music?.src) cmds.push({ op: 'musicBed', clipId: 'music', src: music.src, vol
 for (const c of cmds) if (c.style) for (const k of Object.keys(c.style)) if (c.style[k] === undefined) delete c.style[k];
 
 // ---- 4. Build it.
-const res = await createProject('StudyTok · launch promo', cmds);
+const res = await createProject('StudyGraph · launch promo', cmds);
 const failed = res.results.map((r, i) => [r, cmds[i]]).filter(([r]) => !r.ok);
 console.log(`project ${res.project.id}: ${cmds.length - failed.length}/${cmds.length} commands applied, ${duration}s, music "${music?.query || '?'}"`);
 for (const [r, c] of failed) console.log('  failed:', c.op, c.clipId, r.error);

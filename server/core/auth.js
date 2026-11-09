@@ -1,7 +1,7 @@
 // "Sign in with Vidmoat". Two uses of the same flow:
 //   identity  the default sign-in: the single read-only scope `account.read`, the account
 //             id/name/email read once from /v1/me, tokens discarded. Generation runs on
-//             StudyTok's own key (the free allowance).
+//             StudyGraph's own key (the free allowance).
 //   generate  "Use my Vidmoat account": the student consents to the generation scopes
 //             (projects, media, stock, speech, transcription) so their videos are made on
 //             their account with their credits. Tokens are returned to billing.js, which
@@ -9,7 +9,7 @@
 //
 // Flow: authorization code + PKCE (S256) with a state bound to a short-lived cookie.
 //
-// The OAuth client: VIDMOAT_OAUTH_CLIENT_ID/_SECRET when set; otherwise StudyTok registers
+// The OAuth client: VIDMOAT_OAUTH_CLIENT_ID/_SECRET when set; otherwise StudyGraph registers
 // itself once per redirect URI with RFC 7591 dynamic client registration
 // (POST /api/oauth/register) and keeps the client in storage. Registration grants access to
 // nothing by itself, and every authorize request names `account.read` explicitly (a dynamic

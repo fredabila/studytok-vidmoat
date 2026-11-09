@@ -93,7 +93,7 @@ questions; when most are wrong it asks for plainer questions the video clearly a
 
 ## Breathers
 
-Short-video feeds keep people by changing the pace before they leave. StudyTok does the same,
+Short-video feeds keep people by changing the pace before they leave. StudyGraph does the same,
 without drifting away from the course. `feed/breathers.js`:
 
 * **Trigger** (`needsBreather(session, signals)`): the student left the last two videos early
@@ -120,7 +120,7 @@ without drifting away from the course. `feed/breathers.js`:
 
 ## Recall cards (your mistakes come back)
 
-The strongest learning signal StudyTok has is a quick check answered wrong. `feed/recall.js`
+The strongest learning signal StudyGraph has is a quick check answered wrong. `feed/recall.js`
 keeps those questions (`user:{id}:misses`, at most 40) and brings each one back as a *recall
 card* in the feed: the question again, no video, with the lesson's explanation on a wrong
 answer and a "Watch the lesson again" button.
@@ -164,7 +164,7 @@ the day's quota.
 ## Learning profile (`feed/learning.js`, from StudyGraph)
 
 StudyGraph asked students to pick their learning style (Visual, Auditory, Reading/Writing,
-Kinesthetic) and passed the answer to its AI. StudyTok keeps the question, in plain words
+Kinesthetic) and passed the answer to its AI. StudyGraph keeps the question, in plain words
 (seeing it, hearing it explained, reading it, doing it), and treats the answer as a starting
 point only: research has not found that teaching to a self-reported style helps, but matching
 to what a student measurably finishes and gets right is ordinary good personalisation.
@@ -208,7 +208,7 @@ gap** (the lesson's own sentence with its key term blanked, two distractors from
 ## Moments
 
 Between lessons, every so often, the feed shows a *moment*: an animated card from Noti with a
-tip about StudyTok, a piece of news, or an offer. No video is made for it (the app renders it),
+tip about StudyGraph, a piece of news, or an offer. No video is made for it (the app renders it),
 so it costs nothing, and it is paced so the feed stays a feed. `feed/moments.js`:
 
 * **Pacing** (`pickMoment`): never before four lessons into the session, then at most one every

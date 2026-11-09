@@ -1,9 +1,9 @@
-// StudyTok service worker: makes the app installable and keeps the shell available offline.
+// StudyGraph service worker: makes the app installable and keeps the shell available offline.
 // - App shell (HTML, JS, CSS, icons): network first, falling back to the cache when offline, so
 //   every open gets the HTML, JS and CSS of the same deploy (stale-while-revalidate served the
 //   previous deploy's CSS under the new HTML for one open, which broke layouts after releases).
 // - /api/*, the Vidmoat player and media: never cached (always live).
-const VERSION = 'studytok-v32';
+const VERSION = 'studygraph-v33';
 const SHELL = ['/', '/index.html', '/app.js', '/player.js', '/telemetry.js', '/sensors.js', '/share.js', '/push.js', '/styles.css', '/manifest.webmanifest', '/icon.svg',
   '/icons/icon-192.png', '/icons/icon-512.png', '/icons/apple-touch-icon.png', '/icons/favicon-32.png'];
 
@@ -46,12 +46,12 @@ self.addEventListener('fetch', (event) => {
 self.addEventListener('push', (event) => {
   let data = {};
   try { data = event.data ? event.data.json() : {}; } catch { data = { body: event.data && event.data.text() }; }
-  const title = data.title || 'StudyTok';
+  const title = data.title || 'StudyGraph';
   const options = {
     body: data.body || 'Time for a quick lesson.',
     icon: '/icons/icon-192.png',
     badge: '/icons/icon-192.png',
-    tag: data.tag || 'studytok-reminder',
+    tag: data.tag || 'studygraph-reminder',
     renotify: false,
     data: { url: data.url || '/' },
   };
@@ -63,7 +63,7 @@ self.addEventListener('notificationclick', (event) => {
   const url = new URL((event.notification.data && event.notification.data.url) || '/', self.location.origin).href;
   event.waitUntil(
     self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((list) => {
-      // Reuse an open StudyTok window (the installed app) rather than stacking a second one.
+      // Reuse an open StudyGraph window (the installed app) rather than stacking a second one.
       const open = list.find((c) => new URL(c.url).origin === self.location.origin);
       if (open) return open.navigate(url).catch(() => open).then((c) => (c || open).focus());
       return self.clients.openWindow(url);

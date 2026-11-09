@@ -71,7 +71,7 @@ test('first sign-in links the guest profile; a new device restores it', async ()
 
   // Another device: a different (or no) guest session signs in with the same account.
   const second = await linkVidmoat(null, identity);
-  assert.equal(second.user.id, guest.id, 'the same StudyTok profile comes back');
+  assert.equal(second.user.id, guest.id, 'the same StudyGraph profile comes back');
   assert.equal(second.restored, true);
   assert.deepEqual(second.user.units, ['uni-cs-u1']);
 
@@ -80,7 +80,7 @@ test('first sign-in links the guest profile; a new device restores it', async ()
   assert.equal(fresh.user.setupDone, false);
 });
 
-test('without configured credentials, StudyTok registers its own client once and reuses it', async () => {
+test('without configured credentials, StudyGraph registers its own client once and reuses it', async () => {
   const { config } = await import('../server/core/config.js');
   const saved = { id: config.oauth.clientId, secret: config.oauth.clientSecret };
   config.oauth.clientId = ''; config.oauth.clientSecret = '';
@@ -97,7 +97,7 @@ test('without configured credentials, StudyTok registers its own client once and
     const a = await startSignIn(req);
     const b = await startSignIn(req);
     assert.equal(registrations.length, 1, 'registered once, then reused');
-    assert.deepEqual(registrations[0], { client_name: 'StudyTok', redirect_uris: ['https://studytok.example/api/auth/vidmoat/callback'] });
+    assert.deepEqual(registrations[0], { client_name: 'StudyGraph', redirect_uris: ['https://studytok.example/api/auth/vidmoat/callback'] });
     for (const { url } of [a, b]) {
       const u = new URL(url);
       assert.equal(u.searchParams.get('client_id'), 'dyn_abc');

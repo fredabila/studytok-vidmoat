@@ -194,7 +194,7 @@ export function composeLesson(lesson, media = {}) {
   let n = 0;
   const uid = (p) => `${p}${n++}`;
 
-  // The project name is set at creation ("StudyTok · <title>") so generated projects are easy to find.
+  // The project name is set at creation ("StudyGraph · <title>") so generated projects are easy to find.
   cmds.push({ op: 'setProjectSettings', aspectRatio: '9:16', fps: config.generation.fps, background: look.bg });
 
   // ---- Ambient footage under everything, graded by the format and darkened by the scrim.

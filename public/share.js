@@ -56,7 +56,7 @@ export async function renderCard(card) {
   // brand
   rrect(ctx, 72, 84, 76, 76, 22); ctx.fillStyle = HL; ctx.fill(); ctx.translate(6, 6); ctx.fillStyle = INK; rrect(ctx, 72, 84, 76, 76, 22); ctx.fill(); ctx.translate(-6, -6);
   ctx.fillStyle = HL; ctx.beginPath(); ctx.moveTo(100, 102); ctx.lineTo(136, 122); ctx.lineTo(100, 142); ctx.closePath(); ctx.fill();
-  ctx.fillStyle = INK; ctx.font = '700 54px Fraunces, Georgia, serif'; ctx.textBaseline = 'middle'; ctx.fillText('StudyTok', 170, 124);
+  ctx.fillStyle = INK; ctx.font = '700 54px Fraunces, Georgia, serif'; ctx.textBaseline = 'middle'; ctx.fillText('StudyGraph', 170, 124);
   ctx.font = '600 26px "JetBrains Mono", monospace'; ctx.fillStyle = INK3; ctx.textAlign = 'right'; ctx.fillText('studytok.vidmoat.com', W - 72, 124); ctx.textAlign = 'left';
 
   // kicker + title with a highlighter mark
@@ -132,7 +132,7 @@ export async function renderCard(card) {
     }
     y += 90;
   }
-  ctx.save(); ctx.globalAlpha = 0.07; ctx.fillStyle = INK; ctx.font = '700 260px Fraunces, Georgia, serif'; ctx.textAlign = 'right'; ctx.fillText('StudyTok', W + 20, H - 230); ctx.restore(); ctx.textAlign = 'left';
+  ctx.save(); ctx.globalAlpha = 0.07; ctx.fillStyle = INK; ctx.font = '700 260px Fraunces, Georgia, serif'; ctx.textAlign = 'right'; ctx.fillText('StudyGraph', W + 20, H - 230); ctx.restore(); ctx.textAlign = 'left';
   // Noti, big, bottom right
   try { const img = await svgImage(card.mascot); ctx.save(); ctx.translate(W - 250, H - 520); ctx.rotate(-0.12); ctx.drawImage(img, -170, -170, 340, 340); ctx.restore(); } catch { /* no mascot */ }
 
@@ -145,7 +145,7 @@ export async function renderCard(card) {
 }
 
 /** Shares the card through the share sheet, else saves it and copies the text. Returns how it went. */
-export async function shareCard(blob, { text, filename = 'studytok-card.png' } = {}) {
+export async function shareCard(blob, { text, filename = 'studygraph-card.png' } = {}) {
   const file = new File([blob], filename, { type: 'image/png' });
   try {
     if (navigator.canShare?.({ files: [file] })) { await navigator.share({ files: [file], text }); return 'shared'; }

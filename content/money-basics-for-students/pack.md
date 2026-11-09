@@ -3,7 +3,7 @@ title: Money basics for students
 kind: notes
 topic: economics
 level: high-school
-by: StudyTok team
+by: StudyGraph team
 language: en
 license: CC-BY-4.0
 tags: [personal-finance, budgeting, interest, saving, economics]

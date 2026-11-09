@@ -1,4 +1,4 @@
-/* Public lesson page (/v/:id): the StudyTok notebook look on one paper page. Kept separate from
+/* Public lesson page (/v/:id): the StudyGraph notebook look on one paper page. Kept separate from
    styles.css so the page loads only what it needs (and so the app's stylesheet can change freely). */
 :root {
   --ink: #141414; --ink-2: #3d3a35; --ink-3: #6f6a62;

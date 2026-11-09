@@ -1,7 +1,7 @@
 // Minimal Vidmoat REST client (https://developer.vidmoat.com/developer/docs/api).
-// Only the documented v1 routes StudyTok needs. Credentials never leave the server.
+// Only the documented v1 routes StudyGraph needs. Credentials never leave the server.
 //
-// Requests use StudyTok's own API key unless they run inside `withCredential(token, fn)`:
+// Requests use StudyGraph's own API key unless they run inside `withCredential(token, fn)`:
 // then they carry that student's OAuth access token, so a video is made on their account
 // with their credits (core/billing.js).
 

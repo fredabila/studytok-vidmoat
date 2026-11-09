@@ -1,6 +1,6 @@
 {
-  "name": "StudyTok: learn your syllabus, one swipe at a time",
-  "short_name": "StudyTok",
+  "name": "StudyGraph: learn your syllabus, one swipe at a time",
+  "short_name": "StudyGraph",
   "description": "Short narrated study videos that follow your course, level and exam.",
   "id": "/",
   "start_url": "/?source=pwa",

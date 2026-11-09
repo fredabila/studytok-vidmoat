@@ -1,14 +1,14 @@
 /**
- * StudyTok → Google Sheets bridge and dashboard. Paste this into the Apps Script editor of the
- * "StudyTok — Users" spreadsheet (Extensions → Apps Script), set SECRET, then Deploy → New
- * deployment → Web app, "Execute as: Me", "Who has access: Anyone". Give the /exec URL to StudyTok
+ * StudyGraph → Google Sheets bridge and dashboard. Paste this into the Apps Script editor of the
+ * "StudyGraph — Users" spreadsheet (Extensions → Apps Script), set SECRET, then Deploy → New
+ * deployment → Web app, "Execute as: Me", "Who has access: Anyone". Give the /exec URL to StudyGraph
  * as STUDYTOK_SHEET_URL and the same secret as STUDYTOK_SHEET_SECRET. See scripts/sheet/README.md.
  *
- * StudyTok POSTs { secret, ops: [ { op: 'upsert'|'append', tab, key?, rows: [ {column: value} ] } ] }.
+ * StudyGraph POSTs { secret, ops: [ { op: 'upsert'|'append', tab, key?, rows: [ {column: value} ] } ] }.
  * Row 1 of every tab is the header; new columns are added on the right as they appear.
  *
  * The script also builds a Dashboard tab (headline numbers, latest joins, top students,
- * breakdowns, charts) and styles the data tabs. Use the StudyTok menu in the sheet to rebuild it
+ * breakdowns, charts) and styles the data tabs. Use the StudyGraph menu in the sheet to rebuild it
  * or to pull fresh data from the app.
  */
 var SECRET = 'PASTE_THE_SHARED_SECRET_HERE';
@@ -16,7 +16,7 @@ var APP_URL = 'https://studytok.vidmoat.com';
 
 var PAPER = '#f6f1e7', INK = '#141414', INK3 = '#6f6a62', HL = '#ffd93d', HL_SOFT = '#fff3b0', LINE = '#e6dfd0', GREEN = '#d8f3e3', RED = '#ffe0e0';
 
-// ---------------------------------------------------------------- web app (StudyTok writes here)
+// ---------------------------------------------------------------- web app (StudyGraph writes here)
 function doPost(e) {
   var out = { ok: false };
   try {
@@ -39,7 +39,7 @@ function doPost(e) {
 }
 
 function doGet() {
-  return json_({ ok: true, service: 'studytok-sheet', tabs: SpreadsheetApp.getActiveSpreadsheet().getSheets().map(function (s) { return s.getName(); }) });
+  return json_({ ok: true, service: 'studygraph-sheet', tabs: SpreadsheetApp.getActiveSpreadsheet().getSheets().map(function (s) { return s.getName(); }) });
 }
 
 function json_(obj) {
@@ -48,7 +48,7 @@ function json_(obj) {
 
 // ---------------------------------------------------------------- menu (people use these)
 function onOpen() {
-  SpreadsheetApp.getUi().createMenu('StudyTok')
+  SpreadsheetApp.getUi().createMenu('StudyGraph')
     .addItem('Rebuild dashboard', 'buildDashboard')
     .addItem('Pull fresh data from the app', 'refreshFromApp')
     .addItem('Show / hide ID columns', 'toggleIds')
@@ -58,17 +58,17 @@ function onOpen() {
 function buildDashboard() {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   buildDashboard_(ss);
-  ss.toast('Dashboard rebuilt.', 'StudyTok', 4);
+  ss.toast('Dashboard rebuilt.', 'StudyGraph', 4);
 }
 
-/** Asks StudyTok to resend every student (POST /api/admin/sheet/resync). */
+/** Asks StudyGraph to resend every student (POST /api/admin/sheet/resync). */
 function refreshFromApp() {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
-  ss.toast('Asking the app for fresh data…', 'StudyTok', 5);
+  ss.toast('Asking the app for fresh data…', 'StudyGraph', 5);
   var res = UrlFetchApp.fetch(APP_URL + '/api/admin/sheet/resync', { method: 'post', headers: { Authorization: 'Bearer ' + SECRET }, muteHttpExceptions: true });
   var text = res.getContentText();
-  try { var j = JSON.parse(text); ss.toast(j.ok ? ('Refreshed ' + j.sent + ' of ' + j.users + ' students.') : ('Failed: ' + (j.error || text)), 'StudyTok', 6); }
-  catch (err) { ss.toast('Failed: ' + text.slice(0, 120), 'StudyTok', 6); }
+  try { var j = JSON.parse(text); ss.toast(j.ok ? ('Refreshed ' + j.sent + ' of ' + j.users + ' students.') : ('Failed: ' + (j.error || text)), 'StudyGraph', 6); }
+  catch (err) { ss.toast('Failed: ' + text.slice(0, 120), 'StudyGraph', 6); }
 }
 
 function toggleIds() {
@@ -211,10 +211,10 @@ function buildDashboard_(ss) {
   d.setColumnWidth(1, 150); d.setColumnWidth(7, 40);
 
   // Title
-  d.getRange('A1').setValue('StudyTok').setFontSize(30).setFontWeight('bold').setFontFamily('Fraunces');
+  d.getRange('A1').setValue('StudyGraph').setFontSize(30).setFontWeight('bold').setFontFamily('Fraunces');
   d.getRange('A1:F1').setBackground(HL);
   d.getRange('A2').setFormula('="Live from the app · last update " & IFERROR(SORTN(' + ur('Updated') + ',1,0,1,FALSE),"—") & " (UTC)"').setFontColor(INK3).setFontSize(11);
-  d.getRange('H1').setValue('Rows update by themselves as students use StudyTok. Menu StudyTok ▸ Pull fresh data to force a refresh.').setFontColor(INK3).setFontSize(10).setWrap(true);
+  d.getRange('H1').setValue('Rows update by themselves as students use StudyGraph. Menu StudyGraph ▸ Pull fresh data to force a refresh.').setFontColor(INK3).setFontSize(10).setWrap(true);
   d.getRange('H1:N2').merge();
   d.setRowHeight(1, 46); d.setRowHeight(2, 24);
 
@@ -275,7 +275,7 @@ function buildDashboard_(ss) {
     .setOption('title', 'Lessons watched and completed per day').setOption('legend', { position: 'bottom' }).setOption('colors', ['#ffd93d', '#141414']).setOption('backgroundColor', '#ffffff')
     .setOption('useFirstColumnAsDomain', true).setNumHeaders(1).setPosition(43, 8, 0, 0).setOption('width', 560).setOption('height', 300).build();
   d.insertChart(chart1); d.insertChart(chart2);
-  d.getRange('A60').setValue('Tabs: Users (one row per student, hover a column header for its meaning), Joins (every sign-up and milestone), Daily (one row per day). ID columns are hidden; StudyTok ▸ Show / hide ID columns reveals them.').setFontColor(INK3).setFontSize(9);
+  d.getRange('A60').setValue('Tabs: Users (one row per student, hover a column header for its meaning), Joins (every sign-up and milestone), Daily (one row per day). ID columns are hidden; StudyGraph ▸ Show / hide ID columns reveals them.').setFontColor(INK3).setFontSize(9);
   d.getRange('A60:N60').merge().setWrap(true);
   ss.setActiveSheet(d);
 }

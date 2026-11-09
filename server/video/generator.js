@@ -1,4 +1,4 @@
-// Generates one StudyTok video for a unit at a level:
+// Generates one StudyGraph video for a unit at a level:
 //   lesson (queued episode, or a Claude batch, or the offline bank)
 //   -> in parallel: narration (Vidmoat speech + timings), ambient/beat media (stock + Commons),
 //      sound-effects kit, music bed
@@ -121,7 +121,7 @@ async function buildVideo(video, unit, audience) {
 
   const chip = unit.open ? look.label : unit.title;
   const { commands, duration, quiz, segments } = composeLesson({ ...lesson, topic: unit.topic, chip }, { ...media, music, sfx, voice });
-  const created = await createProject(`StudyTok · ${lesson.title}`, commands);
+  const created = await createProject(`StudyGraph · ${lesson.title}`, commands);
   const projectId = created.project.id;
   const failed = (created.results || []).filter((r) => !r.ok);
   if (failed.length) console.warn(`[generator] ${video.id}: ${failed.length}/${commands.length} commands failed`, failed.slice(0, 3));

@@ -33,7 +33,7 @@ const server = createServer(async (req, res) => {
 });
 
 server.listen(config.port, config.host, () => {
-  console.log(`StudyTok on http://${config.host}:${config.port}`);
+  console.log(`StudyGraph on http://${config.host}:${config.port}`);
   console.log(`  storage: ${usingRedis ? 'Upstash Redis' : `local file (${join(config.dataDir, 'kv.json')})`}`);
   console.log(`  lessons: ${config.anthropic.enabled ? `Claude (${config.anthropic.model})` : 'offline bank (set ANTHROPIC_API_KEY for unlimited lessons)'}`);
   if (!config.vidmoat.apiKey) console.warn('  VIDMOAT_API_KEY is not set: video generation will fail. Copy .env.example to .env.');
