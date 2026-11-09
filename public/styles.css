@@ -198,11 +198,12 @@ body[data-view="feed"] .tabbtn[aria-current="page"] span { color: var(--ink); }
 /* iOS sound gate: the player's audio can only start after a tap inside its own frame, so until
    the first tap a hole in the gesture layer lets a tap in the middle reach the frame. Swipes at
    the edges still work. */
-.slide.sound-gate .gesture { clip-path: polygon(evenodd, 0 0, 100% 0, 100% 100%, 0 100%, 0 0, 22% 34%, 78% 34%, 78% 62%, 22% 62%, 22% 34%); }
+/* Only a button-sized hole over the sound chip reaches the player (iOS needs a tap inside it); swipes start anywhere else. */
+.slide.sound-gate .gesture { clip-path: polygon(evenodd, 0 0, 100% 0, 100% 100%, 0 100%, 0 0, 26% 42%, 74% 42%, 74% 54%, 26% 54%, 26% 42%); }
 .slide.sound-gate .player-host iframe { pointer-events: auto; }
-.sound-chip { position: absolute; z-index: 9; left: 22%; right: 22%; top: 34%; height: 28%; display: grid; place-items: center; align-content: center; gap: 12px; pointer-events: none; border-radius: 28px; border: 2px dashed rgba(255, 255, 255, .7); background: rgba(13, 13, 14, .35); animation: hint 2.4s var(--ease) infinite; }
-.sound-chip i { width: 64px; height: 64px; border-radius: 50%; background: var(--hl); display: grid; place-items: center; box-shadow: 3px 3px 0 var(--ink); }
-.sound-chip i::before { content: '👆'; font-size: 30px; }
+.sound-chip { position: absolute; z-index: 9; left: 26%; right: 26%; top: 42%; height: 12%; display: flex; align-items: center; justify-content: center; gap: 12px; padding: 0 12px; text-align: left; font-size: 14px; pointer-events: none; border-radius: 28px; border: 2px dashed rgba(255, 255, 255, .7); background: rgba(13, 13, 14, .35); animation: hint 2.4s var(--ease) infinite; }
+.sound-chip i { flex: none; width: 48px; height: 48px; border-radius: 50%; background: var(--hl); display: grid; place-items: center; box-shadow: 3px 3px 0 var(--ink); }
+.sound-chip i::before { content: '👆'; font-size: 24px; }
 .ld-invited { margin: 6px 0 0; font-family: var(--mono); font-size: 12px; font-weight: 600; color: var(--ink); }
 .ld-invited b { background: var(--hl); padding: 2px 8px; border-radius: 6px; }
 .invite-card .invite-link { display: flex; gap: 8px; align-items: center; margin: 10px 0 12px; }
