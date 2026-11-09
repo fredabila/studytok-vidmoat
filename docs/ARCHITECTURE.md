@@ -206,7 +206,7 @@ Key families are listed at the top of `core/db.js` and `feed/events.js`.
 
 Only `main` builds on Vercel (`ignoreCommand` in `vercel.json`): preview builds for every branch push
 count towards the plan's deployments-per-day limit, and once it is hit, merges to `main` are
-silently skipped until the rolling window frees up.
+silently skipped until the rolling window frees up (the Pro plan has a far higher limit).
 
 * **Vercel**: `api/index.js` is one Function serving every `/api/*` route (rewrite in
   `vercel.json`); `public/` is static; `waitUntil` keeps generation running after the
