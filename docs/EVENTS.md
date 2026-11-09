@@ -196,3 +196,5 @@ friend") and in the Users sheet (Invited by, Invites).
 | `exam_open` | days | Saw the exam card (days to the exam, -1 without a date) |
 | `mock_start` | n | Started a mock exam of n questions |
 | `mock_done` | n, correct | Finished it; each answer is also a `quiz_answer` |
+| `push_open` | kind | Opened the app from a notification (streak, exam, review, fix, fresh, comeback, tutor, reply) |
+| `push_prompt` | action, state | The notification card at open: shown, later, subscribed, denied |
