@@ -63,8 +63,26 @@ export async function readyCount() {
 }
 
 const STAT_FIELDS = ['views', 'completes', 'likes', 'skips', 'watchSec', 'quizRight', 'quizWrong', 'saves', 'leaves', 'pctSum', 'loops', 'less', 'impressions', 'rewatches'];
-export async function getStats(id) {
-  const h = (await kv.hgetall(`video:${id}:stats`)) || {};
+// Evidence decays: counters are also kept per month (`<key>:m<YYYYMM>`), and a read blends this
+// month and last at full weight with everything older at OLD_WEIGHT, so a video that did well
+// with its first viewers a season ago does not keep that score forever.
+export const OLD_WEIGHT = 0.35;
+export const monthOf = (at = Date.now()) => new Date(at).toISOString().slice(0, 7).replace('-', '');
+const prevMonth = (m) => { const y = Number(m.slice(0, 4)), mo = Number(m.slice(4)); return mo === 1 ? `${y - 1}12` : `${y}${String(mo - 1).padStart(2, '0')}`; };
+/** A hash's counters with older evidence shrunk: recent (this month + last) + OLD_WEIGHT × the rest. */
+export async function blendedHash(key, { now = Date.now(), fields = null } = {}) {
+  const m0 = monthOf(now), m1 = prevMonth(m0);
+  const [total, a, b] = await Promise.all([kv.hgetall(key), kv.hgetall(`${key}:m${m0}`), kv.hgetall(`${key}:m${m1}`)]);
+  if (!total) return null;
+  const out = {};
+  for (const f of fields || Object.keys(total)) {
+    const all = Number(total[f]) || 0, recent = (Number(a?.[f]) || 0) + (Number(b?.[f]) || 0);
+    out[f] = Math.round((recent + OLD_WEIGHT * Math.max(0, all - recent)) * 100) / 100;
+  }
+  return out;
+}
+export async function getStats(id, { now = Date.now() } = {}) {
+  const h = (await blendedHash(`video:${id}:stats`, { now, fields: STAT_FIELDS })) || {};
   return Object.fromEntries(STAT_FIELDS.map((f) => [f, Number(h[f]) || 0]));
 }
 export const incrStat = (id, field, by = 1) => kv.hincrby(`video:${id}:stats`, field, by);

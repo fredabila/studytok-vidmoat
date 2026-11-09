@@ -55,14 +55,14 @@ const LONG_RUN = 10; // videos without one before the feed offers one anyway
  * @param session  { viewed, earlyStreak, wrongStreak, lastBreatherAt }
  * @param signals  { breathers?: { n, pctSum, less } }  how this student took earlier breathers
  */
-export function needsBreather(session = {}, signals = {}) {
+export function needsBreather(session = {}, signals = {}, { early = 2, wrong = 3, gap = MIN_GAP } = {}) {
   const b = signals.breathers || {};
   if ((b.less || 0) >= 2) return null; // they asked for less of this
   if (b.n >= 3 && b.pctSum / b.n < 0.35) return null; // they swipe them away
   const since = (session.viewed || 0) - (session.lastBreatherAt || 0);
-  if (since < MIN_GAP) return null;
-  if ((session.earlyStreak || 0) >= 2) return 'leaving-early';
-  if ((session.wrongStreak || 0) >= 3) return 'tough-run';
+  if (since < gap) return null;
+  if ((session.earlyStreak || 0) >= early) return 'leaving-early';
+  if ((session.wrongStreak || 0) >= wrong) return 'tough-run';
   if ((session.viewed || 0) >= LONG_RUN && since >= LONG_RUN) return 'long-session';
   return null;
 }

@@ -213,9 +213,24 @@ against what students then did:
 Reminders now go out at each student's own usual hour (the mode of their hour-of-day counts,
 18:00 until there are ten views), on an hourly cron, instead of 18:00 UTC for everyone.
 
-Not calibrated yet: the stage-1 unit weights, the breather and moment thresholds, and the
-exploration rate. Video quality and format performance have no decay, so old evidence keeps
-its weight.
+**Evidence decays.** Every video and format counter is kept all-time and per month; a read
+blends this month and last at full weight with everything older at 0.35
+(`core/db.js blendedHash`), so a video that did well with its first viewers a season ago does
+not keep that score forever, and the same for a format's performance on a topic.
+
+**Stage one is reported, not yet reweighted.** Each decision records which term chose the
+unit (affinity, syllabus progress, review, exploration, an interest topic, a breather); the
+Calibration tab shows watch, early leaves, completion and quiz accuracy per lead
+(`unit · review-led` …). Those rows are what a change to the stage-one weights would be judged
+against.
+
+**Experiments** (`feed/experiments.js`). The thresholds that are still judgement calls run as
+two arms, assigned per student by a stable hash of their id (even, independent per
+experiment, never changing): exploration share (15 % → 3 % against 10 % → 2 %), breather
+triggers (2 early leaves / 3 wrong / 6 apart against 3 / 4 / 8) and moment pacing (every 6
+lessons against every 9). Per arm the tab shows views, mean watch, early leaves, lessons per
+session and active days (`experiment · breather · B (early 3, wrong 4, gap 8)`). Promoting an
+arm is a one-line edit of `EXPERIMENTS`; that is deliberate, a human reads the rows first.
 
 ## What the algorithm does not do (yet)
 

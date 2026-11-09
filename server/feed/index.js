@@ -15,6 +15,7 @@ import { startVideo, readyKeyFor } from '../video/generator.js';
 import { pickUnits, mastery, scoreVideo, exploreRate, applyEvent, emptyState, examUrgency } from './ranking.js';
 import { pickRecall, noteRecall, recallItem, getMisses } from './recall.js';
 import { noteDecision, getWeights } from './calibration.js';
+import { settingsFor } from './experiments.js';
 import { ingest, getSignals, getSession, noteServed, noteBreather, studentStats, emptySignals } from './events.js';
 import { needsBreather, pickBreather, isBreatherUnit, BREATHER_REASONS } from './breathers.js';
 import { pickMoment, noteMoment, momentContext, momentItem } from './moments.js';
@@ -274,7 +275,8 @@ export async function nextItems(userId, count = 3) {
   const stale = !session.lastAt || Date.now() - session.lastAt > 12 * 3600000;
   const gentle = stale && signals.lastSeenAt > 0 && Date.now() - signals.lastSeenAt > 3 * 86400000;
   const weights = await getWeights(); // calibration: fitted shrink per rule (empty until there is evidence)
-  const picks = pickUnits(candidates, states, recent, Math.min(candidates.length, count + 4), { hasCourse, explore: exploreRate(servedSoFar), urgency });
+  const exp = settingsFor(userId); // experiments: this student's arm for each judgement-call threshold
+  const picks = pickUnits(candidates, states, recent, Math.min(candidates.length, count + 4), { hasCourse, explore: exploreRate(servedSoFar, exp.explore), urgency });
   const pending = [];
   const taken = new Set();
   const inFlight = await generatingFor(userId); // videos already being made for this student (prefetch, earlier pages)
@@ -303,7 +305,7 @@ export async function nextItems(userId, count = 3) {
   // A breather: when the session says the student is about to drop off, the next slot is one
   // short, fun video from next door to their subject (feed/breathers.js), then back to the units.
   const breatherMark = (await kv.get(`user:${userId}:breather`)) || {};
-  const breatherReason = needsBreather({ ...session, lastBreatherAt: breatherMark.at || 0 }, signals);
+  const breatherReason = needsBreather({ ...session, lastBreatherAt: breatherMark.at || 0 }, signals, exp.breather);
   if (breatherReason) {
     const topics = [...new Set(candidates.map((c) => c.unit.topic))];
     const unit = pickBreather({ topics, lastTopic: session.lastTopics?.[0] || null, recentUnits: recent });
@@ -371,7 +373,7 @@ export async function nextItems(userId, count = 3) {
     const stats = await studentStats(userId, { watched, progress: states, masteryOf: mastery });
     stats.unitsTotal = candidates.filter((c) => c.kind === 'course').length || candidates.length;
     const exam = user.profile?.examDate ? { name: user.profile.exam || 'your exam', days: Math.ceil((Date.parse(user.profile.examDate) - Date.now()) / 86400000) } : null;
-    const moment = miss ? null : await pickMoment(userId, { session, ctx, stats, exam, hasBreather: page.some((x) => x.why?.kind === 'breather') });
+    const moment = miss ? null : await pickMoment(userId, { session, ctx, stats, exam, gap: exp.moments.gap, hasBreather: page.some((x) => x.why?.kind === 'breather') });
     if (moment) { page.splice(moment.opener ? 0 : 1, 0, { moment: momentItem(moment, ctx) }); await noteMoment(userId, moment, session.viewed || 0); }
   }
 
@@ -385,7 +387,7 @@ export async function nextItems(userId, count = 3) {
   await kv.ltrim(`user:${userId}:recentUnits`, 0, 19);
   await noteServed(userId, page.filter((x) => x.video).map((x) => x.video));
   // Calibration: keep why each video was served, so its outcome can be joined to the rules that picked it.
-  for (const x of page) if (x.video && x.why?.video) await noteDecision(userId, x.video.id, x.why.video, { viewed: session.viewed || 0 });
+  for (const x of page) if (x.video && x.why?.video) await noteDecision(userId, x.video.id, x.why.video, { viewed: session.viewed || 0, unit: { kind: x.why.kind, lead: leadOf(x.why) } });
   return { items: page, pending, credits };
 }
 
@@ -554,6 +556,16 @@ export function notesOf(v) {
     takeaway: l.takeaway || null,
     reviewed: Boolean(l.reviewed),
   };
+}
+
+/** Which stage-one term chose a unit: exploration, or the largest of affinity, progress and review. */
+export function leadOf(why = {}) {
+  if (why.explored) return 'explored';
+  if (why.kind === 'breather') return 'breather';
+  if (why.kind === 'interest') return 'interest';
+  const terms = { affinity: why.affinity || 0, progress: why.progress || 0, review: why.review || 0 };
+  const [best] = Object.entries(terms).sort((a, b) => b[1] - a[1])[0] || ['progress'];
+  return `${best}-led`;
 }
 
 /** Saved videos, watch history and course progress for the Library screen. */

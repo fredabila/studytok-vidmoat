@@ -27,7 +27,8 @@ time zone, language, and when the row was last updated. New columns added to the
 Written nightly with the Daily rows: one row per ranking rule and bucket (up / flat / down)
 with views, mean watch, early leaves, completion, quiz accuracy, the lift of *up* against
 *flat* and the fitted weight the ranking now applies; then watch by posture (moving, in hand,
-lying flat, for dense and light formats) and by local hour. "Evidence: insufficient" means
+lying flat, for dense and light formats), by which stage-one term chose the unit, per
+experiment arm (exploration, breathers, moments) and by local hour. "Evidence: insufficient" means
 under 150 outcomes in a bucket, so the rule still runs as designed. See docs/ALGORITHM.md.
 
 ## The Dashboard tab

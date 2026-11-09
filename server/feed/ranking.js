@@ -179,7 +179,7 @@ export function videoQuality(stats) {
 // ---- Stage 2: which video ------------------------------------------------------------------------
 
 /** Exploration share: none for a new student's first 8 videos, then decaying from 15% towards 3%. */
-export const exploreRate = (served) => (served < 8 ? 0 : Math.max(0.03, 0.15 * (20 / (20 + served))));
+export const exploreRate = (served, { start = 0.15, floor = 0.03 } = {}) => (served < 8 ? 0 : Math.max(floor, start * (20 / (20 + served))));
 
 /**
  * The student's taste for a format or topic from their own signals ({ views, completes, likes,

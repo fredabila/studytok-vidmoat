@@ -14,6 +14,7 @@
 
 import { kv } from '../core/kv.js';
 import { FORMAT_VISUAL_DENSITY } from './ranking.js';
+import { experimentReport } from './experiments.js';
 
 export const RULES = ['quality', 'taste', 'diversity', 'fatigue', 'difficulty', 'freshness', 'context', 'retrieval', 'easing'];
 /** Rules whose multipliers are judgement calls and may be shrunk; quality and taste are evidence-based already. */
@@ -39,10 +40,11 @@ export function rulesOf(parts = {}) {
 const dkey = (userId, videoId) => `decision:${userId}:${videoId}`;
 
 /** Remembers why a video was served to a student (one day). */
-export async function noteDecision(userId, videoId, parts, { viewed = 0 } = {}) {
+export async function noteDecision(userId, videoId, parts, { viewed = 0, unit = null } = {}) {
   if (!parts) return;
-  await kv.set(dkey(userId, videoId), { rules: rulesOf(parts), viewed, at: Date.now() }, { ex: DECISION_TTL });
+  await kv.set(dkey(userId, videoId), { rules: rulesOf(parts), unit, viewed, at: Date.now() }, { ex: DECISION_TTL });
 }
+export const UNIT_LEADS = ['affinity-led', 'progress-led', 'review-led', 'explored', 'interest', 'breather'];
 
 const densityClass = (format) => ((FORMAT_VISUAL_DENSITY[format] ?? 0.5) >= 0.6 ? 'dense' : 'light');
 
@@ -60,6 +62,13 @@ export async function recordOutcome(userId, video, { pct = 0, early = false, pos
       const b = bucketOf(rule, decision.rules[rule]);
       if (!b) continue;
       const k = `calib:rule:${rule}:${b}`;
+      writes.push(kv.hincrby(k, 'n', 1), kv.hincrby(k, 'pctSum', p100));
+      if (early) writes.push(kv.hincrby(k, 'early', 1));
+      if (complete) writes.push(kv.hincrby(k, 'completes', 1));
+    }
+    // Stage one: which term chose the unit (affinity, syllabus progress, review, exploration…).
+    if (decision.unit?.lead && UNIT_LEADS.includes(decision.unit.lead)) {
+      const k = `calib:unit:${decision.unit.lead}`;
       writes.push(kv.hincrby(k, 'n', 1), kv.hincrby(k, 'pctSum', p100));
       if (early) writes.push(kv.hincrby(k, 'early', 1));
       if (complete) writes.push(kv.hincrby(k, 'completes', 1));
@@ -88,6 +97,7 @@ export async function recordQuizOutcome(userId, videoId, correct) {
     const b = bucketOf(rule, decision.rules[rule]);
     if (b) writes.push(kv.hincrby(`calib:rule:${rule}:${b}`, correct ? 'right' : 'wrong', 1));
   }
+  if (decision.unit?.lead && UNIT_LEADS.includes(decision.unit.lead)) writes.push(kv.hincrby(`calib:unit:${decision.unit.lead}`, correct ? 'right' : 'wrong', 1));
   return writes;
 }
 
@@ -128,7 +138,10 @@ export async function calibrationReport() {
   }
   const hours = [];
   for (let h = 0; h < 24; h++) { const r = row(await kv.hgetall(`calib:hour:${h}`)); hours.push({ hour: h, n: r.n, watch: r.watch, early: r.early }); }
-  return { rules, postures, hours, weights, at: new Date().toISOString() };
+  const units = [];
+  for (const lead of UNIT_LEADS) units.push({ lead, ...row(await kv.hgetall(`calib:unit:${lead}`)) });
+  const experiments = await experimentReport();
+  return { rules, postures, hours, units, experiments, weights, at: new Date().toISOString() };
 }
 
 /** Fits and stores the shrink weights (nightly). Returns them. */
@@ -152,6 +165,8 @@ export function calibrationRows(report) {
   const rows = [];
   for (const r of report.rules) rows.push({ 'Row': `${r.rule} · ${r.bucket}`, 'Kind': 'rule', 'Views': r.n, 'Mean watch': pct(r.watch), 'Early leaves': pct(r.early), 'Completion': pct(r.completion), 'Quiz accuracy': pct(r.accuracy), 'Lift vs flat': r.liftUp ?? r.liftDown ?? '', 'Weight': r.weight ?? '', 'Evidence': r.evidence, 'Updated': report.at.replace('T', ' ').slice(0, 19) });
   for (const p of report.postures) rows.push({ 'Row': `posture · ${p.posture} · ${p.density} formats`, 'Kind': 'posture', 'Views': p.n, 'Mean watch': pct(p.watch), 'Early leaves': pct(p.early), 'Completion': '', 'Quiz accuracy': '', 'Lift vs flat': '', 'Weight': '', 'Evidence': p.n >= MIN_N ? 'enough' : 'collecting', 'Updated': report.at.replace('T', ' ').slice(0, 19) });
+  for (const u of report.units || []) if (u.n) rows.push({ 'Row': `unit · ${u.lead}`, 'Kind': 'unit', 'Views': u.n, 'Mean watch': pct(u.watch), 'Early leaves': pct(u.early), 'Completion': pct(u.completion), 'Quiz accuracy': pct(u.accuracy), 'Lift vs flat': '', 'Weight': '', 'Evidence': u.n >= MIN_N ? 'enough' : 'collecting', 'Updated': report.at.replace('T', ' ').slice(0, 19) });
+  for (const e of report.experiments || []) rows.push({ 'Row': `experiment · ${e.name} · ${e.arm} (${Object.entries(e.settings).map(([k, v]) => `${k} ${v}`).join(', ')})`, 'Kind': 'experiment', 'Views': e.n, 'Mean watch': pct(e.watch), 'Early leaves': pct(e.early), 'Completion': e.perSession == null ? '' : `${e.perSession} lessons/session`, 'Quiz accuracy': e.days ? `${e.days} active days` : '', 'Lift vs flat': '', 'Weight': '', 'Evidence': e.n >= MIN_N ? 'enough' : 'collecting', 'Updated': report.at.replace('T', ' ').slice(0, 19) });
   for (const h of report.hours) if (h.n) rows.push({ 'Row': `hour · ${String(h.hour).padStart(2, '0')}:00 local`, 'Kind': 'hour', 'Views': h.n, 'Mean watch': pct(h.watch), 'Early leaves': pct(h.early), 'Completion': '', 'Quiz accuracy': '', 'Lift vs flat': '', 'Weight': '', 'Evidence': h.n >= MIN_N ? 'enough' : 'collecting', 'Updated': report.at.replace('T', ' ').slice(0, 19) });
   return rows;
 }
