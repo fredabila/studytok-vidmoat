@@ -425,6 +425,8 @@ function goTo(index, { animate = true } = {}) {
 
 function wireGestures() {
   const f = feedEl();
+  // Older Safari has no overflow: clip; undo any focus-driven scroll of the feed container.
+  f.addEventListener('scroll', () => { if (f.scrollTop || f.scrollLeft) { f.scrollTop = 0; f.scrollLeft = 0; } }, { passive: true });
   let start = null;
   let lastTap = 0;
   let tapTimer = null;
@@ -560,6 +562,211 @@ function addMomentSlide(data) {
   trackEl().insertBefore(node, feed.endEl);
   return item;
 }
+// ---------------------------------------------------------------------------- mini games
+// Games between lessons (server/feed/games.js), made from lessons the student has watched.
+// Answers are checked here for instant feedback; the result (which items were missed) goes to
+// the server, which updates those units' mastery and brings missed lessons back as recall cards.
+const shuffled = (a) => { const o = [...a]; for (let i = o.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [o[i], o[j]] = [o[j], o[i]]; } return o; };
+const bestKey = (type) => `st_best_${type}`;
+function addGameSlide(data, { at } = {}) {
+  const g = data.game;
+  const node = el('article', { class: 'slide moment-slide game-slide', 'data-theme': g.theme || 'sky', 'data-game': g.type });
+  const body = el('div', { class: 'g-body' });
+  const dots = el('div', { class: 'g-dots', 'aria-hidden': 'true' });
+  const card = el('div', { class: 'm-card g-card' },
+    el('div', { class: 'm-kicker' }, el('span', { class: 'm-emoji' }, g.emoji || '🎮'), el('span', {}, 'Game'), el('span', { class: 'm-from' }, `· ${g.title}`)),
+    el('h2', { class: 'm-title g-title' }, g.prompt || g.title),
+    el('p', { class: 'g-intro' }, g.unit ? `${g.intro} From “${g.unit}”.` : g.intro),
+    body, dots);
+  node.append(el('div', { class: 'stage m-stage g-stage' }, el('div', { class: 'm-bg', 'aria-hidden': 'true' }, el('i'), el('i'), el('i')), card));
+  const item = { data, el: node, moment: true, game: true, player: null, polling: false, viewSent: false, completed: false, watched: 0, lastTime: 0, answered: false, watch: null, shownAt: 0 };
+  const st = { wrong: new Set(), started: 0, done: false, timer: null, total: 0 };
+  const setDots = (n, i, results = []) => dots.replaceChildren(...Array.from({ length: n }, (_, k) => el('i', { class: results[k] === true ? 'ok' : results[k] === false ? 'bad' : k === i ? 'on' : '' })));
+  const clearTimer = () => { clearTimeout(st.timer); st.timer = null; };
+  const finish = () => {
+    if (st.done) return;
+    st.done = true; clearTimer();
+    const score = st.total - st.wrong.size;
+    const best = Number(store.get(bestKey(g.type))) || 0;
+    const pct = st.total ? score / st.total : 0;
+    const isBest = pct > 0 && Math.round(pct * 100) > best;
+    if (isBest) store.set(bestKey(g.type), String(Math.round(pct * 100)));
+    track('game_result', { id: g.id, game: g.type, score, total: st.total, wrong: [...st.wrong].join(','), ms: Date.now() - (st.started || Date.now()) });
+    const stars = score === st.total ? 3 : pct >= 0.6 ? 2 : 1;
+    body.replaceChildren(el('div', { class: 'g-result' },
+      svgEl(mascot(stars === 3 ? 'cheer' : stars === 2 ? 'happy' : 'think', 84)),
+      el('div', { class: 'g-stars', 'aria-label': `${stars} of 3 stars` }, '★'.repeat(stars), el('span', {}, '★'.repeat(3 - stars))),
+      el('p', { class: 'g-score' }, `${score} / ${st.total}`),
+      el('p', { class: 'muted' }, score === st.total ? 'Perfect. Those are yours.' : st.wrong.size === 1 ? 'One slipped. Its lesson will come back for review.' : 'The ones you missed will come back for review.'),
+      isBest ? el('span', { class: 'sbadge hot', style: '--r:-3deg' }, 'New best') : null,
+      el('div', { class: 'g-actions' },
+        el('button', { type: 'button', class: 'btn primary small', onclick: () => go(1) }, 'Next lesson'),
+        el('button', { type: 'button', class: 'btn ghost small', onclick: () => playGame(null) }, 'Another game'))));
+    dots.replaceChildren();
+    if (stars === 3) node.querySelector('.g-stage').append(el('div', { class: 'm-confetti', 'aria-hidden': 'true' }, ...Array.from({ length: 14 }, (_, i) => el('i', { style: `--n:${i}` }))));
+  };
+  const flash = (btn, cls) => { btn.classList.remove('ok', 'bad'); void btn.offsetWidth; btn.classList.add(cls); };
+  const renderers = {
+    match() {
+      st.total = g.pairs.length;
+      const lefts = shuffled(g.pairs.map((p, i) => ({ text: p.left, i }))), rights = shuffled(g.pairs.map((p, i) => ({ text: p.right, i })));
+      let sel = null, matched = 0;
+      const tile = (x, side) => {
+        const b = el('button', { type: 'button', class: `g-tile ${side}` }, x.text);
+        b.onclick = () => {
+          if (b.disabled) return;
+          if (!sel || sel.side === side) { $$('.g-tile.sel', body).forEach((t) => t.classList.remove('sel')); sel = { side, i: x.i, b }; b.classList.add('sel'); return; }
+          const left = side === 'l' ? x.i : sel.i;
+          if (sel.i === x.i) {
+            [b, sel.b].forEach((t) => { t.classList.remove('sel'); t.classList.add('ok'); t.disabled = true; });
+            matched++; setDots(st.total, -1, g.pairs.map((_, k) => ($$('.g-tile.l.ok', body).some((t) => t.dataset.i === String(k)) ? !st.wrong.has(k) : undefined)));
+            if (matched === st.total) setTimeout(finish, 450);
+          } else {
+            st.wrong.add(left);
+            [b, sel.b].forEach((t) => { t.classList.remove('sel'); flash(t, 'bad'); });
+          }
+          sel = null;
+        };
+        b.dataset.i = String(x.i);
+        return b;
+      };
+      body.replaceChildren(el('div', { class: 'g-cols' }, el('div', { class: 'g-col' }, ...lefts.map((x) => tile(x, 'l'))), el('div', { class: 'g-col' }, ...rights.map((x) => tile(x, 'r')))));
+      setDots(st.total, -1);
+    },
+    order() {
+      st.total = g.items.length;
+      let next = 0;
+      const placed = el('ol', { class: 'g-placed' });
+      const pool = el('div', { class: 'g-pool' });
+      for (const x of shuffled(g.items.map((it, i) => ({ ...it, i })))) {
+        const b = el('button', { type: 'button', class: 'g-tile' }, x.text);
+        b.onclick = () => {
+          if (x.i === next) {
+            b.remove();
+            placed.append(el('li', { class: st.wrong.has(x.i) ? 'late' : '' }, x.label ? el('b', {}, x.label) : null, x.text));
+            next++;
+            setDots(st.total, next, g.items.map((_, k) => (k < next ? !st.wrong.has(k) : undefined)));
+            if (next === st.total) setTimeout(finish, 450);
+          } else { st.wrong.add(next); flash(b, 'bad'); }
+        };
+        pool.append(b);
+      }
+      body.replaceChildren(placed, pool);
+      setDots(st.total, 0);
+    },
+    sort() {
+      st.total = g.chips.length;
+      let i = 0;
+      const counts = { L: 0, R: 0 };
+      const chip = el('div', { class: 'g-chip', 'aria-live': 'polite' });
+      const binL = el('button', { type: 'button', class: 'g-bin' }, el('b', {}, g.left), el('span', {}, '0'));
+      const binR = el('button', { type: 'button', class: 'g-bin' }, el('b', {}, g.right), el('span', {}, '0'));
+      const show = () => { chip.textContent = g.chips[i].text; chip.classList.remove('in'); void chip.offsetWidth; chip.classList.add('in'); };
+      const pick = (side, bin) => {
+        if (st.done || i >= st.total) return;
+        const ok = g.chips[i].side === side;
+        if (!ok) st.wrong.add(i);
+        counts[g.chips[i].side]++;
+        $('span', binL).textContent = String(counts.L); $('span', binR).textContent = String(counts.R);
+        flash(ok ? bin : (side === 'L' ? binL : binR), ok ? 'ok' : 'bad');
+        i++;
+        setDots(st.total, i, g.chips.map((_, k) => (k < i ? !st.wrong.has(k) : undefined)));
+        if (i === st.total) setTimeout(finish, 450); else setTimeout(show, 260);
+      };
+      binL.onclick = () => pick('L', binL); binR.onclick = () => pick('R', binR);
+      body.replaceChildren(chip, el('div', { class: 'g-bins' }, binL, binR));
+      show(); setDots(st.total, 0);
+    },
+    truefalse() {
+      st.total = g.statements.length;
+      let i = 0, answered = false;
+      const text = el('p', { class: 'g-statement' });
+      const bar = el('div', { class: 'g-timer' }, el('i'));
+      const why = el('p', { class: 'g-why', 'aria-live': 'polite' });
+      const yes = el('button', { type: 'button', class: 'g-tf yes' }, 'True');
+      const no = el('button', { type: 'button', class: 'g-tf no' }, 'False');
+      const answer = (val) => {
+        if (answered || st.done) return;
+        answered = true; clearTimer();
+        const s = g.statements[i];
+        const ok = val === s.truth;
+        if (!ok) st.wrong.add(i);
+        if (val != null) flash(val ? yes : no, ok ? 'ok' : 'bad');
+        why.textContent = `${ok ? '✓' : val == null ? '⏱ Time' : '✗'} ${s.truth ? 'True' : 'False'}${s.why ? `: ${s.why}` : '.'}`;
+        why.dataset.state = ok ? 'right' : 'wrong';
+        bar.classList.remove('run');
+        i++;
+        setDots(st.total, i, g.statements.map((_, k) => (k < i ? !st.wrong.has(k) : undefined)));
+        st.timer = setTimeout(() => (i === st.total ? finish() : show()), s.why ? 1500 : 900);
+      };
+      const show = () => {
+        answered = false; why.textContent = ''; delete why.dataset.state;
+        [yes, no].forEach((b) => b.classList.remove('ok', 'bad'));
+        text.textContent = g.statements[i].text;
+        bar.style.setProperty('--secs', `${g.seconds || 6}s`);
+        bar.classList.remove('run'); void bar.offsetWidth; bar.classList.add('run');
+        clearTimer(); st.timer = setTimeout(() => answer(null), (g.seconds || 6) * 1000);
+      };
+      yes.onclick = () => answer(true); no.onclick = () => answer(false);
+      body.replaceChildren(bar, text, el('div', { class: 'g-tfs' }, no, yes), why);
+      st.resume = () => { if (!st.done && i < st.total) show(); };
+      show(); setDots(st.total, 0);
+    },
+    fillgap() {
+      st.total = g.rounds.length;
+      let i = 0;
+      const sentence = el('p', { class: 'g-sentence' });
+      const opts = el('div', { class: 'g-opts' });
+      const show = () => {
+        const r = g.rounds[i];
+        const [before, after] = r.sentence.split('____');
+        sentence.replaceChildren(before, el('span', { class: 'g-blank' }, '?'), after ?? '');
+        opts.replaceChildren(...r.options.map((o, k) => {
+          const b = el('button', { type: 'button', class: 'g-tile' }, o);
+          b.onclick = () => {
+            if (opts.dataset.locked) return;
+            opts.dataset.locked = '1';
+            const ok = k === r.answerIndex;
+            if (!ok) st.wrong.add(i);
+            flash(b, ok ? 'ok' : 'bad');
+            if (!ok) $$('.g-tile', opts)[r.answerIndex].classList.add('ok');
+            $('.g-blank', sentence).textContent = r.options[r.answerIndex];
+            $('.g-blank', sentence).classList.add(ok ? 'ok' : 'bad');
+            i++;
+            setDots(st.total, i, g.rounds.map((_, kk) => (kk < i ? !st.wrong.has(kk) : undefined)));
+            st.timer = setTimeout(() => { delete opts.dataset.locked; i === st.total ? finish() : show(); }, 1300);
+          };
+          return b;
+        }));
+      };
+      body.replaceChildren(sentence, opts);
+      show(); setDots(st.total, 0);
+    },
+  };
+  item.onEnter = () => {
+    if (st.done) return;
+    if (!st.started) { st.started = Date.now(); (renderers[g.type] || renderers.match)(); } else st.resume?.();
+  };
+  item.onLeave = () => { clearTimer(); };
+  body.replaceChildren(el('p', { class: 'g-intro' }, 'Get ready…'));
+  ensureEndSlide();
+  if (at == null || at >= feed.items.length) { feed.items.push(item); trackEl().insertBefore(node, feed.endEl); }
+  else { feed.items.splice(at, 0, item); trackEl().insertBefore(node, feed.items[at + 1].el); }
+  return item;
+}
+/** A game on demand (Library › Practice games, or "Another game"), queued right after the current slide. */
+async function playGame(type) {
+  track('game_open', { game: type || 'any' });
+  let r;
+  try { r = await api('GET', `/api/games/next${type ? `?type=${type}` : ''}`); }
+  catch (err) { toast(err.status === 404 ? 'Watch a few more lessons first: games are made from what you have watched.' : "Couldn't start a game."); return; }
+  showView('feed');
+  const at = feed.active < 0 ? 0 : feed.active + 1;
+  addGameSlide(r.item, { at });
+  layout(false);
+  goTo(at);
+}
+
 // ---------------------------------------------------------------------------- recall cards
 // A quick check the student got wrong, back as a card (server/feed/recall.js). Right twice,
 // spaced out, retires it; wrong brings it back sooner. No video: the question is the lesson.
@@ -1113,6 +1320,7 @@ function activate(index) {
     prev.watch = null;
     prev.el.dataset.paused = 'false';
     if (prev.moment) prev.el.classList.remove('on');
+    prev.onLeave?.();
   }
   feed.active = index;
   feed.paused = false;
@@ -1124,6 +1332,7 @@ function activate(index) {
     if (item.player?.loaded) item.player.seek(0);
     if (view === 'feed' && !item.moment) history.replaceState(null, '', `#v=${item.data.id}`);
     if (item.moment) requestAnimationFrame(() => item.el.classList.add('on')); // (re)start its animation
+    if (item.onEnter) setTimeout(() => { if (feed.items[feed.active] === item) item.onEnter(); }, 350);
     clearTimeout(activate.viewTimer);
     activate.viewTimer = setTimeout(() => {
       markViewed(item);
@@ -1139,6 +1348,7 @@ function markViewed(item) {
   if (feed.items[feed.active] !== item || item.viewSent || item.data.status !== 'ready') return;
   item.viewSent = true;
   if (item.recall) { track('recall_view', { id: item.data.recall.videoId }); return; }
+  if (item.game) { track('game_view', { id: item.data.game.id, game: item.data.game.type }); return; }
   if (item.gaps) sendEvent(item.data.id, 'gaps_on', { auto: playPref('gaps') === 'review' });
   if (item.moment) { track('moment_view', { id: item.data.moment.id, kind: item.data.moment.type }); return; }
   nthVideo++;
@@ -1155,7 +1365,7 @@ async function loadMore(count = 3) {
     const t0 = Date.now();
     const { items, credits } = await api('GET', `/api/feed?count=${count}`);
     track('load_more', { count: items.length, ms: Date.now() - t0, ready: items.filter((d) => d.status === 'ready').length, generating: items.filter((d) => d.status === 'generating').length });
-    items.filter((d) => !feed.items.some((it) => it.data.id === d.id)).forEach((d) => (d.kind === 'moment' ? addMomentSlide(d) : d.kind === 'recall' ? addRecallSlide(d) : addSlide(d)));
+    items.filter((d) => !feed.items.some((it) => it.data.id === d.id)).forEach((d) => (d.kind === 'moment' ? addMomentSlide(d) : d.kind === 'recall' ? addRecallSlide(d) : d.kind === 'game' ? addGameSlide(d) : addSlide(d)));
     noteCredits(credits);
     if (wasOnEnd && feed.items.length > before) { feed.active = -1; activate(before); }
     layout(false);
@@ -1481,6 +1691,13 @@ async function showLibrary() {
       el('div', {}, el('h3', {}, `${due} question${due > 1 ? 's' : ''} to fix`), el('p', {}, 'Quick checks you got wrong. Get each one right twice and it is yours for good.')),
       el('button', { type: 'button', class: 'btn small primary', onclick: () => fixMisses(lib.misses) }, 'Fix them now')));
   }
+  const GAMES = [['match', '🧩', 'Match it'], ['order', '🔢', 'Put it in order'], ['sort', '🗂️', 'Sort it'], ['truefalse', '⚡', 'True or false'], ['fillgap', '✍️', 'Fill the gap']];
+  const ready = new Set(lib.games || []);
+  course.append(el('div', { class: 'card games-card search-hide' }, el('h3', {}, 'Practice games'),
+    el('p', { class: 'muted' }, ready.size ? 'Quick games made from lessons you have watched. What you miss comes back for review.' : 'Watch a few lessons and games made from them unlock here.'),
+    el('div', { class: 'games-grid' }, ...GAMES.map(([type, emoji, label]) => el('button', { type: 'button', class: 'game-btn', disabled: !ready.has(type), onclick: () => playGame(type) },
+      el('span', { class: 'game-emoji' }, emoji), el('b', {}, label),
+      el('small', {}, ready.has(type) ? (Number(store.get(`st_best_${type}`)) ? `Best ${store.get(`st_best_${type}`)}%` : 'Play') : 'Locked'))))));
   const recap = recapCard(stats);
   if (recap && stats?.week) course.append(Object.assign(recap, { className: `${recap.className} search-hide` }));
   if (!lib.units.length) {

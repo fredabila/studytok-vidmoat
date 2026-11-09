@@ -161,6 +161,25 @@ The first card of a visit can be an *opener* (`moments.js openerMoment`), at mos
 Openers bypass the moment pacing (they are the start of the visit) and do not count against
 the day's quota.
 
+## Mini games (`feed/games.js`)
+
+Five games built from lessons the student has already watched, so each is retrieval practice
+on their own material and costs nothing to make: **Match it** (a term and its meaning, from
+definitions and flashcards), **Put it in order** (step lists, timelines oldest first, cycles,
+worked-example steps), **Sort it** (each chip to its side of a compare table), **True or
+false?** (six seconds per statement, from true/false cards, myths and facts) and **Fill the
+gap** (the lesson's own sentence with its key term blanked, two distractors from other lessons).
+
+* **Pacing**: never before the fifth lesson of a session, then one every seven lessons at most
+  and four a day, not the same kind twice running. A game takes the second slot when no recall
+  card did, and a moment waits for the next page.
+* **Results**: the app checks answers on the device; the server kept which lesson each scored
+  item came from (`game:{id}`, two days, one result per game). Each unit behind the game counts
+  one quick-check answer (right only if every item from it was right), so games move mastery and
+  the spaced-repetition boxes, and up to two missed lessons come back as recall cards.
+* **On demand**: Library › Practice games lists the kinds the student's history can make
+  (`GET /api/games/next?type=`), with their best score per kind on the device.
+
 ## Moments
 
 Between lessons, every so often, the feed shows a *moment*: an animated card from Noti with a
