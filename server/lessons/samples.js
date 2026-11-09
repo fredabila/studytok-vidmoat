@@ -367,4 +367,103 @@ export const SAMPLES = {
     takeaway: 'Four myths down.', beats: [], myth: '', fact: '', items: [], exam: { question: '', options: [], answerIndex: 0, steps: [], mistake: '', tip: '' }, chat: { contact: '', messages: [] },
     quiz: { question: '', options: [], answerIndex: 0, explanation: '' },
   },
+  // ---- third-wave formats ----
+  detective: {
+    format: 'detective', subtopic: 'Seatbelts and inertia', title: 'The case of the sudden stop', hook: 'Why do passengers lurch forward when a bus brakes?', hookTerm: 'lurch forward',
+    ambient: 'bus interior city',
+    beats: [
+      { text: 'Clue one: before braking, you and the bus were moving forward at the same speed.', keyTerm: 'Same speed', visual: { kind: 'footage', query: 'bus driving city street', title: '', items: [], value: 0, unit: '', svg: '' } },
+      { text: 'Clue two: the brakes push on the bus, not on you.', keyTerm: 'Force on the bus', visual: { kind: 'compare', title: 'Bus|You', items: ['Brakes act|No force yet', 'Slows down|Keeps going'], query: '', value: 0, unit: '', svg: '' } },
+      { text: 'Clue three: an object keeps its motion unless a force acts on it.', keyTerm: 'Inertia', visual: { kind: 'definition', title: 'Inertia', items: ['The tendency of an object to keep its state of motion.'], query: '', value: 0, unit: '', svg: '' } },
+    ],
+    fact: 'Your body keeps moving forward while the bus slows beneath you',
+    quiz: { question: 'Why does a cup slide forward on a braking train table?', options: ['The train pushes it', 'It keeps moving forward', 'Air pushes it'], answerIndex: 1, explanation: 'The cup keeps its motion while the train slows.' },
+    takeaway: 'Nothing pushes you forward: you just keep going.', myth: '', items: [], cards: [], exam: { question: '', options: [], answerIndex: 0, steps: [], mistake: '', tip: '' }, chat: { contact: '', messages: [] },
+  },
+  teachback: {
+    format: 'teachback', subtopic: 'Newton’s second law', title: 'Explain F = ma in one sentence', hook: 'In 40 seconds you will be able to explain F = ma', hookTerm: 'F = ma',
+    ambient: 'pushing shopping trolley',
+    beats: [
+      { text: 'A bigger push makes a trolley speed up faster.', keyTerm: 'More force', visual: { kind: 'footage', query: 'pushing shopping trolley', title: '', items: [], value: 0, unit: '', svg: '' } },
+      { text: 'A heavier trolley speeds up more slowly for the same push.', keyTerm: 'More mass', visual: { kind: 'equation', title: 'Force equals mass times acceleration', items: ['F = m × a', 'a = F ÷ m'], query: '', value: 0, unit: '', svg: '' } },
+    ],
+    fact: 'Acceleration grows with force and shrinks with mass',
+    quiz: { question: 'Double the mass, same push: what happens to the acceleration?', options: ['It doubles', 'It halves', 'It stays the same'], answerIndex: 1, explanation: 'a = F ÷ m, so doubling m halves a.' },
+    takeaway: 'Push harder, go faster; heavier, go slower.', myth: '', items: [], cards: [], exam: { question: '', options: [], answerIndex: 0, steps: [], mistake: '', tip: '' }, chat: { contact: '', messages: [] },
+  },
+  numbers: {
+    format: 'numbers', subtopic: 'Speeds in physics', title: 'Speed, by the numbers', hook: 'How fast are you moving right now?', hookTerm: 'How fast',
+    ambient: 'earth from space',
+    beats: [
+      { text: 'Earth spins you round at about 1,670 kilometres an hour at the equator.', keyTerm: 'Spin', visual: { kind: 'stat', title: 'Equator spin speed', items: [], value: 1670, unit: ' km/h', query: '', svg: '' } },
+      { text: 'Earth orbits the Sun at about 107,000 kilometres an hour.', keyTerm: 'Orbit', visual: { kind: 'stat', title: 'Orbital speed', items: [], value: 107000, unit: ' km/h', query: '', svg: '' } },
+      { text: 'Compared with a sprinter or a jet, those speeds are enormous.', keyTerm: 'For scale', visual: { kind: 'bars', title: 'Top speeds in km/h', items: ['Sprinter|44', 'Cheetah|110', 'Jet|900'], query: '', value: 0, unit: '', svg: '' } },
+    ],
+    quiz: { question: 'Roughly how fast does Earth orbit the Sun?', options: ['1,670 km/h', '107,000 km/h', '900 km/h'], answerIndex: 1, explanation: 'About 30 km every second.' },
+    takeaway: 'Standing still is never really still.', myth: '', fact: '', items: [], cards: [], exam: { question: '', options: [], answerIndex: 0, steps: [], mistake: '', tip: '' }, chat: { contact: '', messages: [] },
+  },
+  zoom: {
+    format: 'zoom', subtopic: 'Friction up close', title: 'Zoom into friction', hook: 'Zoom in on two "smooth" surfaces', hookTerm: 'Zoom in',
+    ambient: 'microscope surface texture',
+    beats: [
+      { text: 'A polished table looks perfectly smooth to your eye.', keyTerm: 'Your eye', visual: { kind: 'photo', query: 'polished wooden table', title: '', items: [], value: 0, unit: '', svg: '' } },
+      { text: 'Under a microscope the surface is full of bumps and dips.', keyTerm: '×100', visual: { kind: 'footage', query: 'microscope rough surface', title: '', items: [], value: 0, unit: '', svg: '' } },
+      { text: 'Those bumps catch on each other, and that resistance is friction.', keyTerm: 'Friction', visual: { kind: 'definition', title: 'Friction', items: ['A force that opposes sliding between two surfaces in contact.'], query: '', value: 0, unit: '', svg: '' } },
+    ],
+    quiz: { question: 'What causes friction between two surfaces?', options: ['Tiny bumps catching', 'Magnetism', 'Air pressure'], answerIndex: 0, explanation: 'Microscopic roughness resists sliding.' },
+    takeaway: 'Smooth is only smooth from far away.', myth: '', fact: '', items: [], cards: [], exam: { question: '', options: [], answerIndex: 0, steps: [], mistake: '', tip: '' }, chat: { contact: '', messages: [] },
+  },
+  interview: {
+    format: 'interview', subtopic: 'Gravity', title: 'An interview with gravity', hook: 'Gravity, why do you never take a day off?', hookTerm: 'Gravity',
+    ambient: 'falling apple tree',
+    chat: {
+      contact: 'Gravity',
+      messages: [
+        'Gravity, why do you never take a day off?',
+        'Because every bit of mass pulls on every other bit, all the time.',
+        'So you pull on me and I pull on Earth?',
+        'Exactly, with equal force; Earth just has far more mass, so you move, not it.',
+        'And on the Moon you are weaker?',
+        'There I pull about a sixth as hard, so you would weigh much less.',
+      ],
+    },
+    quiz: { question: 'Why do you fall towards Earth, not Earth towards you?', options: ['Earth pulls harder', 'Earth has far more mass', 'You have no mass'], answerIndex: 1, explanation: 'Equal forces, but Earth’s huge mass barely accelerates.' },
+    takeaway: 'Gravity is a two-way pull between masses.', beats: [], myth: '', fact: '', items: [], cards: [], exam: { question: '', options: [], answerIndex: 0, steps: [], mistake: '', tip: '' },
+  },
+  debate: {
+    format: 'debate', subtopic: 'Town speed limits', title: 'Should speed limits be lower in towns?', hook: 'Should town speed limits drop to 30?', hookTerm: '30',
+    ambient: 'town street traffic',
+    beats: [
+      { text: 'For: stopping distance grows fast with speed, so slower cars stop in time.', keyTerm: 'Stopping distance', visual: { kind: 'bars', title: 'Stopping distance in metres', items: ['30 km/h|13', '50 km/h|25'], query: '', value: 0, unit: '', svg: '' } },
+      { text: 'Against: journeys take longer, which costs people time every day.', keyTerm: 'Journey time', visual: { kind: 'footage', query: 'traffic jam city', title: '', items: [], value: 0, unit: '', svg: '' } },
+      { text: 'For: a crash at lower speed carries far less kinetic energy.', keyTerm: 'Kinetic energy', visual: { kind: 'equation', title: 'Energy grows with the square of speed', items: ['KE = ½ m v²'], query: '', value: 0, unit: '', svg: '' } },
+      { text: 'Against: on wide, empty roads a lower limit may add little safety.', keyTerm: 'Road design', visual: { kind: 'footage', query: 'wide empty road', title: '', items: [], value: 0, unit: '', svg: '' } },
+    ],
+    fact: 'Lower limits save lives most on busy streets with people walking',
+    quiz: { question: 'Why does halving speed cut crash energy by about three quarters?', options: ['Energy depends on v²', 'Mass halves too', 'Friction doubles'], answerIndex: 0, explanation: 'KE = ½ m v², so half the speed gives a quarter of the energy.' },
+    takeaway: 'Speed’s square is what makes crashes deadly.', myth: '', items: [], cards: [], exam: { question: '', options: [], answerIndex: 0, steps: [], mistake: '', tip: '' }, chat: { contact: '', messages: [] },
+  },
+  connect: {
+    format: 'connect', subtopic: 'Momentum everywhere', title: 'What do footballs and rockets share?', hook: 'What do a football and a rocket have in common?', hookTerm: 'in common',
+    ambient: 'rocket launch',
+    beats: [
+      { text: 'Here: a kicked ball moves off because momentum passes from foot to ball.', keyTerm: 'Momentum', visual: { kind: 'footage', query: 'football kick slow motion', title: '', items: [], value: 0, unit: '', svg: '' } },
+      { text: 'Also here: a rocket pushes gas down, and the gas pushes the rocket up.', keyTerm: 'Rockets', visual: { kind: 'footage', query: 'rocket launch', title: '', items: [], value: 0, unit: '', svg: '' } },
+      { text: 'The link: in every push, the total momentum before equals the total after.', keyTerm: 'Conservation', visual: { kind: 'compare', title: 'Football|Rocket', items: ['Foot pushes ball|Rocket pushes gas', 'Ball gains momentum|Rocket gains momentum'], query: '', value: 0, unit: '', svg: '' } },
+    ],
+    quiz: { question: 'What stays the same before and after a push?', options: ['Total speed', 'Total momentum', 'Total mass moving'], answerIndex: 1, explanation: 'Momentum is conserved in every interaction.' },
+    takeaway: 'Every push trades momentum, from feet to rockets.', myth: '', fact: '', items: [], cards: [], exam: { question: '', options: [], answerIndex: 0, steps: [], mistake: '', tip: '' }, chat: { contact: '', messages: [] },
+  },
+  howto: {
+    format: 'howto', subtopic: 'Resultant force', title: 'How to find a resultant force', hook: 'How to find a resultant force in 4 steps', hookTerm: '4 steps',
+    ambient: 'tug of war rope',
+    items: [
+      { title: 'Step 1: draw the forces', text: 'Draw every force on the object as an arrow from its centre.', visual: 'drawing arrows paper' },
+      { title: 'Step 2: pick a direction', text: 'Choose one direction as positive, usually right or up.', visual: 'pointing direction arrow' },
+      { title: 'Step 3: add with signs', text: 'Add forces in that direction and subtract forces against it.', visual: 'calculator homework' },
+      { title: 'Step 4: state the answer', text: 'Give the size and the direction, with newtons as the unit.', visual: 'student writing answer' },
+    ],
+    quiz: { question: '10 N right and 4 N left: what is the resultant?', options: ['14 N right', '6 N right', '6 N left'], answerIndex: 1, explanation: '10 − 4 = 6 N, towards the bigger force.' },
+    takeaway: 'Arrows, a direction, add with signs, then say which way.', beats: [], myth: '', fact: '', cards: [], exam: { question: '', options: [], answerIndex: 0, steps: [], mistake: '', tip: '' }, chat: { contact: '', messages: [] },
+  },
 };

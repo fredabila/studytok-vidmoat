@@ -91,6 +91,27 @@ const plural = (n, w) => `${n} ${w}${n === 1 ? '' : 's'}`;
 const STALE_MS = 12 * 3600000; // a session older than this is over: the next page opens a new visit
 
 /**
+ * Looking after the student: after 40 minutes in one sitting an under-18 is told to rest their
+ * eyes, and anyone still going late at night is told that sleep is when memory consolidates.
+ * Once a session, ahead of any other moment, never counted against the day's quota. The streak
+ * is safe either way: the point is to come back tomorrow, not to stay.
+ */
+export const BREAK_AFTER_MS = 40 * 60 * 1000;
+export function careMoment({ session = {}, ctx = {}, now = Date.now(), mark = {} } = {}) {
+  const started = session.startedAt || 0;
+  if (!started || now - started < BREAK_AFTER_MS || (session.sid && mark.careSid === session.sid)) return null;
+  if (session.night) {
+    return { id: 'care-sleep', type: 'tip', theme: 'grape', emoji: '🌙', mood: 'sleepy', care: true,
+      title: 'Sleep is part of studying', lines: ['Your brain files today\'s lessons while you sleep.', 'Stopping now helps them stick.', 'Your streak is safe. See you tomorrow.'],
+      cta: { label: 'One more, then sleep', action: 'feed' } };
+  }
+  if (!ctx.minor) return null;
+  return { id: 'care-break', type: 'tip', theme: 'mint', emoji: '🌿', mood: 'sleepy', care: true,
+    title: 'Time for a short break', lines: [`That's ${Math.round((now - started) / 60000)} minutes of learning. Nice.`, 'Rest your eyes for five minutes.', 'A break helps it sink in.'],
+    cta: { label: 'Back to learning', action: 'feed' } };
+}
+
+/**
  * The card that opens a visit, when there is something worth saying: welcome back after days
  * away, what happened last time, or the exam countdown. At most one a day, in the first slot.
  */
@@ -133,6 +154,7 @@ export function momentContext({ user = {}, signals = {}, saved = 0, watched = 0,
   const freeTotal = config.billing?.freeVideos || 0;
   return {
     user, signals, saved, watched, invites, pushEnabled, pushSubscribed,
+    minor: user.profile?.age != null && user.profile.age < 18,
     device: signals.device || {},
     customUnits: (user.units || []).some((id) => String(id).startsWith('cu:')),
     lessTaps: Object.values(signals.topics || {}).reduce((n, t) => n + (t?.less || 0), 0),
@@ -183,6 +205,8 @@ export async function pickMoment(userId, { session = {}, ctx, now = Date.now(), 
   if (hasBreather || !ctx) return null;
   const viewed = session.viewed || 0;
   const mark = (await kv.get(`user:${userId}:moments`)) || { seen: {}, at: -GAP, day: '', today: 0 };
+  const care = careMoment({ session, ctx, now, mark });
+  if (care) return care;
   const opener = stats ? openerMoment({ session, signals: ctx.signals, stats, exam, now, mark }) : null;
   if (opener) return opener;
   // A stale session is over: the new visit starts counting from zero, like the events will.
@@ -199,8 +223,9 @@ export async function pickMoment(userId, { session = {}, ctx, now = Date.now(), 
 }
 
 /** Records that a moment was served at `viewed` lessons into the session. */
-export async function noteMoment(userId, m, viewed = 0, now = Date.now()) {
+export async function noteMoment(userId, m, viewed = 0, now = Date.now(), { sid = '' } = {}) {
   const mark = (await kv.get(`user:${userId}:moments`)) || { seen: {} };
+  if (m.care) { await kv.set(`user:${userId}:moments`, { ...mark, careSid: sid || `t${now}` }); return; } // once a session
   if (m.opener) { // openers do not count against the day's quota or the gap
     await kv.set(`user:${userId}:moments`, { ...mark, openerDay: dayOf(now), ...(m.examMark ? { examAt: now } : {}) });
     return;

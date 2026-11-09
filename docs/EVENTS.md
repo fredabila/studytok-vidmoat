@@ -101,6 +101,9 @@ Every `leave` and `quiz_answer` is also joined to the decision that served the v
 | `search_submit` / `search_pick` | `q`, `results`, `where` / `type`, `value` | ran a search / picked a typeahead suggestion |
 | `settings_open` | `card` | opened a settings row on the Profile tab |
 | `more_open` | | opened the ⋯ menu on a lesson (why, notes, show less, tune, the course) |
+| `channel_avatar` | `handle`, `outcome` set/rejected/error | the student who brought a course changed its picture |
+| `goal_reached` | `goal` | the daily goal was reached |
+| `upnext_shown` / `upnext_tap` | | the "Up next" line near the end of a lesson was shown / tapped |
 | `channel_search` | `q`, `results` | searched course profiles (Explore, or adding a topic that already exists) |
 | `unit_toggle` | `unitId`, `on` | ticked / unticked a unit in the Library |
 | `library_open` | `tab` course/saved/history | Library tab |

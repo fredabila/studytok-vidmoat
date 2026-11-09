@@ -79,6 +79,10 @@ course (one StudyGraph researched for your school) or add your own topic, you pi
 If the course or topic is already on StudyGraph, you follow the existing one instead, so
 everyone studying it shares the same lessons.
 
+**Can I add a picture to my course?** If you brought the course, yes: open its profile and
+tap *Add a picture*. Pictures are checked before anyone sees them: use a logo, drawing, object
+or scene, not a photo of a person.
+
 **Can I change a handle?** If you brought the course, yes: open its profile and tap *Change
 handle* (up to three times a month). Followers and lessons stay, and links to the old handle
 keep working: they open the new one. Official courses keep their handle.

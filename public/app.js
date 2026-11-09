@@ -578,6 +578,7 @@ function addSlide(data, { at } = {}) {
   $('.share', node).onclick = () => shareLesson(item);
   wireChannelChip(item);
   $('.more', node).onclick = () => openMore(item);
+  $('.up-next', node).onclick = () => { track('upnext_tap', { videoId: item.data.id }); go(1); };
   if (data.status === 'generating') poll(item);
   return item;
 }
@@ -909,6 +910,10 @@ function renderSlide(item) {
   $('.unit-text', node).textContent = unitLabel(d) + (d.subtopic ? ` · ${d.subtopic}` : '');
   $('.title', node).textContent = d.title || '';
   renderChannelChip(item);
+  // Social proof, only from real counts and only once it means something.
+  const proof = $('.proof', node);
+  proof.hidden = !(d.views >= 25);
+  proof.textContent = d.views >= 25 ? `👀 ${fmtCount(d.views)} students learned this` : '';
   $('.fmt-badge', node).textContent = d.status === 'ready' && d.format?.tag ? d.format.tag : '';
   $('.like .count', node).textContent = String(d.likes || 0);
   $('.like', node).setAttribute('aria-pressed', String(!!d.liked));
@@ -1201,6 +1206,8 @@ function onState(item, time, playing, duration) {
     $('.quiz', item.el).dataset.held = 'true';
     return;
   }
+  // An open loop: near the end, a line from the next lesson (curiosity pulls the swipe; nothing autoplays).
+  if (isActive && duration && !item.teased && time >= duration * 0.72 && (!q || item.answered || time > (q.reveal ?? 0) + 1)) showUpNext(item);
   if (duration && time >= duration - 0.15 && isActive) {
     if (!item.completed) { item.completed = true; sendEvent(item.data.id, 'complete'); }
     item.lastTime = 0;
@@ -1279,6 +1286,7 @@ function answer(item, i) {
     b.classList.toggle('wrong', k === i && !correct);
   });
   $('.quiz-feedback', box).textContent = correct ? 'Correct! 🎉' : `Not quite: it's ${'ABC'[q.answerIndex]}. We'll bring this back for review.`;
+  if (correct) showMastery(item);
   sendEvent(item.data.id, 'quiz_answer', { correct, choice: i, ms: Date.now() - (item.heldAt || item.quizShownAt || Date.now()) });
   if (item.held && item.el.dataset.loaded === 'true') stampAnswer(item, i, correct);
   setTimeout(() => release(item), 700);
@@ -1380,6 +1388,7 @@ async function closeSheet() {
 
 // ---------------------------------------------------------------------------- activation & paging
 function activate(index) {
+  feed.items.forEach((it, i) => { if (i !== index && it.teased) { it.teased = false; const u = it.el && $('.up-next', it.el); if (u) u.hidden = true; } });
   if (index === feed.active) return;
   const prev = feed.items[feed.active];
   const dir = index > feed.active ? 'next' : 'prev';
@@ -1421,6 +1430,54 @@ function markViewed(item) {
   if (item.moment) { track('moment_view', { id: item.data.moment.id, kind: item.data.moment.type }); return; }
   nthVideo++;
   sendEvent(item.data.id, 'view', { nth: nthVideo, format: item.data.format?.id, source: item.source || 'feed' });
+  bumpGoal();
+}
+
+// ---- engagement that serves learning: a visible daily goal, the next lesson's hook, progress after a quiz ----
+/** The daily goal ring in the feed header (stats.today of stats.goal, from /api/me; counted up locally). */
+function renderGoalPill() {
+  const pill = $('#goal-pill');
+  const s = me?.stats;
+  if (!pill || !s) return;
+  const goal = s.goal || 3, n = s.today || 0;
+  pill.hidden = false;
+  pill.classList.toggle('done', n >= goal);
+  $('.gp-fill', pill).style.strokeDashoffset = String(100 - Math.min(100, (n / goal) * 100));
+  $('.gp-n', pill).textContent = n >= goal ? `${n} ✓` : `${n}/${goal}`;
+  pill.setAttribute('aria-label', n >= goal ? `Daily goal done: ${n} lessons today` : `Today: ${n} of ${goal} lessons`);
+}
+function bumpGoal() {
+  if (!me?.stats) return;
+  const goal = me.stats.goal || 3;
+  const before = me.stats.today || 0;
+  me.stats.today = before + 1;
+  renderGoalPill();
+  if (before < goal && me.stats.today >= goal) { track('goal_reached', { goal }); levelUp([{ kind: 'goal', goal, streak: me.stats.streak || 0 }]); }
+}
+
+/** "Up next: <the next lesson's hook>" near the end of a lesson. */
+function showUpNext(item) {
+  item.teased = true;
+  const next = feed.items[feed.active + 1];
+  if (!next) return;
+  const d = next.data || {};
+  const text = next.game ? 'A quick game from what you just watched 🎮' : next.recall ? 'One you missed earlier. Can you get it now?' : next.moment ? null : d.status === 'ready' ? (d.hook || d.title) : null;
+  if (!text) return;
+  const box = $('.up-next', item.el);
+  $('.un-t', box).textContent = text;
+  box.hidden = false;
+  track('upnext_shown', { videoId: item.data.id });
+}
+
+/** After a right answer: how close the unit is to mastered (from the viewer's mastery before this lesson). */
+function showMastery(item) {
+  const d = item.data;
+  if (d.mastery == null || !d.unit?.title) return;
+  const after = Math.min(1, d.mastery + 0.12);
+  const bar = el('span', { class: 'mp-bar' }, el('i', { style: `width:${Math.round(d.mastery * 100)}%` }));
+  const pill = el('p', { class: 'mastery-pill' }, el('span', { class: 'mp-label' }, after >= 0.7 ? `${d.unit.title} · nearly mastered` : `${d.unit.title} · getting stronger`), bar);
+  $('.quiz', item.el).append(pill);
+  requestAnimationFrame(() => requestAnimationFrame(() => { $('i', bar).style.width = `${Math.round(after * 100)}%`; }));
 }
 
 async function loadMore(count = 3) {
@@ -1592,8 +1649,18 @@ function nextBurst() {
   const item = burstQueue.shift();
   if (!item) { bursting = false; return; }
   bursting = true;
-  track('level_up', { unitId: item.unitId });
   const host = $('#burst');
+  if (item.kind === 'goal') {
+    const card = el('div', { class: 'burst-card' }, svgEl(mascot('cheer', 96)), el('b', {}, 'Daily goal done!'),
+      el('span', {}, `${item.goal} lessons today. Anything more is a bonus.`), item.streak >= 2 ? sbadge(`🔥 ${item.streak}-day streak`, { hot: true, r: 2 }) : null,
+      el('div', { class: 'burst-actions' }, el('button', { type: 'button', class: 'btn ghost small', onclick: () => close() }, 'Keep going')));
+    const close = () => { card.classList.add('leaving'); setTimeout(() => { host.hidden = true; nextBurst(); }, 420); };
+    host.replaceChildren(card);
+    host.hidden = false;
+    setTimeout(close, 3500);
+    return;
+  }
+  track('level_up', { unitId: item.unitId });
   const colors = ['#ffd93d', '#ff6b6b', '#34d399', '#8fc1ff', '#f472b6', '#141414'];
   const confetti = Array.from({ length: 26 }, (_, i) => {
     const a = (i / 26) * Math.PI * 2, r = 140 + Math.random() * 160;
@@ -1927,7 +1994,7 @@ function courseChip(c) {
     btn.disabled = false;
   };
   return el('article', { class: 'x-course', style: `--accent:${c.topic?.accent || '#ffe580'}`, tabindex: '0', onclick: () => { track('explore_course_open', { handle: c.handle, where: 'row' }); openChannel(c.handle, { source: 'explore' }); } },
-    el('div', { class: 'x-course-av', 'aria-hidden': 'true' }, c.topic?.emoji || '📚'),
+    el('div', { class: 'x-course-av', 'aria-hidden': 'true' }, face(c)),
     el('strong', {}, c.name), el('small', {}, `@${c.handle}`),
     el('small', { class: 'x-course-n' }, `${fmtCount(c.lessons)} lessons · ${fmtCount(c.followers)} follower${c.followers === 1 ? '' : 's'}`),
     c.why ? el('small', { class: 'x-course-why' }, c.why) : null, btn);
@@ -1997,8 +2064,9 @@ async function showSuggestions() {
       : s.type === 'topic' ? [s.emoji, s.label, 'Topic', () => { $('#explore-search').value = ''; xp.q = ''; xp.topic = s.id; hideSuggestions(); renderExplore(); }]
       : s.type === 'pack' ? ['📘', s.title, 'Community pack', () => openPack(s.slug)]
       : ['🔍', s.text, 'Popular search', () => submitSearch(s.text, 'suggest')];
+    const iconEl = s.type === 'course' && s.avatar ? el('img', { src: s.avatar, alt: '', class: 'face-img' }) : icon;
     return el('button', { type: 'button', class: 'x-sg-row x-sg-main', role: 'option', onclick: () => { track('search_pick', { type: s.type, value: (s.handle || s.id || s.slug || s.text || '').slice(0, 60) }); if (s.type !== 'query') rememberSearch(q); hideSuggestions(); act(); } },
-      el('span', { class: 'x-sg-ic' }, icon), el('span', { class: 'x-sg-text' }, el('span', {}, label), el('small', {}, sub)));
+      el('span', { class: 'x-sg-ic' }, iconEl), el('span', { class: 'x-sg-text' }, el('span', {}, label), el('small', {}, sub)));
   });
   box.replaceChildren(...rows, el('button', { type: 'button', class: 'x-sg-row x-sg-main x-sg-all', onclick: () => submitSearch(q, 'enter') }, el('span', { class: 'x-sg-ic' }, '🔍'), el('span', {}, `Search for "${q.slice(0, 40)}"`)));
   box.hidden = false;
@@ -2345,6 +2413,7 @@ function showView(next) {
   $$('.view').forEach((v) => { v.hidden = v.dataset.view !== next; });
   $$('.tabbtn').forEach((t, i) => { t.setAttribute('aria-current', t.dataset.tab === next ? 'page' : 'false'); if (t.dataset.tab === next) $('.tab-blob').style.setProperty('--tab', String(i)); });
   if (next === 'feed') {
+    renderGoalPill();
     layout(false);
     syncPlayers();
     const item = feed.items[feed.active];
@@ -2354,7 +2423,7 @@ function showView(next) {
     history.replaceState(null, '', `#${next}`);
     // Fresh numbers for the stickers and tiles: send pending events, then re-read the profile.
     flush();
-    const refresh = api('GET', '/api/me').then((r) => { me = { ...r.user, billing: r.user.billing || me?.billing }; }).catch(() => {});
+    const refresh = api('GET', '/api/me').then((r) => { me = { ...r.user, billing: r.user.billing || me?.billing }; renderGoalPill(); }).catch(() => {});
     if (next === 'library') { track('library_open', { tab: 'course' }); refresh.then(() => showLibrary()).catch(() => toast("Couldn't load your library.")); }
     if (next === 'profile') { track('profile_open'); renderProfile(); refresh.then(renderProfile); }
     if (next === 'explore') { track('explore_open'); refresh.then(() => renderExplore()).catch(() => renderExplore()); }
@@ -2721,6 +2790,11 @@ async function setFollow(handle, on, { source = 'app' } = {}) {
   return res;
 }
 
+/** A course's face: its picture when it has one, else its topic emoji. */
+function face(c, emoji) {
+  return c?.avatar ? el('img', { src: c.avatar, alt: '', loading: 'lazy', decoding: 'async', class: 'face-img' }) : document.createTextNode(emoji || c?.topic?.emoji || '📚');
+}
+
 /** The course avatar on a lesson's rail (like a creator's picture): its topic, a + until followed. */
 function renderChannelChip(item) {
   const av = $('.rail-av', item.el);
@@ -2729,7 +2803,7 @@ function renderChannelChip(item) {
   av.hidden = !ch;
   if (!ch) return;
   const topic = item.data.topic || {};
-  $('.av-face', av).textContent = topic.emoji || '📚';
+  $('.av-face', av).replaceChildren(face(ch, topic.emoji));
   av.style.setProperty('--av', topic.accent || '#ffd93d');
   $('.av-open', av).setAttribute('aria-label', `${ch.name || 'Course'} (@${ch.handle}): open its profile`);
   $('.av-plus', av).hidden = Boolean(ch.following || isFollowingHandle(ch.handle));
@@ -2872,7 +2946,7 @@ function renderChannelHead() {
   };
   const kicker = [d.topic ? `${d.topic.emoji} ${d.topic.label}` : null, d.level?.label, d.official ? 'Official course' : d.kind === 'pack' ? 'Community pack' : 'Made by a student'].filter(Boolean).join(' · ');
   head.replaceChildren(
-    el('div', { class: 'ch-avatar', 'aria-hidden': 'true' }, d.topic?.emoji || '📚'),
+    el('div', { class: 'ch-avatar', 'aria-hidden': 'true' }, face(d)),
     el('h2', { class: 'ch-name' }, d.name),
     el('p', { class: 'ch-handle' }, `@${d.handle}`, d.mine ? el('span', { class: 'sbadge', style: '--r:-2deg' }, 'you named it') : null),
     el('p', { class: 'ch-kicker' }, kicker),
@@ -2884,7 +2958,68 @@ function renderChannelHead() {
     el('div', { class: 'ch-actions' }, followBtn,
       el('button', { type: 'button', class: 'btn ghost', disabled: !channelUi.lessons.length, onclick: () => playChannel(0, 'play') }, '▶ Play all'),
       el('button', { type: 'button', class: 'btn ghost', 'aria-label': 'Share', onclick: () => shareChannel(d.handle) }, svgEl(svg_share))),
-    d.canRename ? el('button', { type: 'button', class: 'link ch-rename', onclick: () => openRename(d) }, '✏️ Change handle') : null);
+    d.canRename ? el('div', { class: 'ch-owner' },
+      el('button', { type: 'button', class: 'link ch-rename', onclick: () => pickPicture(d) }, d.avatar ? '🖼️ Change picture' : '🖼️ Add a picture'),
+      d.avatar ? el('button', { type: 'button', class: 'link ch-rename', onclick: () => removePicture(d) }, 'Remove picture') : null,
+      el('button', { type: 'button', class: 'link ch-rename', onclick: () => openRename(d) }, '✏️ Change handle')) : null);
+}
+
+/**
+ * Picks, crops (centre square) and shrinks a picture in the browser, then sends it as a JPEG. Re-encoding
+ * drops the photo's EXIF data (location, device). The server has it checked before anyone sees it.
+ */
+function pickPicture(d) {
+  const input = el('input', { type: 'file', accept: 'image/*', hidden: '' });
+  document.body.append(input);
+  input.onchange = async () => {
+    const file = input.files?.[0];
+    input.remove();
+    if (!file) return;
+    if (file.size > 15 * 1024 * 1024) return toast('That picture is too big. Try one under 15 MB.');
+    let dataUrl;
+    try { dataUrl = await squareJpeg(file, 320); } catch { return toast("Couldn't read that picture. Try a JPEG or PNG."); }
+    toast('Checking your picture…');
+    try {
+      const { channel } = await api('POST', `/api/channels/${d.handle}/avatar`, { image: dataUrl });
+      track('channel_avatar', { handle: d.handle, outcome: 'set' });
+      channelUi.data = channel;
+      feed.items.forEach((it) => { if (it.data?.channel?.handle === d.handle) { it.data.channel.avatar = channel.avatar; renderChannelChip(it); } });
+      xp.data = null;
+      renderChannelHead();
+      toast('Picture added.');
+    } catch (err) {
+      track('channel_avatar', { handle: d.handle, outcome: err.status === 422 ? 'rejected' : 'error' });
+      toast(err.message || "Couldn't add that picture.");
+    }
+  };
+  input.click();
+}
+
+async function removePicture(d) {
+  try {
+    const { channel } = await api('DELETE', `/api/channels/${d.handle}/avatar`);
+    channelUi.data = channel;
+    feed.items.forEach((it) => { if (it.data?.channel?.handle === d.handle) { it.data.channel.avatar = null; renderChannelChip(it); } });
+    xp.data = null;
+    renderChannelHead();
+  } catch { toast("Couldn't remove the picture."); }
+}
+
+/** A centred square crop of an image file, `size` px, as a JPEG data URL (orientation applied). */
+async function squareJpeg(file, size) {
+  const bmp = await createImageBitmap(file, { imageOrientation: 'from-image' });
+  const side = Math.min(bmp.width, bmp.height);
+  const canvas = el('canvas', { width: String(size), height: String(size) });
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, size, size);
+  ctx.drawImage(bmp, (bmp.width - side) / 2, (bmp.height - side) / 2, side, side, 0, 0, size, size);
+  bmp.close?.();
+  for (const q of [0.86, 0.75, 0.6]) {
+    const url = canvas.toDataURL('image/jpeg', q);
+    if (url.length < 260000) return url;
+  }
+  throw new Error('too large');
 }
 
 /** The student who brought a course changes its handle; the old one keeps redirecting. */
@@ -2981,7 +3116,7 @@ function channelCard(c, { onFollowChange } = {}) {
     } catch { toast("Couldn't change that."); btn.disabled = false; }
   };
   return el('article', { class: 'ch-card', style: `--accent:${c.topic?.accent || '#ffe580'}`, tabindex: '0', onclick: () => openChannel(c.handle, { source: 'card' }), onkeydown: (e) => { if (e.key === 'Enter') openChannel(c.handle, { source: 'card' }); } },
-    el('div', { class: 'ch-card-av', 'aria-hidden': 'true' }, c.topic?.emoji || '📚'),
+    el('div', { class: 'ch-card-av', 'aria-hidden': 'true' }, face(c)),
     el('div', { class: 'ch-card-text' }, el('strong', {}, c.name), el('small', {}, `@${c.handle} · ${fmtCount(c.followers)} follower${c.followers === 1 ? '' : 's'} · ${fmtCount(c.lessons)} lessons`)),
     btn);
 }

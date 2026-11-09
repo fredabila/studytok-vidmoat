@@ -27,7 +27,7 @@ import { recordOutcome, recordQuizOutcome } from './calibration.js';
 import { armOutcomeWrites, armCountWrites } from './experiments.js';
 import { gameOutcome } from './games.js';
 import { FORMAT_IDS } from '../video/formats.js';
-import { TOPIC_BY_ID as TOPIC_BY_ID_EVENTS } from '../curriculum/topics.js';
+import { TOPIC_BY_ID as TOPIC_BY_ID_EVENTS, guessTopic } from '../curriculum/topics.js';
 
 // ---- Taxonomy ------------------------------------------------------------------------------------
 // video: the event is about a video (videoId required). fields: name -> type ('n' number 0..1e6,
@@ -95,6 +95,11 @@ export const EVENT_SPECS = {
   search_pick: { fields: { type: 's', value: 's' } },
   settings_open: { fields: { card: 's' } },
   more_open: { video: true, fields: {} },
+  channel_avatar: { fields: { handle: 's', outcome: 's' } },
+  // Engagement that serves learning (app.js): the daily goal, the next lesson's hook near the end.
+  goal_reached: { fields: { goal: 'i' } },
+  upnext_shown: { video: true, fields: {} },
+  upnext_tap: { video: true, fields: {} },
   pack_remove: { fields: { slug: 's' } },
   pack_link: { fields: { slug: 's' } },
   library_search: { fields: { q: 's' } },
@@ -420,6 +425,17 @@ export async function ingest(userId, batch) {
       case 'gen_wait': writes.push(kv.hincrby('stats:generation', e.outcome === 'ready' ? 'waitedReady' : 'waitedGaveUp', 1), kv.hincrby('stats:generation', 'waitMs', Math.round(e.ms || 0))); break;
       case 'pref_change': if (e.key) signals.prefs[e.key.slice(0, 16)] = e.value; break;
       case 'session_start': session.served = session.served || 0; break;
+      case 'search_submit': {
+        // What a student searches is the clearest thing they tell us: keep the last 30 searches,
+        // and lean their Explore grid and (for a day) their feed towards the subject searched.
+        const q = String(e.q || '').toLowerCase().replace(/\s+/g, ' ').trim().slice(0, 60);
+        if (!q) break;
+        const topic = guessTopic(q);
+        signals.searches = [{ q, at: e.at, n: e.results || 0, topic: topic !== 'general' ? topic : null }, ...(signals.searches || []).filter((s) => s.q !== q)].slice(0, 30);
+        if (topic !== 'general') { signals.explore ||= {}; signals.explore[topic] = Math.min(50, (signals.explore[topic] || 0) + 2); }
+        if (!e.results) writes.push(kv.hincrby(`events:day:${day(e.at)}`, 'search_zero', 1));
+        break;
+      }
       case 'explore_tile_open': case 'explore_topic': {
         // Topics opened in Explore lean the Explore grid towards them (feed/discover.js discoverFor).
         if (TOPIC_BY_ID_EVENTS[e.topic]) { signals.explore ||= {}; signals.explore[e.topic] = Math.min(50, (signals.explore[e.topic] || 0) + 1); }

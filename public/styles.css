@@ -1075,3 +1075,35 @@ body.channel-open .sheet { z-index: 70; }
 .av-plus[hidden] { display: none; }
 .more-list { margin: 0; }
 @media (max-width: 899px) and (max-height: 700px) { .av-open { width: 42px; height: 42px; } .av-face { font-size: 20px; } }
+
+/* Course pictures (app.js face): fill their circle. */
+.face-img { width: 100%; height: 100%; object-fit: cover; display: block; border-radius: inherit; }
+.av-open, .ch-avatar, .ch-card-av, .x-course-av, .x-sg-ic { overflow: hidden; }
+.av-face { display: grid; place-items: center; width: 100%; height: 100%; }
+.ch-owner { display: flex; justify-content: center; flex-wrap: wrap; gap: 4px 16px; margin-top: 10px; }
+.ch-owner .ch-rename { margin-top: 0; }
+
+/* Daily goal ring in the feed header (app.js renderGoalPill). */
+.goal-pill { pointer-events: auto; position: relative; z-index: 13; display: inline-flex; align-items: center; gap: 5px; height: 34px; padding: 0 10px 0 7px; margin-right: 8px; border-radius: 999px; border: 1.5px solid rgba(255, 255, 255, .55); background: rgba(13, 13, 14, .45); color: #fff; font-family: var(--mono); font-size: 12px; font-weight: 700; cursor: pointer; }
+.goal-pill[hidden] { display: none; }
+.goal-pill svg { width: 20px; height: 20px; transform: rotate(-90deg); }
+.gp-track { fill: none; stroke: rgba(255, 255, 255, .25); stroke-width: 3; }
+.gp-fill { fill: none; stroke: var(--hl); stroke-width: 3; stroke-linecap: round; stroke-dasharray: 100; stroke-dashoffset: 100; transition: stroke-dashoffset .6s var(--ease); }
+.goal-pill.done { border-color: var(--hl); color: var(--hl); }
+.feed-head-spacer { align-items: center; }
+/* "Up next" near the end of a lesson (app.js showUpNext). */
+.up-next { pointer-events: auto; display: flex; align-items: center; gap: 8px; max-width: min(100%, 420px); margin: 0 0 10px; padding: 8px 12px; border-radius: 12px; border: 1.5px solid rgba(255, 255, 255, .7); background: rgba(13, 13, 14, .62); color: #fff; text-align: left; cursor: pointer; animation: upnext-in .35s var(--ease) both; }
+.up-next[hidden] { display: none; }
+.un-k { flex: none; font-family: var(--mono); font-size: 10.5px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; color: var(--hl); }
+.un-t { flex: 1; min-width: 0; font-size: 13.5px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.un-a { flex: none; font-weight: 700; }
+@keyframes upnext-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+/* Real view counts under the title. */
+.proof { margin: 4px 0 0; font-size: 12px; font-weight: 600; text-shadow: 0 1px 4px #000; }
+.proof[hidden] { display: none; }
+/* Progress after a right answer (app.js showMastery). */
+.mastery-pill { display: grid; gap: 5px; margin: 8px 0 0; font-size: 12.5px; color: var(--ink-2); }
+.mp-label { font-weight: 600; }
+.mp-bar { display: block; height: 7px; border-radius: 99px; background: var(--paper-2); overflow: hidden; }
+.mp-bar i { display: block; height: 100%; border-radius: inherit; background: var(--ok); transition: width .9s var(--ease); }
+@media (prefers-reduced-motion: reduce) { .up-next { animation: none; } .gp-fill, .mp-bar i { transition: none; } }

@@ -46,6 +46,10 @@
   ],
   "rewrites": [
     {
+      "source": "/a/:id",
+      "destination": "/api/index?__path=a/:id"
+    },
+    {
       "source": "/@:handle",
       "destination": "/api/index?__path=c/:handle"
     },
