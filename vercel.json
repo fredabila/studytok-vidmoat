@@ -6,7 +6,7 @@
   "functions": {
     "api/index.js": {
       "maxDuration": 300,
-      "includeFiles": "content/**/pack.md"
+      "includeFiles": "{content/**/pack.md,server/assets/fonts/**}"
     }
   },
   "redirects": [
@@ -45,6 +45,14 @@
     }
   ],
   "rewrites": [
+    {
+      "source": "/sitemap.xml",
+      "destination": "/api/index?__path=sitemap.xml"
+    },
+    {
+      "source": "/og/v/:file",
+      "destination": "/api/index?__path=og/v/:file"
+    },
     {
       "source": "/api/:path*",
       "destination": "/api/index?__path=:path*"

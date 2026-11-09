@@ -23,8 +23,10 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^1.6.0",
+    "@resvg/resvg-js": "^2.6.2",
     "@upstash/redis": "^1.41.0",
     "@vercel/functions": "^3.11.0",
+    "satori": "^0.18.3",
     "web-push": "^4.0.0",
     "zod": "^4.6.7"
   }

@@ -105,8 +105,9 @@ class LocalKV {
   async zrange(k, start, stop, opts = {}) {
     const z = this.data.get(k);
     if (!z) return [];
-    const sorted = [...z].sort((a, b) => (opts.rev ? b[1] - a[1] : a[1] - b[1])).map(([m]) => m);
-    return sorted.slice(start, stop === -1 ? undefined : stop + 1);
+    const sorted = [...z].sort((a, b) => (opts.rev ? b[1] - a[1] : a[1] - b[1])).slice(start, stop === -1 ? undefined : stop + 1);
+    // Like Upstash: withScores gives a flat [member, score, member, score…] list.
+    return opts.withScores ? sorted.flat() : sorted.map(([m]) => m);
   }
   async hincrby(k, f, n) { const h = this.data.get(k) || {}; h[f] = (h[f] || 0) + n; this.data.set(k, h); this.persist(); return h[f]; }
   async hgetall(k) { const h = this.data.get(k); return h && Object.keys(h).length ? { ...h } : null; }
