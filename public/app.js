@@ -78,7 +78,7 @@ function toast(msg) {
 }
 
 // ============================================================================ onboarding
-const ob = { level: null, step: 1, profile: {}, interests: new Set(), programs: [], selected: new Set(), who: 'self', styles: new Set() };
+const ob = { level: null, step: 1, profile: {}, interests: new Set(), programs: [], selected: new Set(), who: 'self', styles: new Set(), handles: {} };
 // StudyGraph's four learning styles, in StudyGraph's words.
 const LEARN_STYLES = [['visual', '👀', 'Seeing it', 'diagrams, cards, timelines'], ['listening', '🎧', 'Hearing it explained', 'stories, analogies'], ['reading', '📖', 'Reading it', 'flashcards, notes'], ['handson', '🧩', 'Doing it', 'guessing first, games']];
 const ageOf = () => { const n = Number($('#ob-age').value); return Number.isInteger(n) && n >= 5 && n <= 120 ? n : null; };
@@ -202,12 +202,34 @@ function programBlock(part) {
       box.append(el('p', { class: 'sources' }, 'Sources: ', ...p.sources.slice(0, 4).flatMap((s, i) => [i ? ' · ' : '',
         el('a', { href: s.url, target: '_blank', rel: 'noopener noreferrer' }, s.title.slice(0, 48))])));
     }
+    if (p.key) box.append(courseHandleBox(p));
     if (p.source === 'catalog' && cfg.research && ob.profile.institution) {
       box.append(el('p', { class: 'sources' }, el('button', { type: 'button', class: 'link', onclick: () => resolvePart(part, block, true) },
         `Match ${ob.profile.institution}'s actual course instead →`)));
     }
   };
   return block;
+}
+
+/**
+ * Under a course at onboarding: its profile. A course already on StudyGraph is followed as it is
+ * (no duplicate); a catalog course has its official handle; a newly researched course is named
+ * here by the student who brought it.
+ */
+function courseHandleBox(p) {
+  const box = el('div', { class: 'course-handle' }, el('span', { class: 'spinner small' }));
+  api('GET', `/api/channels/for?ref=${encodeURIComponent(p.key)}`).then(({ channel, suggestion }) => {
+    if (channel) {
+      box.replaceChildren(el('p', {}, '✓ Already on StudyGraph as ', el('strong', {}, `@${channel.handle}`), ` · ${fmtCount(channel.followers)} follower${channel.followers === 1 ? '' : 's'} · ${fmtCount(channel.lessons)} lessons. You'll follow it and share its lessons.`));
+      return;
+    }
+    if (p.source === 'catalog') { box.replaceChildren(el('p', {}, "You'll follow ", el('strong', {}, `@${suggestion}`), ', the official profile for this course.')); return; }
+    const start = ob.handles[p.key] || suggestion; // keep what the student typed when the list re-renders
+    ob.handles[p.key] = start;
+    box.replaceChildren(el('p', {}, "You're the first to bring this course to StudyGraph. Name its profile: classmates who pick the same course will find and follow it."),
+      handleField(start, (h) => { if (h) ob.handles[p.key] = h; }));
+  }).catch(() => box.replaceChildren());
+  return box;
 }
 
 async function resolvePart(part, existing, tailor = false) {
@@ -259,7 +281,7 @@ async function buildSyllabus() {
 
 function profileBody() {
   const units = ob.programs.flatMap((p) => p.program.units.map((u) => u.id)).filter((id) => ob.selected.has(id));
-  return { profile: { ...ob.profile, level: ob.level, age: ageOf(), managedBy: ob.who === 'child' ? 'guardian' : 'self' }, guardianConsent: ob.who === 'child' && $('#ob-consent-box').checked, programKeys: ob.programs.map((p) => p.program.key), units, interests: [...ob.interests], ref: captureRef() || undefined, pack: store.get('st_pack') || undefined, styles: [...ob.styles] };
+  return { handles: { ...ob.handles }, profile: { ...ob.profile, level: ob.level, age: ageOf(), managedBy: ob.who === 'child' ? 'guardian' : 'self' }, guardianConsent: ob.who === 'child' && $('#ob-consent-box').checked, programKeys: ob.programs.map((p) => p.program.key), units, interests: [...ob.interests], ref: captureRef() || undefined, pack: store.get('st_pack') || undefined, styles: [...ob.styles] };
 }
 
 async function runOnboarding(prefill) {
@@ -549,6 +571,7 @@ function addSlide(data, { at } = {}) {
   $('.like', node).onclick = () => toggleFlag(item, 'liked', 'like', 'unlike');
   $('.save', node).onclick = () => toggleFlag(item, 'saved', 'save', 'unsave');
   $('.share', node).onclick = () => shareLesson(item);
+  wireChannelChip(item);
   $('.why', node).onclick = () => { sendEvent(item.data.id, 'why_open'); openWhy(item); };
   $('.tune', node).onclick = () => { track('tune_open'); openTune(); };
   $('.less', node).onclick = () => {
@@ -886,6 +909,7 @@ function renderSlide(item) {
   $$('.making-steps li', node).forEach((li, i) => { li.classList.toggle('done', i < stage); li.classList.toggle('on', i === stage && d.status === 'generating'); });
   $('.unit-text', node).textContent = unitLabel(d) + (d.subtopic ? ` · ${d.subtopic}` : '');
   $('.title', node).textContent = d.title || '';
+  renderChannelChip(item);
   $('.fmt-badge', node).textContent = d.status === 'ready' && d.format?.tag ? d.format.tag : '';
   $('.like .count', node).textContent = String(d.likes || 0);
   $('.like', node).setAttribute('aria-pressed', String(!!d.liked));
@@ -1120,7 +1144,7 @@ function stampAnswer(item, choice, correct) {
  */
 function syncPlayers({ light = false } = {}) {
   if (light) {
-    feed.items.forEach((item, i) => { if (item.player) { if (i === feed.active && !feed.paused && view === 'feed' && !item.held) item.player.play(); else item.player.pause(); } });
+    feed.items.forEach((item, i) => { if (item.player) { if (i === feed.active && !feed.paused && view === 'feed' && !feed.covered && !item.held) item.player.play(); else item.player.pause(); } });
     clearTimeout(feed.syncTimer);
     feed.syncTimer = setTimeout(() => syncPlayers(), Math.max(0, feed.animUntil - performance.now()) + 40);
     return;
@@ -1137,7 +1161,7 @@ function syncPlayers({ light = false } = {}) {
     const keep = feed.active >= 0 && (i === feed.active || (i === feed.active + 1 && preloadNext));
     if (keep) mountPlayer(item); else unmountPlayer(item);
     if (!item.player) return;
-    if (i === feed.active && !feed.paused && view === 'feed' && !item.held) item.player.play(); else item.player.pause();
+    if (i === feed.active && !feed.paused && view === 'feed' && !feed.covered && !item.held) item.player.play(); else item.player.pause();
   });
   soundGate(feed.items[feed.active]);
 }
@@ -1271,6 +1295,8 @@ function openWhy(item) {
   if (w.kind === 'course' && w.progress >= 0.7) reasons.push(['📚', d.position ? `Next up in your syllabus: unit ${d.position.index} of ${d.position.total}.` : 'Next up in your syllabus.']);
   else if (w.kind === 'course') reasons.push(['📚', 'Part of your course.']);
   if (w.kind === 'interest') reasons.push(['✨', `From your interests: ${d.topic.label}.`]);
+  if (w.kind === 'follow') reasons.push(['➕', `From a course you follow${d.channel ? `: @${d.channel.handle}` : ''}.`]);
+  if (w.intent > 0) reasons.push(['👀', `You just looked at ${d.channel ? `@${d.channel.handle}` : 'this course'}'s profile, so your feed leans towards it for a while.`]);
   if (d.pack) reasons.push(['📘', `Made from the community pack "${d.pack.title}" by ${d.pack.by}${d.pack.link ? `. ${d.pack.cta || 'Find out more'}: ${d.pack.link}` : '.'}`]);
   if (w.review > 0) reasons.push(['🔁', 'Due for review. Spaced repetition brings units back after 1, 3, 7 and 21 days, and sooner when a quiz goes wrong.']);
   if (w.affinity >= 0.6) reasons.push(['❤️', "You've been finishing and liking lessons like this."]);
@@ -1346,7 +1372,7 @@ async function closeSheet() {
   const cb = sheetOnClose;
   sheetOnClose = null;
   if (cb) await cb();
-  if (view === 'feed' && !feed.paused) feed.items[feed.active]?.player?.play();
+  if (view === 'feed' && !feed.paused && !feed.covered) feed.items[feed.active]?.player?.play();
 }
 
 // ---------------------------------------------------------------------------- activation & paging
@@ -1517,11 +1543,9 @@ async function openTune() {
   const add = async () => {
     const title = input.value.trim();
     if (title.length < 2) return;
+    const added = await addCustomTopic(title);
+    if (!added) return;
     input.value = '';
-    const { added } = await patchMe({ addCustom: { title } }).catch(() => ({}));
-    if (!added) return toast("Couldn't add that topic.");
-    track('custom_add', { title: added.title });
-    toast(`Added "${added.title}". Lessons are on their way.`);
     renderCustom((await api('GET', '/api/library')).units);
   };
   input.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); add(); } });
@@ -1767,10 +1791,9 @@ async function showLibrary() {
     const add = async () => {
       const title = input.value.trim();
       if (title.length < 2) return;
+      const added = await addCustomTopic(title, { programKey: key === 'custom' ? null : key });
+      if (!added) return;
       input.value = '';
-      const { added } = await patchMe({ addCustom: { title, programKey: key === 'custom' ? null : key } }).catch(() => ({}));
-      if (!added) return toast("Couldn't add that topic.");
-      toast(`Added "${added.title}". Lessons are on their way.`);
       showLibrary();
     };
     input.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); add(); } });
@@ -1789,9 +1812,7 @@ async function showLibrary() {
     const add = async () => {
       const title = input.value.trim();
       if (title.length < 2) return;
-      const { added } = await patchMe({ addCustom: { title } }).catch(() => ({}));
-      if (!added) return toast("Couldn't add that topic.");
-      toast(`Added "${added.title}". Lessons are on their way.`);
+      if (!(await addCustomTopic(title))) return;
       showLibrary();
     };
     input.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); add(); } });
@@ -1847,8 +1868,9 @@ async function renderExplore() {
   const q = ($('#explore-search').value || '').trim().toLowerCase();
   $('[data-view="explore"] .lib-clear').hidden = !q;
   const shown = explorePacks.filter((p) => (!exploreTopic || p.topic === exploreTopic) && (!q || `${p.title} ${p.by} ${p.kind} ${p.about} ${p.tags.join(' ')} ${p.units.map((u) => u.title).join(' ')}`.toLowerCase().includes(q)));
-  if (!shown.length) { list.replaceChildren(el('div', { class: 'explore-empty' }, svgEl(mascot('think', 100)), el('b', { style: 'display:block;color:var(--ink);font-family:var(--serif);font-size:20px;margin:6px 0' }, explorePacks.length ? 'No pack matches' : 'No packs yet'), explorePacks.length ? 'Try another word or topic.' : 'Be the first to share one on GitHub.')); return; }
-  list.replaceChildren(...shown.map((p) => {
+  const courses = await exploreChannels(q);
+  if (!shown.length) { list.replaceChildren(...(courses ? [courses] : []), el('div', { class: 'explore-empty' }, svgEl(mascot('think', 100)), el('b', { style: 'display:block;color:var(--ink);font-family:var(--serif);font-size:20px;margin:6px 0' }, explorePacks.length ? 'No pack matches' : 'No packs yet'), explorePacks.length ? 'Try another word or topic.' : 'Be the first to share one on GitHub.')); return; }
+  list.replaceChildren(...(courses ? [courses, el('h2', { class: 'xch-title' }, 'Packs')] : []), ...shown.map((p) => {
     const topic = cfg.topics.find((t) => t.id === p.topic);
     const isAdded = added.has(p.slug);
     const btn = el('button', { type: 'button', class: `btn small ${isAdded ? 'ghost' : 'primary'}` }, isAdded ? 'Remove from Library' : 'Add to Library');
@@ -1905,9 +1927,7 @@ function applyLibrarySearch() {
   out.replaceChildren(...parts);
   if (!total) out.append(el('button', { type: 'button', class: 'btn small primary lib-add', onclick: async () => {
     const title = input.value.trim();
-    const { added } = await patchMe({ addCustom: { title } }).catch(() => ({}));
-    if (!added) return toast("Couldn't add that topic.");
-    toast(`Added "${added.title}". Lessons are on their way.`);
+    if (!(await addCustomTopic(title))) return;
     input.value = ''; showLibrary();
   } }, `Add "${input.value.trim().slice(0, 30)}" as a topic`));
 }
@@ -2073,6 +2093,7 @@ function renderProfile() {
     goalRing(stats));
   $('#profile-tiles').replaceChildren(...[statTiles(stats), recapCard(stats)].filter(Boolean));
 
+  renderFollowing();
   renderCredits();
   renderInvite();
   renderLearning();
@@ -2454,6 +2475,7 @@ function authNotice() {
 
 async function boot() {
   capturePack(); // a ?pack= link is remembered before anything else happens
+  captureChannelLink(); // so is a ?c= / ?follow= link from a course profile page
   if ('serviceWorker' in navigator) {
     // Check for a new worker on every open; when one takes over mid-session, reload once so the
     // page runs one deploy's HTML, JS and CSS together.
@@ -2505,6 +2527,7 @@ async function boot() {
   $('#sound-go')?.addEventListener('click', startSensors, { once: true });
   if (linked) await openVideo(linked);
   await loadMore(3);
+  applyPendingChannel();
   if (feed.active < 0 && feed.items.length) goTo(0, { animate: false });
   if (!store.get('st_swiped') && !feed.items[feed.active]?.moment) { // a moment card says how to continue itself
     $('#swipe-hint').hidden = false;
@@ -2516,3 +2539,318 @@ boot().catch((err) => {
   console.error(err);
   toast('StudyGraph could not start. Is the server running?');
 });
+
+// ============================================================================ course profiles
+// Every course has a public profile, @handle (server/feed/channels.js). Students follow and
+// unfollow them; a profile shows the course's lessons as a grid that plays as a feed, and can be
+// shared as study-graph.com/@handle. Students who create a course (a researched course or their
+// own topic) name its handle; a course that already exists is followed instead of duplicated.
+const fmtCount = (n) => (n >= 1e6 ? `${(n / 1e6).toFixed(1).replace(/\.0$/, '')}M` : n >= 1e4 ? `${Math.round(n / 1e3)}K` : n >= 1e3 ? `${(n / 1e3).toFixed(1).replace(/\.0$/, '')}K` : String(n || 0));
+const profileUrl = (h) => `${location.origin}/@${h}`;
+const isFollowingHandle = (h) => (me?.following || []).includes(h);
+const HANDLE_RE = /^[a-z0-9](?:[a-z0-9._-]{1,38}[a-z0-9])$/;
+const channelUi = { handle: null, data: null, lessons: [], more: false, pushed: false };
+
+/** Follow (on) or unfollow a course profile and update every place that shows it. */
+async function setFollow(handle, on, { source = 'app' } = {}) {
+  const res = await api(on ? 'POST' : 'DELETE', `/api/channels/${handle}/follow`);
+  me = { ...me, following: on ? [...new Set([...(me?.following || []), handle])] : (me?.following || []).filter((h) => h !== handle) };
+  track(on ? 'channel_follow' : 'channel_unfollow', { handle, source });
+  feed.items.forEach((it) => { if (it.data?.channel?.handle === handle) { it.data.channel.following = on; renderChannelChip(it); } });
+  if (channelUi.data?.handle === handle) { channelUi.data.following = on; channelUi.data.followers = res.followers; renderChannelHead(); }
+  if (res.left && res.user) {
+    me = { ...me, ...res.user, billing: me?.billing };
+    toast(`Unfollowed @${handle}. It has left your course.`);
+    restartFeed();
+  } else toast(on ? `Following @${handle}. Its lessons will join your feed.` : `Unfollowed @${handle}.`);
+  return res;
+}
+
+/** The @handle chip on a lesson: tap the name for the profile, "+ Follow" to follow. */
+function renderChannelChip(item) {
+  const chip = $('.ch-chip', item.el);
+  const ch = item.data?.channel;
+  if (!chip) return;
+  chip.hidden = !ch;
+  if (!ch) return;
+  $('.ch-at', chip).textContent = `@${ch.handle}`;
+  const f = $('.ch-follow', chip);
+  const on = ch.following || isFollowingHandle(ch.handle);
+  f.hidden = on;
+  f.textContent = '+ Follow';
+}
+
+function wireChannelChip(item) {
+  const chip = $('.ch-chip', item.el);
+  if (!chip) return;
+  $('.ch-at', chip).onclick = () => item.data?.channel && openChannel(item.data.channel.handle, { source: 'slide' });
+  $('.ch-follow', chip).onclick = async (e) => {
+    e.stopPropagation();
+    const h = item.data?.channel?.handle;
+    if (!h) return;
+    e.currentTarget.disabled = true;
+    try { await setFollow(h, true, { source: 'slide' }); } catch { toast("Couldn't follow that course."); }
+    e.currentTarget.disabled = false;
+  };
+}
+
+function channelRoot() {
+  let root = $('#channel-view');
+  if (!root) {
+    root = el('section', { id: 'channel-view', class: 'channel-view', hidden: '', 'aria-label': 'Course profile' });
+    document.body.append(root);
+    window.addEventListener('popstate', () => { if (!root.hidden && !String(history.state?.channel || '')) closeChannel({ fromPop: true }); });
+  }
+  return root;
+}
+
+/** Opens a course profile over the app. */
+async function openChannel(handle, { source = 'app' } = {}) {
+  const h = String(handle || '').replace(/^@/, '').toLowerCase();
+  if (!HANDLE_RE.test(h)) return;
+  const root = channelRoot();
+  Object.assign(channelUi, { handle: h, data: null, lessons: [], more: false });
+  root.hidden = false;
+  document.body.classList.add('channel-open');
+  feed.covered = true;
+  syncPlayers({ light: true });
+  if (!channelUi.pushed) { history.pushState({ channel: h }, '', `#@${h}`); channelUi.pushed = true; }
+  root.replaceChildren(channelTop(h), el('div', { class: 'ch-loading' }, el('span', { class: 'spinner' })));
+  try {
+    const { channel, lessons, more } = await api('GET', `/api/channels/${h}`);
+    if (channelUi.handle !== h) return;
+    Object.assign(channelUi, { data: channel, lessons, more });
+    track('channel_view', { handle: h, source });
+    renderChannel();
+  } catch (err) {
+    root.replaceChildren(channelTop(h), el('div', { class: 'ch-empty' }, err.status === 404 ? `There is no course called @${h}.` : "Couldn't load this course. Try again."));
+  }
+}
+
+function closeChannel({ fromPop = false } = {}) {
+  const root = channelRoot();
+  root.hidden = true;
+  document.body.classList.remove('channel-open');
+  feed.covered = false;
+  if (channelUi.pushed && !fromPop) { channelUi.pushed = false; history.back(); } else channelUi.pushed = false;
+  channelUi.handle = null;
+  if (view === 'feed') syncPlayers();
+}
+
+function channelTop(h) {
+  return el('div', { class: 'ch-top' },
+    el('button', { type: 'button', class: 'ch-back', 'aria-label': 'Back', onclick: () => closeChannel() }, '‹'),
+    el('strong', { class: 'ch-top-handle' }, `@${h}`),
+    el('button', { type: 'button', class: 'ch-share-top', 'aria-label': 'Share this course', onclick: () => shareChannel(h, 'top') }, svgEl(svg_share)));
+}
+
+async function shareChannel(h, where = 'profile') {
+  const d = channelUi.data?.handle === h ? channelUi.data : null;
+  const title = d ? `${d.name} (@${h})` : `@${h}`;
+  const url = profileUrl(h);
+  try {
+    if (navigator.share) { await navigator.share({ title, text: `${title} on StudyGraph: short study videos for this course.`, url }); track('channel_share', { handle: h, by: `native-${where}` }); return; }
+    await navigator.clipboard.writeText(url);
+    track('channel_share', { handle: h, by: `copy-${where}` });
+    toast('Profile link copied.');
+  } catch { /* cancelled */ }
+}
+
+function renderChannel() {
+  const root = channelRoot();
+  const d = channelUi.data;
+  root.style.setProperty('--accent', d.topic?.accent || '#ffd93d');
+  const head = el('header', { class: 'ch-head' });
+  const grid = el('div', { class: 'ch-grid' });
+  const moreBtn = el('button', { type: 'button', class: 'btn ghost small ch-more', hidden: !channelUi.more }, 'Load more lessons');
+  moreBtn.onclick = async () => {
+    moreBtn.disabled = true;
+    const last = channelUi.lessons[channelUi.lessons.length - 1];
+    try {
+      const { lessons, more } = await api('GET', `/api/channels/${d.handle}/lessons?before=${last?.at || ''}`);
+      channelUi.lessons.push(...lessons); channelUi.more = more;
+      fillGrid(grid); moreBtn.hidden = !more;
+    } catch { toast("Couldn't load more."); }
+    moreBtn.disabled = false;
+  };
+  const units = (d.units || []).length ? el('details', { class: 'ch-syllabus' }, el('summary', {}, `What it covers · ${d.units.length} unit${d.units.length > 1 ? 's' : ''}`),
+    el('ol', {}, ...d.units.map((u) => el('li', {}, el('strong', {}, u.title), u.summary ? el('span', {}, u.summary) : null)))) : null;
+  root.replaceChildren(channelTop(d.handle), el('div', { class: 'ch-scroll' }, head, units, grid, moreBtn));
+  renderChannelHead();
+  fillGrid(grid);
+}
+
+function renderChannelHead() {
+  const d = channelUi.data;
+  const head = $('#channel-view .ch-head');
+  if (!d || !head) return;
+  const on = d.following;
+  const followBtn = el('button', { type: 'button', class: `btn ${on ? 'ghost' : 'primary'} ch-follow-btn` }, on ? 'Following ✓' : 'Follow');
+  followBtn.onclick = async () => {
+    if (on && d.inCourse && !confirm(`Unfollow @${d.handle}? It is part of your course, so its units will leave your feed too.`)) return;
+    followBtn.disabled = true;
+    try { await setFollow(d.handle, !on, { source: 'profile' }); } catch { toast("Couldn't change that."); followBtn.disabled = false; }
+  };
+  const kicker = [d.topic ? `${d.topic.emoji} ${d.topic.label}` : null, d.level?.label, d.official ? 'Official course' : d.kind === 'pack' ? 'Community pack' : 'Made by a student'].filter(Boolean).join(' · ');
+  head.replaceChildren(
+    el('div', { class: 'ch-avatar', 'aria-hidden': 'true' }, d.topic?.emoji || '📚'),
+    el('h2', { class: 'ch-name' }, d.name),
+    el('p', { class: 'ch-handle' }, `@${d.handle}`, d.mine ? el('span', { class: 'sbadge', style: '--r:-2deg' }, 'you named it') : null),
+    el('p', { class: 'ch-kicker' }, kicker),
+    el('ul', { class: 'ch-stats' },
+      el('li', {}, el('strong', {}, fmtCount(d.lessons)), 'lessons'),
+      el('li', {}, el('strong', {}, fmtCount(d.followers)), 'followers'),
+      el('li', {}, el('strong', {}, fmtCount(d.views)), 'views')),
+    d.bio ? el('p', { class: 'ch-bio' }, d.bio) : null,
+    el('div', { class: 'ch-actions' }, followBtn,
+      el('button', { type: 'button', class: 'btn ghost', disabled: !channelUi.lessons.length, onclick: () => playChannel(0, 'play') }, '▶ Play all'),
+      el('button', { type: 'button', class: 'btn ghost', 'aria-label': 'Share', onclick: () => shareChannel(d.handle) }, svgEl(svg_share))));
+}
+
+function fillGrid(grid) {
+  const list = channelUi.lessons;
+  if (!list.length) { grid.replaceChildren(el('p', { class: 'ch-empty' }, 'The first lessons for this course are being made. Follow it and they will come to your feed.')); return; }
+  grid.replaceChildren(...list.map((l, i) => el('button', { type: 'button', class: 'ch-tile', onclick: () => playChannel(i, 'tile') },
+    l.poster ? el('img', { src: l.poster, alt: '', loading: 'lazy', decoding: 'async' }) : el('span', { class: 'ch-tile-blank' }),
+    el('span', { class: 'ch-tile-meta' }, el('span', { class: 'ch-tile-title' }, l.title || l.unit || 'Lesson'), el('span', { class: 'ch-tile-len' }, [l.format, l.duration ? minsOf(l.duration) : null].filter(Boolean).join(' · '))))));
+}
+
+/** Plays the profile's lessons as a feed, starting at `i`. */
+async function playChannel(i, how) {
+  const h = channelUi.handle;
+  const list = channelUi.lessons.slice(i);
+  if (!list.length) return;
+  track(how === 'play' ? 'channel_play' : 'channel_lesson_open', how === 'play' ? { handle: h, from: 'profile' } : { handle: h, id: list[0].id });
+  closeChannel();
+  await queueLessons(list, `channel:${h}`);
+}
+
+/**
+ * A handle field: "@" + input with a live availability check. `onChange(handle|null)` gets the
+ * handle while it is valid and free, null otherwise.
+ */
+function handleField(initial, onChange) {
+  const input = el('input', { type: 'text', class: 'handle-input', value: initial || '', maxlength: '40', autocapitalize: 'none', autocomplete: 'off', spellcheck: 'false', 'aria-label': 'Course handle' });
+  const note = el('small', { class: 'handle-note' }, '');
+  let timer = null;
+  let seq = 0;
+  const check = async () => {
+    const v = input.value.trim().replace(/^@/, '').toLowerCase();
+    if (input.value !== v) input.value = v;
+    const mine = ++seq;
+    if (!v) { note.textContent = 'Pick a handle for this course.'; note.dataset.ok = 'false'; onChange(null); return; }
+    try {
+      const r = await api('GET', `/api/channels/check?handle=${encodeURIComponent(v)}`);
+      if (mine !== seq) return;
+      note.dataset.ok = String(r.ok);
+      note.textContent = r.ok ? `study-graph.com/@${r.handle} is yours.` : `${r.reason}${r.suggestion ? ` Try @${r.suggestion}.` : ''}`;
+      onChange(r.ok ? r.handle : null);
+    } catch { onChange(null); }
+  };
+  input.addEventListener('input', () => { clearTimeout(timer); timer = setTimeout(check, 250); });
+  check();
+  return el('div', { class: 'handle-field' }, el('label', { class: 'handle-row' }, el('span', { 'aria-hidden': 'true' }, '@'), input), note);
+}
+
+/** A course profile as a small card (Explore, Following, "already exists"). */
+function channelCard(c, { onFollowChange } = {}) {
+  const on = c.following || isFollowingHandle(c.handle);
+  const btn = el('button', { type: 'button', class: `btn small ${on ? 'ghost' : 'primary'}` }, on ? 'Following' : 'Follow');
+  btn.onclick = async (e) => {
+    e.stopPropagation();
+    btn.disabled = true;
+    try {
+      if (on && c.inCourse && !confirm(`Unfollow @${c.handle}? It is part of your course, so its units will leave your feed too.`)) { btn.disabled = false; return; }
+      await setFollow(c.handle, !on, { source: 'card' });
+      onFollowChange?.();
+    } catch { toast("Couldn't change that."); btn.disabled = false; }
+  };
+  return el('article', { class: 'ch-card', style: `--accent:${c.topic?.accent || '#ffe580'}`, tabindex: '0', onclick: () => openChannel(c.handle, { source: 'card' }), onkeydown: (e) => { if (e.key === 'Enter') openChannel(c.handle, { source: 'card' }); } },
+    el('div', { class: 'ch-card-av', 'aria-hidden': 'true' }, c.topic?.emoji || '📚'),
+    el('div', { class: 'ch-card-text' }, el('strong', {}, c.name), el('small', {}, `@${c.handle} · ${fmtCount(c.followers)} follower${c.followers === 1 ? '' : 's'} · ${fmtCount(c.lessons)} lessons`)),
+    btn);
+}
+
+/**
+ * Adds a topic of the student's own. If the topic is already on StudyGraph, offers to follow it
+ * instead of making a copy; if it is new, asks for its handle first. Returns `added` or null.
+ */
+async function addCustomTopic(title, { programKey = null } = {}) {
+  title = String(title || '').trim();
+  if (title.length < 2) return null;
+  let found = null;
+  try { found = await api('GET', `/api/channels/for?title=${encodeURIComponent(title)}`); } catch { /* offline check: just add */ }
+  const choice = await new Promise((resolve) => {
+    if (!found) return resolve({ handle: null });
+    let handle = null;
+    const body = el('div', { class: 'name-sheet' });
+    if (found.channel) {
+      track('channel_search', { q: title, results: 1 });
+      body.append(el('p', {}, `"${title}" is already on StudyGraph. Follow it to get its lessons, and share them with everyone else studying it.`),
+        channelCard(found.channel),
+        el('button', { type: 'button', class: 'btn primary', onclick: () => { resolve({ handle: found.channel.handle, existing: true }); closeSheet(); } }, `Follow @${found.channel.handle}`));
+    } else {
+      const go = el('button', { type: 'button', class: 'btn primary', disabled: '' }, 'Create course');
+      body.append(el('p', {}, `You're the first to study "${title}" here. Give it a handle: it becomes the course's profile, study-graph.com/@handle, and anyone who adds the same topic will follow it.`),
+        handleField(found.suggestion, (h) => { handle = h; go.disabled = !h; go.textContent = h ? `Create @${h}` : 'Create course'; }), go);
+      go.onclick = () => { resolve({ handle }); closeSheet(); };
+    }
+    openSheet(found.channel ? 'Already on StudyGraph' : 'Name your course', body, () => resolve(null));
+  });
+  if (!choice) return null;
+  const { added } = await patchMe({ addCustom: { title, programKey, handle: choice.existing ? null : choice.handle } }).catch(() => ({}));
+  if (!added) { toast("Couldn't add that topic."); return null; }
+  track('custom_add', { title: added.title });
+  if (added.channel?.handle) me = { ...me, following: [...new Set([...(me?.following || []), added.channel.handle])] };
+  toast(added.channel?.existed ? `Following @${added.channel.handle}. Lessons are on their way.` : `Created @${added.channel?.handle || added.title}. Lessons are on their way.`);
+  return added;
+}
+
+/** "Courses to follow" for Explore: search results for `q`, or the most followed. */
+async function exploreChannels(q) {
+  const box = el('section', { class: 'xch' }, el('h2', { class: 'xch-title' }, q ? 'Courses' : 'Courses to follow'));
+  try {
+    const { channels } = await api('GET', `/api/channels${q ? `?q=${encodeURIComponent(q)}` : ''}`);
+    if (q) track('channel_search', { q: q.slice(0, 60), results: channels.length });
+    if (!channels.length) { if (q) return null; box.append(el('p', { class: 'muted' }, 'No courses yet.')); return box; }
+    box.append(el('div', { class: 'xch-list' }, ...channels.slice(0, q ? 8 : 10).map((c) => channelCard(c, { onFollowChange: () => renderExplore() }))));
+    return box;
+  } catch { return null; }
+}
+
+/** The Following card on the Profile tab. */
+async function renderFollowing() {
+  let card = $('#following-card');
+  if (!card) {
+    card = el('div', { id: 'following-card', class: 'card' });
+    $('#profile-tiles')?.after(card);
+  }
+  try {
+    const { channels } = await api('GET', '/api/me/following');
+    card.replaceChildren(el('h3', {}, `Following · ${channels.length}`),
+      channels.length ? el('div', { class: 'xch-list' }, ...channels.map((c) => channelCard(c, { onFollowChange: renderFollowing })))
+        : el('p', { class: 'muted' }, 'Follow courses from Explore, or from the @handle on any lesson.'));
+  } catch { card.replaceChildren(el('h3', {}, 'Following'), el('p', { class: 'muted' }, "Couldn't load who you follow.")); }
+}
+
+/** ?c=<handle> opens a profile; ?follow=<handle> follows it too (links from the public /@handle page). */
+function captureChannelLink() {
+  const params = new URLSearchParams(location.search);
+  const follow = params.get('follow');
+  const open = params.get('c');
+  const h = (follow || open || '').toLowerCase();
+  if (h && HANDLE_RE.test(h)) {
+    store.set('st_channel', JSON.stringify({ h, follow: Boolean(follow) }));
+    const url = new URL(location.href); url.searchParams.delete('follow'); url.searchParams.delete('c'); history.replaceState(null, '', url.pathname + url.search + url.hash);
+  }
+  const hash = /^#@([a-z0-9._-]{3,40})$/.exec(location.hash)?.[1];
+  if (hash && !store.get('st_channel')) store.set('st_channel', JSON.stringify({ h: hash, follow: false }));
+}
+async function applyPendingChannel() {
+  let pending = null;
+  try { pending = JSON.parse(store.get('st_channel') || 'null'); localStorage.removeItem('st_channel'); } catch { /* fine */ }
+  if (!pending?.h || !me?.setupDone) return;
+  if (location.hash.startsWith('#@')) history.replaceState(null, '', location.pathname);
+  if (pending.follow && !isFollowingHandle(pending.h)) await setFollow(pending.h, true, { source: 'link' }).catch(() => {});
+  openChannel(pending.h, { source: 'link' });
+}

@@ -12,7 +12,7 @@ import { usingRedis, redisSource, redisLikeVarNames } from './core/kv.js';
 import * as db from './core/db.js';
 import { saveProfile, editProfile, prefetch, nextItems, publicVideo, library, topUpLibrary, cleanProfile, linkVidmoat, recordReferral, resetStudent, notesOf } from './feed/index.js';
 import { extraMoments, setExtraMoments } from './feed/moments.js';
-import { resolveProgram, getProgram, getUnit } from './curriculum/index.js';
+import { resolveProgram, getProgram, getUnit, customUnitId } from './curriculum/index.js';
 import { getPlan } from './lessons/plan.js';
 import { lessonKey } from './lessons/index.js';
 import { queueStats } from './video/generator.js';
@@ -33,6 +33,9 @@ import * as push from './core/push.js';
 import { originOf } from './core/auth.js';
 import { publicLesson, watchPage, notFoundPage, refOf, SITE_URL } from './core/watch.js';
 import { sitemapXml, SITEMAP_LIMIT } from './core/sitemap.js';
+import { profilePage } from './core/profile.js';
+import * as channels from './feed/channels.js';
+import { noteProfileVisit } from './feed/index.js';
 
 
 export const SECURITY_HEADERS = {
@@ -78,6 +81,12 @@ async function readJson(req, limit = 64 * 1024) {
   }
   if (!chunks.length) return {};
   try { return JSON.parse(Buffer.concat(chunks).toString()); } catch { throw Object.assign(new Error('Invalid JSON'), { status: 400 }); }
+}
+
+/** Grid tiles for a course profile: [{ id, at }] → [{ id, title, poster, duration, format, unit, at }]. */
+async function lessonTiles(ids) {
+  const vids = await Promise.all(ids.map(({ id }) => db.getVideo(id)));
+  return vids.map((v, i) => (v?.status === 'ready' ? { id: v.id, title: v.lesson?.title || null, poster: v.poster || null, duration: v.duration || null, format: FORMATS[v.format || 'explain']?.tag || null, unit: v.unitTitle || null, at: ids[i].at } : null)).filter(Boolean);
 }
 
 /**
@@ -170,7 +179,7 @@ async function route(req, res, url) {
   // one counter per day, nothing personal. The later steps are counted where they happen.
   if (key === 'POST /api/funnel') {
     const body = await readJson(req, 2048);
-    const step = ['landing', 'signin_click', 'install_prompt', 'installed'].includes(body.step) ? body.step : null;
+    const step = ['landing', 'signin_click', 'install_prompt', 'installed', 'profile_share'].includes(body.step) ? body.step : null;
     if (step) await kv.hincrby(`events:day:${new Date().toISOString().slice(0, 10)}`, `funnel_${step}`, 1);
     if (step === 'landing' && Number.isInteger(Number(body.ref)) && Number(body.ref) > 0) await kv.hincrby(`events:day:${new Date().toISOString().slice(0, 10)}`, 'funnel_landing_ref', 1);
     return send(res, 200, { ok: Boolean(step) });
@@ -208,12 +217,76 @@ async function route(req, res, url) {
     }
   }
 
+  // ---- Course profiles (feed/channels.js): public pages, share cards and the JSON the app reads ----
+  const profileMatch = /^\/(?:api\/)?(?:c\/|@)([a-z0-9._-]{3,40})$/.exec(path);
+  if (req.method === 'GET' && profileMatch) {
+    const ch = await channels.getChannel(profileMatch[1]);
+    const html = { 'Content-Type': 'text/html; charset=utf-8' };
+    const site = siteOrigin(req);
+    if (!ch) return send(res, 404, notFoundPage({ url: `${site}/@${profileMatch[1]}` }).replace("This lesson isn't here.", "This course isn't here."), { ...html, 'Cache-Control': 'no-store' });
+    const [pub, ids] = await Promise.all([channels.publicChannel(ch, { withUnits: true }), channels.channelLessonIds(ch, { limit: 30 })]);
+    const lessons = await lessonTiles(ids);
+    waitUntil(Promise.allSettled([channels.statOf(ch.handle, 'pageViews'), kv.hincrby(`events:day:${new Date().toISOString().slice(0, 10)}`, 'profile_page_view', 1)]));
+    return send(res, 200, profilePage(pub, lessons, { url: `${site}/@${ch.handle}`, site, image: `${site}/og/c/${ch.handle}.png` }), { ...html, 'Cache-Control': 'public, max-age=120, s-maxage=300' });
+  }
+  const ogChannelMatch = /^\/(?:api\/)?og\/c\/([a-z0-9._-]{3,40}?)(?:\.png)?$/.exec(path); // lazy: handles may contain dots
+  if (req.method === 'GET' && ogChannelMatch) {
+    const ch = await channels.getChannel(ogChannelMatch[1]);
+    if (!ch) return redirect(res, '/og.png');
+    try {
+      const { channelCard } = await import('./core/og.js');
+      const png = await channelCard(await channels.publicChannel(ch), { site: new URL(siteOrigin(req)).host });
+      return send(res, 200, png, { 'Content-Type': 'image/png', 'Cache-Control': 'public, max-age=3600, s-maxage=86400, stale-while-revalidate=86400' });
+    } catch (err) {
+      console.warn('[og]', err.message);
+      return redirect(res, '/og.png');
+    }
+  }
+  // Search (?q=) or the most followed; a handle check; the profile for a course ref.
+  if (key === 'GET /api/channels') {
+    const q = (url.searchParams.get('q') || '').slice(0, 80);
+    const viewer = await cookieUser(req);
+    const found = q ? await channels.searchChannels(q, 12) : await channels.topChannels(20);
+    const list = (await Promise.all(found.map(async ({ handle }) => { const ch = await channels.getChannel(handle); return ch ? channels.publicChannel(ch, { userId: viewer }) : null; }))).filter(Boolean);
+    return send(res, 200, { channels: list });
+  }
+  if (key === 'GET /api/channels/check') {
+    const raw = url.searchParams.get('handle') || '';
+    const r = await channels.handleAvailable(raw);
+    return send(res, 200, { ...r, suggestion: r.ok ? undefined : await channels.freeHandleNear(channels.cleanHandle(raw) || 'course') });
+  }
+  if (key === 'GET /api/channels/for') {
+    const ref = String(url.searchParams.get('ref') || '').slice(0, 60);
+    const title = String(url.searchParams.get('title') || '').slice(0, 60);
+    // A custom topic is identified by its title (curriculum customUnit hashes it the same way).
+    const cuRef = title ? customUnitId(title) : null;
+    const ch = await channels.channelForRef(ref || cuRef || '');
+    const viewer = await cookieUser(req);
+    if (ch) return send(res, 200, { channel: await channels.publicChannel(ch, { userId: viewer }) });
+    const src = ref ? await channels.sourceOf(ref) : null;
+    return send(res, 200, { channel: null, suggestion: await channels.freeHandleNear(src?.suggest || channels.slugHandle(title || src?.name || 'course')) });
+  }
+  const channelApiMatch = /^\/api\/channels\/([a-z0-9._-]{3,40})(\/lessons)?$/.exec(path);
+  if (req.method === 'GET' && channelApiMatch) {
+    const ch = await channels.getChannel(channelApiMatch[1]);
+    if (!ch) return send(res, 404, { error: 'No such course profile' });
+    const viewer = await cookieUser(req);
+    const before = Number(url.searchParams.get('before')) || null;
+    const ids = await channels.channelLessonIds(ch, { limit: 30, before });
+    const lessons = await lessonTiles(ids);
+    if (channelApiMatch[2]) return send(res, 200, { lessons, more: ids.length === 30 });
+    // Opening a profile leans this viewer's feed towards it for a while (feed/index.js profileIntent).
+    if (viewer) waitUntil(noteProfileVisit(viewer, ch));
+    return send(res, 200, { channel: await channels.publicChannel(ch, { userId: viewer, withUnits: true }), lessons, more: ids.length === 30 });
+  }
+
   // Sitemap: the home page plus every ready lesson page, newest first.
   if (req.method === 'GET' && /^\/(?:api\/)?sitemap\.xml$/.test(path)) {
     const flat = await kv.zrange('ready:any', 0, SITEMAP_LIMIT - 1, { rev: true, withScores: true });
     const lessons = [];
     for (let i = 0; i + 1 < flat.length; i += 2) lessons.push({ id: flat[i], at: Number(flat[i + 1]) });
-    return send(res, 200, sitemapXml(siteOrigin(req), lessons), { 'Content-Type': 'application/xml; charset=utf-8', 'Cache-Control': 'public, max-age=3600, s-maxage=3600' });
+    const profiles = (await channels.topChannels(5000)).map((c) => c.handle);
+    return send(res, 200, sitemapXml(siteOrigin(req), lessons, profiles), { 'Content-Type': 'application/xml; charset=utf-8', 'Cache-Control': 'public, max-age=3600, s-maxage=3600' });
   }
   const publicVideoMatch = /^\/api\/public\/videos\/([0-9a-f-]{36})$/.exec(path);
   if (req.method === 'GET' && publicVideoMatch) {
@@ -354,10 +427,14 @@ async function route(req, res, url) {
     let before;
     try { before = current ? await db.getUser(current) : null; user = await saveProfile(current, body); } catch (err) { if (err.status === 400) return send(res, 400, { error: err.message, code: err.code }); throw err; }
     if (user.setupDone && !before?.setupDone) waitUntil(kv.hincrby(`events:day:${new Date().toISOString().slice(0, 10)}`, 'funnel_setup', 1));
+    // Every course the student picked gets its profile (named by them when it is new) and is followed.
+    const handles = body.handles && typeof body.handles === 'object' ? Object.fromEntries(Object.entries(body.handles).slice(0, 12).map(([k, v]) => [String(k).slice(0, 60), String(v).slice(0, 64)])) : {};
+    const made = body.draft ? [] : await channels.syncOwnChannels(user, { handles }).catch((err) => { console.warn('[channels]', err.message); return []; });
+    if (made.length) { user.channelsSig = made.map((m) => m.ref).sort().join(','); await db.saveUser(user); }
     waitUntil(syncUser(user.id, { event: user.setupDone && !before?.setupDone ? 'set up' : null, detail: user.profile?.program || (user.profile?.level || ''), force: true }));
     // Start the first videos now, so the feed opens without a wait.
     waitUntil(prefetch(user.id).then((pending) => Promise.allSettled(pending)).catch((err) => console.warn('[prefetch]', err.message)));
-    return send(res, 200, { user }, { 'Set-Cookie': userCookie(req, user.id) });
+    return send(res, 200, { user, channels: made }, { 'Set-Cookie': userCookie(req, user.id) });
   }
 
   const userId = await cookieUser(req);
@@ -366,6 +443,12 @@ async function route(req, res, url) {
 
   if (key === 'GET /api/me') {
     const [u, seen, liked] = await Promise.all([db.getUser(userId).then(db.ensureMemberNo), db.countSet(userId, 'seen'), db.countSet(userId, 'liked')]);
+    // Courses without a profile yet (research that finished later, students from before profiles): make and follow them.
+    if (u.setupDone && channels.ownRefs(u).sort().join(',') !== (u.channelsSig || '')) {
+      const made = await channels.syncOwnChannels(u).catch(() => null);
+      if (made) { u.channelsSig = made.map((m) => m.ref).sort().join(','); await db.saveUser(u); }
+    }
+    const following = await channels.followingOf(userId);
     // Legacy profiles (before setupDone existed) count as set up when they have content.
     const setupDone = u.setupDone ?? Boolean(u.units?.length || u.interests?.length);
     const [billing, stats] = await Promise.all([billingStatus(u, { fetchMe: getMeAs }), studentStats(userId, { watched: seen, progress: await getProgress(userId), masteryOf: mastery })]);
@@ -373,7 +456,7 @@ async function route(req, res, url) {
     waitUntil(syncUser(userId)); // keeps the admin sheet's row fresh (throttled)
     const invites = u.memberNo ? await db.referralCount(u.memberNo) : 0;
     const learning = learningProfile(await getSignals(userId), u.styles);
-    return send(res, 200, { user: { ...safe, setupDone, seen, liked, billing, stats, invites, learning: { ...learning, insight: insightOf(learning) } } });
+    return send(res, 200, { user: { ...safe, setupDone, seen, liked, billing, stats, invites, following, learning: { ...learning, insight: insightOf(learning) } } });
   }
 
   // Credits: switch between the free allowance and the student's own account, or disconnect it.
@@ -432,6 +515,29 @@ async function route(req, res, url) {
     const { user, added } = await editProfile(userId, body);
     waitUntil(prefetch(userId).then((pending) => Promise.allSettled(pending)).catch(() => {}));
     return send(res, 200, { user, added });
+  }
+
+  // Follow / unfollow a course profile. Unfollowing a course the student studies takes it off their course too.
+  const followMatch = /^\/api\/channels\/([a-z0-9._-]{3,40})\/follow$/.exec(path);
+  if (followMatch && (req.method === 'POST' || req.method === 'DELETE')) {
+    const user = await db.getUser(userId);
+    if (req.method === 'POST') {
+      const r = await channels.follow(userId, followMatch[1]);
+      if (user.unfollowed?.includes(r.channel.handle)) { user.unfollowed = user.unfollowed.filter((h) => h !== r.channel.handle); await db.saveUser(user); }
+      waitUntil(prefetch(userId).then((pending) => Promise.allSettled(pending)).catch(() => {}));
+      return send(res, 200, { following: true, followers: r.followers });
+    }
+    const r = await channels.unfollow(userId, followMatch[1]);
+    const left = channels.ownRefs(user).includes(r.channel.ref) && channels.leaveCourse(user, r.channel);
+    if (!left) user.unfollowed = [...new Set([...(user.unfollowed || []), r.channel.handle])].slice(-100);
+    user.channelsSig = channels.ownRefs(user).sort().join(',');
+    await db.saveUser(user);
+    return send(res, 200, { following: false, followers: r.followers, left, user: left ? user : undefined });
+  }
+  if (key === 'GET /api/me/following') {
+    const handles = await channels.followingOf(userId);
+    const list = (await Promise.all(handles.slice(0, 100).map(async (h) => { const ch = await channels.getChannel(h); return ch ? channels.publicChannel(ch, { userId }) : null; }))).filter(Boolean);
+    return send(res, 200, { channels: list.sort((a, b) => Number(b.mine) - Number(a.mine) || b.followers - a.followers) });
   }
 
   // Start over: { scope: 'feed' | 'everything' } (see resetStudent).

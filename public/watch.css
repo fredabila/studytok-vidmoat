@@ -97,3 +97,32 @@ mark { background: linear-gradient(transparent 28%, var(--hl) 28%, var(--hl) 88%
 
 .foot { padding: 18px 20px calc(22px + env(safe-area-inset-bottom, 0px)); text-align: center; color: var(--ink-3); font-size: 12px; }
 .stage:has(.quiz[data-held="true"]) .play { opacity: 0; pointer-events: none; }
+
+/* ---- Course profile pages (/@handle, server/core/profile.js) ---- */
+.profile { max-width: 720px; }
+.p-head { text-align: center; padding-top: 8px; }
+.p-avatar { width: 92px; height: 92px; margin: 0 auto; border-radius: 50%; display: grid; place-items: center; font-size: 44px; background: var(--hl); border: 2px solid var(--ink); box-shadow: 4px 4px 0 var(--ink); }
+.p-head .title { margin: 16px 0 2px; }
+.p-handle { margin: 0; color: var(--ink-3); font-size: 14px; }
+.p-kicker { margin: 8px 0 0; font-size: 13px; color: var(--ink-2); }
+.p-stats { list-style: none; display: flex; justify-content: center; gap: 22px; margin: 16px 0; padding: 0; font-size: 13px; color: var(--ink-3); }
+.p-stats strong { display: block; font-size: 20px; color: var(--ink); font-family: var(--serif); }
+.p-head .hook { max-width: 520px; margin: 0 auto 10px; }
+.p-by { margin: 0 0 12px; font-size: 13px; color: var(--ink-3); }
+.p-actions { display: flex; justify-content: center; gap: 10px; flex-wrap: wrap; margin: 16px 0 22px; }
+.p-share { background: #fff; color: var(--ink); }
+.grid { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; }
+.tile { position: relative; display: block; aspect-ratio: 9 / 16; overflow: hidden; border-radius: 6px; background: var(--dark); color: #fff; text-decoration: none; }
+.tile img, .tile-blank { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.tile-blank { background: linear-gradient(160deg, #2a2a2e, #0d0d0e); }
+.tile-meta { position: absolute; left: 0; right: 0; bottom: 0; padding: 22px 7px 7px; display: grid; gap: 3px; background: linear-gradient(transparent, rgba(0, 0, 0, .78)); }
+.tile-title { font-size: 12px; font-weight: 600; line-height: 1.25; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.tile-len { font-size: 10px; opacity: .85; }
+.empty { text-align: center; color: var(--ink-3); padding: 24px 0; }
+.syllabus { margin-top: 26px; padding: 20px; background: #fff; border: 1.5px solid var(--line-2); border-radius: 16px; }
+.syllabus h2 { margin: 0 0 10px; font-size: 22px; }
+.syllabus ol { margin: 0; padding-left: 22px; }
+.syllabus li { margin: 6px 0; font-size: 15px; color: var(--ink-2); }
+.syllabus li strong { color: var(--ink); }
+.syllabus li span { display: block; font-size: 13.5px; }
+@media (min-width: 640px) { .grid { gap: 8px; } .tile-title { font-size: 13px; } }

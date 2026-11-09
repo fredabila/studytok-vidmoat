@@ -46,6 +46,14 @@
   ],
   "rewrites": [
     {
+      "source": "/@:handle",
+      "destination": "/api/index?__path=c/:handle"
+    },
+    {
+      "source": "/og/c/:file",
+      "destination": "/api/index?__path=og/c/:file"
+    },
+    {
       "source": "/sitemap.xml",
       "destination": "/api/index?__path=sitemap.xml"
     },

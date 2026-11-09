@@ -22,6 +22,7 @@ import { ingest, getSignals, getSession, noteServed, noteBreather, studentStats,
 import { needsBreather, pickBreather, isBreatherUnit, BREATHER_REASONS } from './breathers.js';
 import { pickMoment, noteMoment, momentContext, momentItem } from './moments.js';
 import * as push from '../core/push.js';
+import { followCandidates, channelOfUnit, isFollowing, ensureChannel, follow as followChannel } from './channels.js';
 import { credentialFor } from '../core/billing.js';
 import { kv } from '../core/kv.js';
 import * as db from '../core/db.js';
@@ -166,6 +167,16 @@ export async function editProfile(userId, body) {
     delete user.unitGroups[body.removeUnit];
   }
   if (typeof body.addPack === 'string' && PACK_SLUG.test(body.addPack)) { if (addPack(user, body.addPack)) added = { pack: publicPack(PACK_BY_SLUG[body.addPack]) }; }
+  // A custom topic or pack gets its course profile (named by this student when the topic is new) and is followed.
+  const madeRef = added?.pack ? `pack:${added.pack.slug}` : added?.id?.startsWith?.('cu:') ? added.id : null;
+  if (madeRef) {
+    const made = await ensureChannel(madeRef, { handle: body.addCustom?.handle || null, createdBy: user.id }).catch(() => null);
+    if (made) {
+      user.unfollowed = (user.unfollowed || []).filter((h) => h !== made.channel.handle);
+      await followChannel(user.id, made.channel.handle, { auto: true });
+      added = { ...added, channel: { handle: made.channel.handle, existed: made.existed, gotRequested: made.gotRequested } };
+    }
+  }
   if (typeof body.removePack === 'string') removePack(user, body.removePack);
   if (Array.isArray(body.styles)) user.styles = cleanStyles(body.styles);
   if (!user.units.length && !user.interests.length) user.interests = INTEREST_TOPICS.map((t) => t.id);
@@ -183,7 +194,7 @@ async function updateProgress(userId, unitId, type, extra) {
   return all[unitId];
 }
 
-async function candidatesFor(user) {
+async function candidatesFor(user, { intent = null } = {}) {
   const out = [];
   const course = (await Promise.all(user.units.map((id) => getUnit(id)))).filter(Boolean);
   const groupOf = (u) => u.programKey || user.unitGroups?.[u.id] || (u.pack ? `pack:${u.pack}` : u.custom ? 'custom' : 'course');
@@ -195,6 +206,13 @@ async function candidatesFor(user) {
     seen[group] = (seen[group] || 0) + 1;
     out.push({ unit, kind: 'course', order, group, pos: { index: seen[group], total: sizes[group] } });
   });
+  // Course profiles the student follows (feed/channels.js), beyond their own syllabus.
+  const skip = new Set(out.map((c) => c.unit.id));
+  for (const c of await followCandidates(user, { skip, intent }).catch(() => [])) {
+    if (!skip.has(c.unit.id)) { skip.add(c.unit.id); out.push(c); }
+  }
+  // A visit to the profile of a course the student already studies leans the feed the same way.
+  if (intent?.handle) for (const c of out) if (c.kind === 'course' && c.channel == null && intent.units?.includes(c.unit.id)) c.intent = intent.w;
   for (const t of user.interests) {
     const unit = interestUnit(t);
     if (unit && !out.some((c) => c.unit.id === unit.id)) out.push({ unit, kind: 'interest' });
@@ -226,6 +244,17 @@ async function reusable(userId, readyKey, taken, { signals, session, review = fa
   });
   return best;
 }
+
+/**
+ * The course profile the student opened in the last 20 minutes, as { handle, at, units, w }
+ * (w fades from 1 to 0), or null. Written by GET /api/channels/:handle (noteProfileVisit).
+ */
+export async function profileIntent(userId, now = Date.now()) {
+  const v = await kv.get(`user:${userId}:intent`);
+  if (!v?.handle || now - v.at > 20 * 60 * 1000) return null;
+  return { ...v, w: +(1 - (now - v.at) / (20 * 60 * 1000)).toFixed(3) };
+}
+export const noteProfileVisit = (userId, channel) => kv.set(`user:${userId}:intent`, { handle: channel.handle, at: Date.now(), units: (channel.units || []).slice(0, 80) }, { ex: 20 * 60 });
 
 /** Videos this viewer already has generating (so prefetch does not pile up). */
 async function generatingFor(userId) {
@@ -267,7 +296,8 @@ async function starter(userId, level, taken) {
 export async function nextItems(userId, count = 3) {
   const user = await db.getUser(userId);
   const audience = audienceFor(user);
-  const { candidates, hasCourse } = await candidatesFor(user);
+  const intent = await profileIntent(userId);
+  const { candidates, hasCourse } = await candidatesFor(user, { intent });
   const [states, signals, session] = await Promise.all([getProgress(userId), getSignals(userId), getSession(userId)]);
   const recent = (await kv.lrange(`user:${userId}:recentUnits`, 0, 9)) || [];
 
@@ -442,11 +472,12 @@ function quizWithStepText(quiz, lesson) {
 export async function publicVideo(v, userId, { withDocument = true, why, pos, queuedFor } = {}) {
   const look = TOPIC_BY_ID[v.topic] || TOPIC_BY_ID.biology;
   const ready = v.status === 'ready';
-  const [stats, liked, saved, document] = await Promise.all([
+  const [stats, liked, saved, document, channel] = await Promise.all([
     db.getStats(v.id),
     userId ? db.inSet(userId, 'liked', v.id) : false,
     userId ? db.inSet(userId, 'saved', v.id) : false,
     ready && withDocument ? db.getDocument(v.id) : undefined,
+    channelOfUnit(v.unitId).catch(() => null),
   ]);
   return {
     id: v.id,
@@ -456,6 +487,8 @@ export async function publicVideo(v, userId, { withDocument = true, why, pos, qu
     topic: { id: look.id, label: look.label, emoji: look.emoji, accent: look.accent },
     format: { id: v.format || 'explain', tag: formatOf(v.format).tag, name: formatOf(v.format).name },
     unit: v.unitId ? { id: v.unitId, title: v.unitTitle || null } : null,
+    // The course profile this lesson belongs to (feed/channels.js), for the @handle on the slide.
+    channel: channel ? { handle: channel.handle, name: channel.name, following: await isFollowing(userId, channel.handle) } : undefined,
     pack: packOfUnit(v.unitId) ? (({ slug, title, by, link, cta, kind }) => ({ slug, title, by, link, cta, kind }))(packOfUnit(v.unitId)) : undefined,
     title: v.lesson?.title || null,
     hook: v.lesson?.hook || null,
@@ -573,6 +606,8 @@ export function leadOf(why = {}) {
   if (why.explored) return 'explored';
   if (why.kind === 'breather') return 'breather';
   if (why.kind === 'interest') return 'interest';
+  if (why.intent > 0) return 'intent';   // a course profile visited just now
+  if (why.kind === 'follow') return 'follow'; // a course profile the student follows
   const terms = { affinity: why.affinity || 0, progress: why.progress || 0, review: why.review || 0 };
   const [best] = Object.entries(terms).sort((a, b) => b[1] - a[1])[0] || ['progress'];
   return `${best}-led`;
