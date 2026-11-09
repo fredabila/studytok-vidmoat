@@ -14,7 +14,9 @@
 import { config } from '../core/config.js';
 import { topic as topicOf } from '../curriculum/topics.js';
 import { format as formatOf, scenesFor } from './formats.js';
-import { teachingVisual, stampCard, numberCard, recapCard, questionCard, answerSteps, calloutCard, flashCard, chatThread, tierCard, sheetCard } from './visuals.js';
+import { teachingVisual, stampCard, numberCard, recapCard, questionCard, answerSteps, calloutCard, flashCard, chatThread, tierCard, sheetCard, CARD } from './visuals.js';
+// Captions under a teaching card start this far down (the card's bottom edge plus two caption lines' clearance).
+const CAPTIONS_UNDER_CARD = CARD.y + CARD.h / 2 + 270;
 import { isTeachingVisual } from '../lessons/schema.js';
 
 export const W = 1080;
@@ -26,9 +28,11 @@ const TAIL = 1.2;            // after the narration ends
 const REVEAL_SEC = 2.6;
 
 // Higher trackIndex draws on top. Track 2 is the default audio track (A1).
-const T = { ambient: 0, media: 1, scrim: 3, card: 4, quizDim: 5, captions: 6, headline: 7, quizBox: 8, quizOk: 9, quizText: 10, quizTextOk: 11, chrome: 12, chromeText: 13, voice: 15, sfx: 16 };
+// Higher tracks draw on top. A scene's dim (4) sits under its card (5), so cards stay bright; captions (6) sit above both.
+const T = { ambient: 0, media: 1, scrim: 3, quizDim: 4, card: 5, captions: 6, headline: 7, quizBox: 8, quizOk: 9, quizText: 10, quizTextOk: 11, chrome: 12, chromeText: 13, voice: 15, sfx: 16 };
 
 const round = (n) => Math.round(n * 100) / 100;
+const round6 = (n) => Math.round(n * 1e6) / 1e6;
 const words = (s) => String(s || '').trim().split(/\s+/).filter(Boolean);
 
 /** Scale that makes a w x h source cover the 1080x1920 frame (the player contain-fits by default). */
@@ -97,9 +101,12 @@ export function planTimeline(scenes, voice = null) {
     }
     // A spoken scene whose narration was dropped (character limit) is left out of the video.
   });
+  // Every scene gets at least 0.8 s; a scene that would start sooner waits, so scenes never overlap
+  // (overlapping clips are pushed up a track by the editor: dims over cards, footage over the scrim).
+  starts.forEach((s, i) => { if (i > 0 && s.start < starts[i - 1].start + 0.8) s.start = round(starts[i - 1].start + 0.8); });
   const segments = starts.map(({ scene, start }, i) => {
     const next = i + 1 < starts.length ? starts[i + 1].start : Math.max(end, start + (scene.minDur || 3));
-    return { ...scene, start, duration: round(Math.max(0.8, next - start)) };
+    return { ...scene, start, duration: round(next - start) };
   });
 
   for (const scene of scenes) {
@@ -133,10 +140,12 @@ function spanFor(text, term, color) {
   if (i < 0) return undefined;
   return [{ from: i, to: i + Math.max(1, words(term).length) - 1, color }];
 }
+// Words never worth colouring in a caption ("Step 1: draw the forces" must not light up "the").
+const EMPHASIS_SKIP = new Set(['the', 'and', 'for', 'with', 'from', 'that', 'this', 'are', 'was', 'its', 'you', 'your', 'how', 'what', 'why', 'who', 'into', 'onto', 'over', 'step', 'not', 'but', 'than', 'then']);
 function emphasisFor(spoken, keyTerm, color) {
   const norm = (s) => s.toLowerCase().replace(/[^\p{L}\p{N}]/gu, '');
   const said = new Set(words(spoken).map(norm));
-  const picked = words(keyTerm || '').filter((w) => w.length > 2 && said.has(norm(w))).slice(0, 2);
+  const picked = words(keyTerm || '').filter((w) => w.length > 2 && !EMPHASIS_SKIP.has(norm(w)) && said.has(norm(w))).slice(0, 2);
   return picked.length ? { emphasis: { words: picked, style: { color } } } : {};
 }
 const SHADOW = { shadow: true, shadowColor: '#000000', shadowBlur: 18, shadowDistance: 0 };
@@ -149,13 +158,20 @@ function styled(skinText, over = {}) {
 
 // ---- Clip helpers ------------------------------------------------------------------------------
 
+/**
+ * A duration that ends where the next scene starts. The editor compares start + duration with the
+ * next clip's start in floating point, so 22.99 + 2.01 can count as overlapping 25 and push the next
+ * clip up a track: end a microsecond early (no frame ever lands in that gap).
+ */
+const butt = (start, d) => round6(round(start + d) - round(start) - 1e-6);
+
 function mediaClip(id, m, start, duration, track, { opacity = 1, zoom = 1 } = {}) {
   const isImage = m.type === 'image';
   const scale = coverScale(m.width, m.height);
   const loop = !isImage && m.mediaDuration && m.mediaDuration < duration;
   return [
     {
-      op: 'addClip', clipId: id, type: isImage ? 'image' : 'video', src: m.src, start: round(start), duration: round(duration), trackIndex: track,
+      op: 'addClip', clipId: id, type: isImage ? 'image' : 'video', src: m.src, start: round(start), duration: round6(duration), trackIndex: track,
       ...(isImage ? {} : { mediaStart: 0, mediaDuration: m.mediaDuration }),
       patch: { scale, volume: 0, muted: true, opacity, ...(loop ? { loop: true } : {}) },
     },
@@ -170,8 +186,10 @@ const sfxClip = (id, s, at, volume, extra = {}) => (s?.src ? [{
   trackIndex: T.sfx, patch: { volume, ...(extra.loop ? { loop: true } : {}) },
 }] : []);
 
+// A dim ends a hair before the next scene starts: the editor treats touching clips on one track as
+// a clash and moves the second one up a track (where a scene's dim would cover its own card).
 const dim = (id, start, duration, track, fill, opacity) => ({
-  op: 'addShapeClip', clipId: id, kind: 'rectangle', start: round(start), duration: round(duration), trackIndex: track,
+  op: 'addShapeClip', clipId: id, kind: 'rectangle', start: round(start), duration: round(Math.max(0.05, duration - 0.02)), trackIndex: track,
   style: { fill, fillOpacity: opacity, width: W * 1.3, height: H * 1.3 },
 });
 
@@ -190,7 +208,8 @@ export function composeLesson(lesson, media = {}) {
   const sfx = media.sfx || {};
   const cmds = [];
   const accent = look.accent;
-  const card = (id, start, d) => ({ id, start, duration: d, track: T.card, accent, theme });
+  // Cards share one track back to back, so each ends where the next scene begins (see butt).
+  const card = (id, start, d) => ({ id, start, duration: butt(start, d), track: T.card, accent, theme });
   let n = 0;
   const uid = (p) => `${p}${n++}`;
 
@@ -271,7 +290,9 @@ export function composeLesson(lesson, media = {}) {
       const teaching = isTeachingVisual(v.kind) ? teachingVisual(v, { ...card(`vis${i}`, start + 0.15, d - 0.15) }) : [];
       const fullBleed = !teaching.length && m;
       if (fullBleed) {
-        cmds.push(...mediaClip(`media${i}`, m, start, d + 0.4, T.media));
+        // Back to back, not overlapping: a transition runs OUT of a clip into the next one on the same
+        // track, and an overlapping clip is pushed up a track, over the scrim and the cards.
+        cmds.push(...mediaClip(`media${i}`, m, start, butt(start, d), T.media));
         cmds.push({ op: 'setTransition', clipId: `media${i}`, type: skin.transition || 'dissolve', duration: 0.4 });
       }
       cmds.push(...teaching);
@@ -293,7 +314,8 @@ export function composeLesson(lesson, media = {}) {
       }
       // Captions were placed before we knew whether this beat has a card; fix the y now.
       const cap = cmds.findLast((c) => c.op === 'addCaptions');
-      if (cap && captions[seg.id]?.length) cap.y = teaching.length ? skin.captions.y : Math.min(skin.captions.y, 240);
+      // Under a teaching card the captions sit clear of its bottom edge (the card ends at CARD.y + CARD.h / 2).
+      if (cap && captions[seg.id]?.length) cap.y = teaching.length ? Math.max(skin.captions.y, CAPTIONS_UNDER_CARD) : Math.min(skin.captions.y, 240);
     }
 
     if (kind === 'stamp') {
@@ -306,7 +328,7 @@ export function composeLesson(lesson, media = {}) {
       const i = seg.index;
       const m = media.itemMedia?.[i];
       if (m) {
-        cmds.push(...mediaClip(`item${i}`, m, start, d + 0.3, T.media, { zoom: 1.04 }));
+        cmds.push(...mediaClip(`item${i}`, m, start, butt(start, d), T.media, { zoom: 1.04 }));
         cmds.push({ op: 'setTransition', clipId: `item${i}`, type: skin.transition || 'whip-pan', duration: 0.35 });
       }
       cmds.push(...numberCard(card(`num${i}`, start, d), { index: seg.number != null ? seg.number - 1 : i, total: seg.total, title: seg.item.title }));
@@ -315,19 +337,19 @@ export function composeLesson(lesson, media = {}) {
 
     if (kind === 'sheet') {
       cmds.push(dim(uid('sheetDim'), start, d, T.quizDim, look.bg, 0.5));
-      cmds.push(...sheetCard(card(`sheet${seg.index}`, start, d + 0.05), { items: seg.items, upTo: seg.index, title: seg.title }));
+      cmds.push(...sheetCard(card(`sheet${seg.index}`, start, d), { items: seg.items, upTo: seg.index, title: seg.title }));
       cmds.push(...sfxClip(uid('pop'), sfx.pop, start + 0.1, 0.4));
     }
 
     if (kind === 'tier') {
       cmds.push(dim(uid('tierDim'), start, d, T.quizDim, look.bg, 0.5));
-      cmds.push(...tierCard(card(`tier${seg.index}`, start, d + 0.05), { items: seg.items, latest: seg.item }));
+      cmds.push(...tierCard(card(`tier${seg.index}`, start, d), { items: seg.items, latest: seg.item }));
       cmds.push(...sfxClip(uid('pop'), sfx.pop, start + 0.1, 0.5));
     }
 
     if (kind === 'stepsAll' || kind === 'stepsWrong') {
       cmds.push(dim(uid('stepDim'), start, d, T.quizDim, look.bg, 0.5));
-      cmds.push(...answerSteps(card(`${kind}${seg.id}`, start, d + 0.05), { steps: seg.steps, exam: seg.exam, mode: kind === 'stepsAll' ? 'all' : 'wrong', wrong: seg.wrong ?? -1 }));
+      cmds.push(...answerSteps(card(`${kind}${seg.id}`, start, d), { steps: seg.steps, exam: seg.exam, mode: kind === 'stepsAll' ? 'all' : 'wrong', wrong: seg.wrong ?? -1 }));
       if (kind === 'stepsAll') {
         // Invisible markers for tap-to-answer: options from `opt0`, reveal at `optOk`.
         cmds.push({ op: 'addShapeClip', clipId: 'opt0', kind: 'rectangle', start: round(start + 0.4), duration: round(d - 0.4), trackIndex: T.quizBox, style: { fill: '#000000', fillOpacity: 0, width: 10, height: 10 }, patch: { y: 900 } });
@@ -374,7 +396,7 @@ export function composeLesson(lesson, media = {}) {
 
     if (kind === 'chat') {
       if (seg.index === 0) cmds.push(dim('chatDim', start, round(segments.filter((s) => s.kind === 'chat').reduce((n, s) => n + s.duration, 0)), T.quizDim, look.bg, 0.5));
-      cmds.push(...chatThread(card(`msg${seg.index}`, start, d + 0.05), { contact: seg.contact, messages: seg.messages }));
+      cmds.push(...chatThread(card(`msg${seg.index}`, start, d), { contact: seg.contact, messages: seg.messages }));
       cmds.push(...sfxClip(uid('pop'), sfx.pop, start + 0.1, 0.4));
     }
 
@@ -417,7 +439,7 @@ export function composeLesson(lesson, media = {}) {
       cmds.push(...sfxClip('ding', sfx.ding, start, 0.55));
       if (lesson.quiz.explanation) {
         cmds.push({ op: 'addTextClip', clipId: 'explain', text: lesson.quiz.explanation, start: round(start + 0.2), duration: round(d - 0.2), trackIndex: T.quizText,
-          style: { fontSize: 76, fontWeight: 600, color: '#ffffff', maxWidth: 0.84, lineHeight: 1.2, animIn: 'fade-in', animInDuration: 0.3 }, patch: { y: 520 } });
+          style: { fontSize: 76, fontWeight: 600, color: '#ffffff', maxWidth: 0.84, lineHeight: 1.2, animIn: 'fade-in', animInDuration: 0.3 }, patch: { y: 600 } });
       }
     }
 
