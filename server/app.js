@@ -10,7 +10,7 @@ import { LEVELS } from './curriculum/levels.js';
 import { catalogNames } from './curriculum/catalog.js';
 import { usingRedis, redisSource, redisLikeVarNames } from './core/kv.js';
 import * as db from './core/db.js';
-import { saveProfile, editProfile, prefetch, nextItems, publicVideo, library, topUpLibrary, cleanProfile, linkVidmoat, recordReferral, resetStudent } from './feed/index.js';
+import { saveProfile, editProfile, prefetch, nextItems, publicVideo, library, topUpLibrary, cleanProfile, linkVidmoat, recordReferral, resetStudent, notesOf } from './feed/index.js';
 import { extraMoments, setExtraMoments } from './feed/moments.js';
 import { resolveProgram, getProgram, getUnit } from './curriculum/index.js';
 import { getPlan } from './lessons/plan.js';
@@ -31,7 +31,8 @@ import { getProgress, audienceFor } from './feed/index.js';
 import { kv } from './core/kv.js';
 import * as push from './core/push.js';
 import { originOf } from './core/auth.js';
-import { publicLesson, watchPage, notFoundPage, refOf } from './core/watch.js';
+import { publicLesson, watchPage, notFoundPage, refOf, SITE_URL } from './core/watch.js';
+import { sitemapXml, SITEMAP_LIMIT } from './core/sitemap.js';
 
 
 export const SECURITY_HEADERS = {
@@ -78,6 +79,12 @@ async function readJson(req, limit = 64 * 1024) {
   if (!chunks.length) return {};
   try { return JSON.parse(Buffer.concat(chunks).toString()); } catch { throw Object.assign(new Error('Invalid JSON'), { status: 400 }); }
 }
+
+/**
+ * The site's public origin for canonical links and share images: STUDYTOK_SITE_URL, or
+ * study-graph.com in production, or whatever host served the request (local, previews).
+ */
+const siteOrigin = (req) => ((process.env.STUDYTOK_SITE_URL || process.env.VERCEL_ENV === 'production') ? SITE_URL : originOf(req));
 
 const isHttps = (req) => (req.headers['x-forwarded-proto'] || '').split(',')[0].trim() === 'https' || Boolean(process.env.VERCEL);
 
@@ -175,13 +182,38 @@ async function route(req, res, url) {
   const watchMatch = /^\/(?:api\/)?v\/([0-9a-f-]{36})$/.exec(path);
   if (req.method === 'GET' && watchMatch) {
     const ref = refOf(url.searchParams.get('ref'));
-    const pageUrl = `${originOf(req)}/v/${watchMatch[1]}`;
+    const site = siteOrigin(req);
+    const pageUrl = `${site}/v/${watchMatch[1]}`;
     const v = await db.getVideo(watchMatch[1]);
     const html = { 'Content-Type': 'text/html; charset=utf-8' };
     if (!v || v.status !== 'ready') return send(res, 404, notFoundPage({ url: pageUrl, ref }), { ...html, 'Cache-Control': 'no-store' });
     // Views of shared pages: one counter per day for the sheet, one per video for ranking.
     waitUntil(Promise.allSettled([kv.hincrby(`events:day:${new Date().toISOString().slice(0, 10)}`, 'share_page_view', 1), db.incrStat(v.id, 'shareViews')]));
-    return send(res, 200, watchPage(v, { url: pageUrl, ref, playerOrigin: config.vidmoat.playerOrigin }), { ...html, 'Cache-Control': 'public, max-age=300' });
+    return send(res, 200, watchPage(v, { url: pageUrl, ref, playerOrigin: config.vidmoat.playerOrigin, notes: notesOf(v), ogImage: `${site}/og/v/${v.id}.png` }), { ...html, 'Cache-Control': 'public, max-age=300' });
+  }
+
+  // Share image for one lesson (core/og.js). Rendered once, then cached by the CDN for a week.
+  // satori/resvg load only here, so the rest of the API never pays for them.
+  const ogMatch = /^\/(?:api\/)?og\/v\/([0-9a-f-]{36})(?:\.png)?$/.exec(path);
+  if (req.method === 'GET' && ogMatch) {
+    const v = await db.getVideo(ogMatch[1]);
+    if (!v || v.status !== 'ready') return redirect(res, '/og.png');
+    try {
+      const { lessonCard } = await import('./core/og.js');
+      const png = await lessonCard(v, { site: new URL(siteOrigin(req)).host });
+      return send(res, 200, png, { 'Content-Type': 'image/png', 'Cache-Control': 'public, max-age=86400, s-maxage=604800, stale-while-revalidate=86400' });
+    } catch (err) {
+      console.warn('[og]', err.message);
+      return redirect(res, '/og.png');
+    }
+  }
+
+  // Sitemap: the home page plus every ready lesson page, newest first.
+  if (req.method === 'GET' && /^\/(?:api\/)?sitemap\.xml$/.test(path)) {
+    const flat = await kv.zrange('ready:any', 0, SITEMAP_LIMIT - 1, { rev: true, withScores: true });
+    const lessons = [];
+    for (let i = 0; i + 1 < flat.length; i += 2) lessons.push({ id: flat[i], at: Number(flat[i + 1]) });
+    return send(res, 200, sitemapXml(siteOrigin(req), lessons), { 'Content-Type': 'application/xml; charset=utf-8', 'Cache-Control': 'public, max-age=3600, s-maxage=3600' });
   }
   const publicVideoMatch = /^\/api\/public\/videos\/([0-9a-f-]{36})$/.exec(path);
   if (req.method === 'GET' && publicVideoMatch) {

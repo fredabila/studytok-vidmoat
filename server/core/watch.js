@@ -5,9 +5,11 @@
 
 import { format as formatOf } from '../video/formats.js';
 import { TOPIC_BY_ID } from '../curriculum/topics.js';
+import { level as levelOf } from '../curriculum/levels.js';
 
 export const SITE_NAME = 'StudyGraph';
-export const FALLBACK_IMAGE = 'https://study-graph.com/og.png';
+export const SITE_URL = (process.env.STUDYTOK_SITE_URL || 'https://study-graph.com').replace(/\/$/, '');
+export const FALLBACK_IMAGE = `${SITE_URL}/og.png`;
 
 const FONTS = 'https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,500;0,9..144,600;0,9..144,700;1,9..144,500&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600&display=swap';
 
@@ -58,7 +60,18 @@ function posterUrl(poster) {
   } catch { return FALLBACK_IMAGE; }
 }
 
-function shell({ title, description, image, url, body, noindex = false, ref = null }) {
+/** JSON for a <script type="application/ld+json"> block: `<` is escaped so text can never close the tag. */
+export const jsonLd = (data) => JSON.stringify(data).replace(/</g, '\\u003c');
+
+/** Seconds as an ISO 8601 duration (PT1M5S), or undefined. */
+export function isoDuration(seconds) {
+  const n = Math.round(Number(seconds));
+  if (!Number.isFinite(n) || n <= 0) return undefined;
+  const m = Math.floor(n / 60);
+  return `PT${m ? `${m}M` : ''}${n % 60 ? `${n % 60}S` : ''}`;
+}
+
+function shell({ title, description, image, imageAlt = '', imageSize = null, url, body, noindex = false, ref = null, ld = null }) {
   const e = escapeHtml;
   return `<!doctype html>
 <html lang="en">
@@ -67,18 +80,24 @@ function shell({ title, description, image, url, body, noindex = false, ref = nu
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>${e(title)} · ${SITE_NAME}</title>
   <meta name="description" content="${e(description)}">
-  ${noindex ? '<meta name="robots" content="noindex">' : ''}
+  <meta name="robots" content="${noindex ? 'noindex' : 'index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1'}">
   <link rel="canonical" href="${e(url)}">
   <meta property="og:type" content="video.other">
   <meta property="og:site_name" content="${SITE_NAME}">
   <meta property="og:title" content="${e(title)}">
   <meta property="og:description" content="${e(description)}">
   <meta property="og:image" content="${e(image)}">
+  ${imageSize ? `<meta property="og:image:type" content="image/png">
+  <meta property="og:image:width" content="${imageSize[0]}">
+  <meta property="og:image:height" content="${imageSize[1]}">
+  ` : ''}<meta property="og:image:alt" content="${e(imageAlt || title)}">
   <meta property="og:url" content="${e(url)}">
+  <meta property="og:locale" content="en_GB">
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:title" content="${e(title)}">
   <meta name="twitter:description" content="${e(description)}">
   <meta name="twitter:image" content="${e(image)}">
+  <meta name="twitter:image:alt" content="${e(imageAlt || title)}">
   <meta name="theme-color" content="#f6f1e7">
   <link rel="icon" href="/icons/favicon-32.png" sizes="32x32">
   <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
@@ -86,6 +105,7 @@ function shell({ title, description, image, url, body, noindex = false, ref = nu
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="${FONTS}">
   <link rel="stylesheet" href="/watch.css">
+  ${ld ? `<script type="application/ld+json">${jsonLd(ld)}</script>` : ''}
 </head>
 <body${ref ? ` data-ref="${ref}"` : ''}>
 ${body}
@@ -103,11 +123,61 @@ const brand = (homeHref) => `<header class="top">
  * The public page for a ready video. `url` is the canonical page URL (no query string);
  * `ref` the inviting member's number, or null.
  */
-export function watchPage(v, { url, ref = null, playerOrigin }) {
+/** The lesson's notes as plain HTML, so the page has real text to read and to index. */
+export function notesHtml(notes) {
+  if (!notes) return '';
+  const e = escapeHtml;
+  const points = (notes.points || []).filter(Boolean).slice(0, 12);
+  const defs = (notes.definitions || []).slice(0, 8);
+  const terms = (notes.keyTerms || []).slice(0, 8);
+  const parts = [
+    notes.objective ? `<p class="notes-objective">${e(notes.objective)}</p>` : '',
+    points.length ? `<h3>Key points</h3>\n    <ul class="notes-points">${points.map((p) => `<li>${e(p)}</li>`).join('')}</ul>` : '',
+    defs.length ? `<h3>Definitions</h3>\n    <dl class="notes-defs">${defs.map((d) => `<dt>${e(d.term)}</dt><dd>${e(d.meaning)}</dd>`).join('')}</dl>` : '',
+    notes.myth && notes.fact ? `<p class="notes-myth"><strong>Myth:</strong> ${e(notes.myth)}<br><strong>Fact:</strong> ${e(notes.fact)}</p>` : '',
+    notes.takeaway ? `<p class="notes-takeaway"><strong>Takeaway:</strong> ${e(notes.takeaway)}</p>` : '',
+    notes.quiz ? `<details class="notes-quiz"><summary>Quick check: ${e(notes.quiz.question)}</summary><ol type="A">${notes.quiz.options.map((o, i) => `<li${i === notes.quiz.answerIndex ? ' class="right"' : ''}>${e(o)}</li>`).join('')}</ol>${notes.quiz.explanation ? `<p>${e(notes.quiz.explanation)}</p>` : ''}</details>` : '',
+    terms.length ? `<p class="notes-terms">${terms.map((t) => `<span>${e(t)}</span>`).join('')}</p>` : '',
+  ].filter(Boolean);
+  if (!parts.length) return '';
+  return `<section class="notes" aria-labelledby="notes-h">
+    <h2 class="serif" id="notes-h">Lesson notes</h2>
+    ${parts.join('\n    ')}
+  </section>`;
+}
+
+/** schema.org data for a lesson page: a video that is also a learning resource. */
+export function lessonLd(v, { url, image, description, notes, site = SITE_URL }) {
+  const look = TOPIC_BY_ID[v.topic];
+  const teaches = [notes?.objective, ...(notes?.keyTerms || [])].filter(Boolean).slice(0, 8);
+  const thumbs = [image, posterUrl(v.poster)].filter((u, i, a) => u && a.indexOf(u) === i);
+  return {
+    '@context': 'https://schema.org',
+    '@type': ['VideoObject', 'LearningResource'],
+    '@id': `${url}#lesson`,
+    name: v.lesson?.title || v.unitTitle || 'A StudyGraph lesson',
+    description,
+    url,
+    thumbnailUrl: thumbs,
+    uploadDate: v.createdAt || undefined,
+    duration: isoDuration(v.duration),
+    inLanguage: 'en',
+    isAccessibleForFree: true,
+    learningResourceType: 'Video lesson',
+    educationalLevel: v.level ? levelOf(v.level).label : undefined,
+    about: look ? { '@type': 'Thing', name: look.label } : undefined,
+    teaches: teaches.length ? teaches : undefined,
+    keywords: (notes?.keyTerms || []).join(', ') || undefined,
+    isPartOf: v.unitTitle ? { '@type': 'Course', name: v.unitTitle, provider: { '@id': `${site}/#org` } } : undefined,
+    publisher: { '@type': 'Organization', '@id': `${site}/#org`, name: SITE_NAME, url: `${site}/`, logo: { '@type': 'ImageObject', url: `${site}/icons/icon-512.png` } },
+  };
+}
+
+export function watchPage(v, { url, ref = null, playerOrigin, notes = null, ogImage = null }) {
   const e = escapeHtml;
   const title = v.lesson?.title || v.unitTitle || 'A StudyGraph lesson';
   const description = v.lesson?.hook || v.lesson?.takeaway || `A short ${formatOf(v.format).name.toLowerCase()} lesson from ${SITE_NAME}.`;
-  const image = posterUrl(v.poster);
+  const image = ogImage || posterUrl(v.poster);
   const home = ref ? `/?ref=${ref}` : '/';
   const f = formatOf(v.format);
   const body = `${brand(home)}
@@ -132,6 +202,7 @@ export function watchPage(v, { url, ref = null, playerOrigin }) {
     <div class="bar"></div>
   </section>
   ${ref ? `<p class="shared-by mono">Shared by member #${ref}</p>` : ''}
+  ${notesHtml(notes)}
   <section class="cta">
     <h2 class="serif">Lessons like this, for <mark>your</mark> syllabus.</h2>
     <p>Short narrated study videos written for your course, level and exam. Free to start.</p>
@@ -139,7 +210,13 @@ export function watchPage(v, { url, ref = null, playerOrigin }) {
   </section>
 </main>
 <script type="module" src="/watch.js"></script>`;
-  return shell({ title, description, image, url, body, ref });
+  const site = (() => { try { return new URL(url).origin; } catch { return SITE_URL; } })();
+  return shell({
+    title, description, image, url, body, ref,
+    imageAlt: `${title}: a ${f.name.toLowerCase()} lesson on StudyGraph`,
+    imageSize: ogImage ? [1200, 630] : null,
+    ld: lessonLd(v, { url, image, description, notes, site }),
+  });
 }
 
 /** The small branded 404 for a missing or not-yet-ready video. */

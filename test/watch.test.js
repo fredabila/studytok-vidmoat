@@ -14,7 +14,9 @@ for (const k of Object.keys(process.env)) if (/REST_API_URL|REDIS_REST_URL/.test
 const { kv } = await import('../server/core/kv.js');
 const db = await import('../server/core/db.js');
 const { handleApi } = await import('../server/app.js');
-const { watchPage, notFoundPage, publicLesson, escapeHtml, refOf, FALLBACK_IMAGE } = await import('../server/core/watch.js');
+const { watchPage, notFoundPage, publicLesson, escapeHtml, refOf, FALLBACK_IMAGE, notesHtml, lessonLd, isoDuration, jsonLd } = await import('../server/core/watch.js');
+const { sitemapXml } = await import('../server/core/sitemap.js');
+const { cardTree, clip, posterData, lessonCard, titleSize } = await import('../server/core/og.js');
 const { dailyRow } = await import('../server/core/sheet.js');
 
 const TITLE = 'Osmosis <script>alert("x")</script> & "water"';
@@ -88,7 +90,7 @@ test('watchPage escapes the lesson text and carries the Open Graph / Twitter tag
   assert.ok(html.includes('Get lessons for your own syllabus'));
   assert.ok(html.includes('Built by Vidmoat · a Buzz Innovations Ltd. company'));
   assert.ok(html.includes('<script type="module" src="/watch.js"></script>'));
-  assert.equal(/<script(?! type="module" src=)/.test(html), false, 'no inline scripts (CSP)');
+  assert.equal(/<script(?! type="module" src=| type="application\/ld\+json">)/.test(html), false, 'no inline scripts (CSP); JSON-LD data blocks are not scripts');
   assert.equal(/<style|style="/.test(html), false, 'no inline styles (CSP)');
   assert.ok(html.includes('Cells &amp; transport'));
   assert.ok(html.includes('data-player-origin="https://www.vidmoat.com"'));
@@ -142,4 +144,96 @@ test('GET /v/:id is a branded 404 for a video that is not ready', async () => {
   assert.ok(r.body.includes("This lesson isn't here."));
   assert.equal(r.body.includes('Not yet'), false, 'the unready title is not leaked');
   assert.ok(notFoundPage({ url: 'https://studytok.example/v/x', ref: 3 }).includes('href="/?ref=3"'));
+});
+
+const NOTES = {
+  objective: 'Explain why water moves across a membrane.', keyTerms: ['osmosis', 'partially permeable'],
+  points: ['Water moves toward the saltier side.', 'Cells swell or shrink.'], definitions: [{ term: 'Osmosis', meaning: 'Net movement of water <across> a membrane.' }],
+  takeaway: 'Water follows salt.', myth: null, fact: null,
+  quiz: { question: 'Which way does water move?', options: ['Out', 'Toward salt', 'Nowhere'], answerIndex: 1, explanation: 'Down its own gradient.' },
+};
+
+test('watchPage carries the lesson share image, robots, notes and VideoObject/LearningResource data', () => {
+  const url = `https://study-graph.com/v/${ready.id}`;
+  const html = watchPage(ready, { url, playerOrigin: 'https://www.vidmoat.com', notes: NOTES, ogImage: `https://study-graph.com/og/v/${ready.id}.png` });
+  assert.ok(html.includes(`<meta property="og:image" content="https://study-graph.com/og/v/${ready.id}.png">`));
+  assert.ok(html.includes('<meta property="og:image:width" content="1200">'));
+  assert.ok(html.includes(`<meta name="twitter:image" content="https://study-graph.com/og/v/${ready.id}.png">`));
+  assert.ok(html.includes('<meta name="robots" content="index, follow, max-image-preview:large'));
+  assert.ok(html.includes('Lesson notes'));
+  assert.ok(html.includes('Net movement of water &lt;across&gt; a membrane.'));
+  const ld = JSON.parse(/<script type="application\/ld\+json">(.*?)<\/script>/s.exec(html)[1]);
+  assert.deepEqual(ld['@type'], ['VideoObject', 'LearningResource']);
+  assert.equal(ld.url, url);
+  assert.equal(ld.duration, 'PT32S');
+  assert.equal(ld.uploadDate, ready.createdAt);
+  assert.equal(ld.thumbnailUrl[0], `https://study-graph.com/og/v/${ready.id}.png`);
+  assert.ok(ld.teaches.includes('osmosis'));
+  assert.equal(ld.isPartOf.name, 'Cells & transport');
+  // The title holds a <script> tag: JSON-LD must not let it close the data block.
+  assert.equal(jsonLd({ t: TITLE }).includes('</script>'), false);
+  assert.equal(/<\/script>/g.exec(html.slice(html.indexOf('application/ld+json')))?.index > 0, true);
+});
+
+test('the 404 page stays noindex; notesHtml is empty without notes; durations are ISO 8601', () => {
+  assert.ok(notFoundPage({ url: 'https://study-graph.com/v/x' }).includes('<meta name="robots" content="noindex">'));
+  assert.equal(notesHtml(null), '');
+  assert.equal(notesHtml({ points: [], keyTerms: [], definitions: [] }), '');
+  assert.equal(isoDuration(65), 'PT1M5S');
+  assert.equal(isoDuration(60), 'PT1M');
+  assert.equal(isoDuration(0), undefined);
+  assert.equal(lessonLd({ ...ready, unitTitle: null }, { url: 'u', image: 'i', description: 'd', notes: null }).isPartOf, undefined);
+});
+
+test('GET /v/:id uses the lesson share image and notes', async () => {
+  const r = await call(`/v/${ready.id}`);
+  assert.ok(r.body.includes(`og:image" content="https://studytok.example/og/v/${ready.id}.png"`));
+  assert.ok(r.body.includes('application/ld+json'));
+});
+
+test('sitemap lists the home page and every ready lesson with its image', async () => {
+  const r = await call('/sitemap.xml');
+  assert.equal(r.status, 200);
+  assert.match(r.headers['Content-Type'], /application\/xml/);
+  assert.ok(r.body.includes('<loc>https://studytok.example/</loc>'));
+  assert.ok(r.body.includes(`<loc>https://studytok.example/v/${ready.id}</loc>`));
+  assert.ok(r.body.includes(`<image:loc>https://studytok.example/og/v/${ready.id}.png</image:loc>`));
+  assert.equal(r.body.includes(making.id), false, 'unready lessons are not listed');
+  assert.ok((await call('/api/index?__path=sitemap.xml')).body.includes(ready.id));
+  const xml = sitemapXml('https://s.example', [{ id: 'not-a-uuid', at: 1 }, { id: ready.id, at: Date.parse('2026-01-02') }]);
+  assert.equal(xml.includes('not-a-uuid'), false);
+  assert.ok(xml.includes('<lastmod>2026-01-02</lastmod>'));
+});
+
+test('the share card: text is clipped, the poster is optional and only https JPEG/PNG is fetched', async () => {
+  assert.equal(clip('a b c d e f', 6), 'a b c…');
+  assert.equal(clip('short', 10), 'short');
+  assert.ok(titleSize('x'.repeat(95), false) < titleSize('x'.repeat(20), false));
+  const text = JSON.stringify(cardTree(ready));
+  assert.ok(text.includes('CELLS & TRANSPORT'), 'unit shown');
+  assert.equal(text.includes('"img"'), false, 'no poster element without poster data');
+  assert.ok(JSON.stringify(cardTree(ready, { poster: 'data:image/png;base64,AA' })).includes('"img"'));
+  let fetched = 0;
+  const png = (type) => async () => { fetched++; return new Response(Buffer.from([1, 2, 3]), { headers: { 'content-type': type } }); };
+  assert.equal(await posterData('http://cdn.example/a.jpg', { fetchImpl: png('image/jpeg') }), null);
+  assert.equal(await posterData('javascript:alert(1)', { fetchImpl: png('image/jpeg') }), null);
+  assert.equal(fetched, 0, 'nothing but https is fetched');
+  assert.equal(await posterData('https://cdn.example/a.svg', { fetchImpl: png('image/svg+xml') }), null);
+  assert.equal(await posterData('https://cdn.example/a.jpg', { fetchImpl: png('image/jpeg') }), 'data:image/jpeg;base64,AQID');
+  assert.equal(await posterData('https://cdn.example/a.jpg', { fetchImpl: async () => { throw new Error('down'); } }), null);
+});
+
+test('GET /og/v/:id.png renders a 1200×630 PNG, and falls back to the site image for unready lessons', async () => {
+  const card = await lessonCard({ ...ready, poster: null });
+  assert.deepEqual([...card.subarray(1, 4)].map((c) => String.fromCharCode(c)).join(''), 'PNG');
+  assert.equal(card.readUInt32BE(16), 1200);
+  assert.equal(card.readUInt32BE(20), 630);
+  const saved = { ...ready, id: crypto.randomUUID(), poster: null };
+  await db.saveVideo(saved);
+  const r = await call(`/og/v/${saved.id}.png`);
+  assert.equal(r.status, 200);
+  assert.equal(r.headers['Content-Type'], 'image/png');
+  assert.match(r.headers['Cache-Control'], /s-maxage=604800/);
+  const v = await call(`/api/index?__path=og/v/${making.id}.png`);
+  assert.equal(v.status, 302);
 });
