@@ -121,6 +121,13 @@ saved lessons, settings and member number stay, and new lessons start from the b
 your syllabus. *Reset everything* also clears your course, saved lessons and settings, and you
 set up again. Your account, member number, invites and free-lesson count always stay.
 
+**What is "How you learn best"?**
+Your learning profile, on your Profile: how well you do with lessons you see (diagrams,
+cards), hear (stories, analogies), read (flashcards, notes) and do (guessing first,
+challenges, games). You can tell StudyTok how you like to learn when you set up, but the
+profile follows what you actually finish and get right, so it can surprise you. Your feed
+leans towards your stronger ways in, a little, and keeps checking that it helps.
+
 **What are the games between lessons?**
 Short games made from lessons you have already watched: match terms to their meanings, put
 steps or dates in order, sort things into two sides, a six-second true-or-false round, and fill

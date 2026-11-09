@@ -78,7 +78,9 @@ function toast(msg) {
 }
 
 // ============================================================================ onboarding
-const ob = { level: null, step: 1, profile: {}, interests: new Set(), programs: [], selected: new Set(), who: 'self' };
+const ob = { level: null, step: 1, profile: {}, interests: new Set(), programs: [], selected: new Set(), who: 'self', styles: new Set() };
+// StudyGraph's four learning styles, in StudyTok's words.
+const LEARN_STYLES = [['visual', '👀', 'Seeing it', 'diagrams, cards, timelines'], ['listening', '🎧', 'Hearing it explained', 'stories, analogies'], ['reading', '📖', 'Reading it', 'flashcards, notes'], ['handson', '🧩', 'Doing it', 'guessing first, games']];
 const ageOf = () => { const n = Number($('#ob-age').value); return Number.isInteger(n) && n >= 5 && n <= 120 ? n : null; };
 const ageBand = (age) => (age == null ? '' : age < 13 ? 'under13' : age < 18 ? '13-17' : '18+');
 /** Who the profile is for, and the rules: under-18s are set up by a parent or guardian on the adult's Vidmoat account. */
@@ -117,6 +119,13 @@ function renderLevels() {
   }, el('span', { class: 'emoji', 'aria-hidden': 'true' }, l.emoji), el('strong', {}, l.label), el('small', {}, LEVEL_INFO[l.id] || ''))));
 }
 
+function renderStyles(box = $('#ob-styles'), chosen = ob.styles, onChange = () => {}) {
+  box.replaceChildren(...LEARN_STYLES.map(([id, emoji, label, hint]) => {
+    const b = el('button', { type: 'button', class: 'chip-btn style-chip', 'aria-pressed': String(chosen.has(id)), title: hint }, `${emoji} ${label}`);
+    b.onclick = () => { chosen.has(id) ? chosen.delete(id) : chosen.add(id); b.setAttribute('aria-pressed', String(chosen.has(id))); onChange(); };
+    return b;
+  }));
+}
 function renderTopics() {
   $('#topics').replaceChildren(...cfg.topics.map((t) => {
     const b = el('button', { type: 'button', class: 'chip-btn', 'aria-pressed': String(ob.interests.has(t.id)) }, `${t.emoji} ${t.label}`);
@@ -250,7 +259,7 @@ async function buildSyllabus() {
 
 function profileBody() {
   const units = ob.programs.flatMap((p) => p.program.units.map((u) => u.id)).filter((id) => ob.selected.has(id));
-  return { profile: { ...ob.profile, level: ob.level, age: ageOf(), managedBy: ob.who === 'child' ? 'guardian' : 'self' }, guardianConsent: ob.who === 'child' && $('#ob-consent-box').checked, programKeys: ob.programs.map((p) => p.program.key), units, interests: [...ob.interests], ref: captureRef() || undefined, pack: store.get('st_pack') || undefined };
+  return { profile: { ...ob.profile, level: ob.level, age: ageOf(), managedBy: ob.who === 'child' ? 'guardian' : 'self' }, guardianConsent: ob.who === 'child' && $('#ob-consent-box').checked, programKeys: ob.programs.map((p) => p.program.key), units, interests: [...ob.interests], ref: captureRef() || undefined, pack: store.get('st_pack') || undefined, styles: [...ob.styles] };
 }
 
 async function runOnboarding(prefill) {
@@ -258,6 +267,7 @@ async function runOnboarding(prefill) {
     ob.level = prefill.profile.level || null;
     ob.profile = { ...prefill.profile };
     ob.interests = new Set(prefill.interests || []);
+    ob.styles = new Set(prefill.styles || []);
     const form = $('#details');
     for (const k of ['country', 'institution', 'program', 'exam', 'examDate']) form[k].value = prefill.profile[k] || '';
     ob.who = prefill.profile.managedBy === 'guardian' ? 'child' : 'self';
@@ -267,6 +277,7 @@ async function runOnboarding(prefill) {
   wireWho();
   renderLevels();
   renderTopics();
+  renderStyles();
   $('#countries').replaceChildren(...COUNTRIES.map((c) => el('option', { value: c })));
   $('#ob-signin-hint').hidden = !cfg.vidmoatSignIn || Boolean(me?.vidmoat);
   $('#onboard').hidden = false;
@@ -1404,7 +1415,7 @@ const PREFS = [
 
 async function patchMe(body) {
   const res = await api('PATCH', '/api/me', body);
-  me = { ...res.user, billing: me?.billing };
+  me = { ...me, ...res.user, billing: me?.billing }; // keep the computed parts (stats, learning, invites) /api/me added
   return res;
 }
 
@@ -1964,6 +1975,45 @@ async function queueLessons(list, source) {
 }
 
 // ============================================================================ profile
+/** "How you learn best": the measured learning profile (server/feed/learning.js), with what to do about it. */
+function renderLearning() {
+  const card = $('#learning-card');
+  const lp = me?.learning;
+  if (!card || !lp) { if (card) card.hidden = true; return; }
+  card.hidden = false;
+  const said = new Set(lp.said || []);
+  const meta = Object.fromEntries(LEARN_STYLES.map(([id, emoji, label]) => [id, { emoji, label }]));
+  const max = Math.max(...lp.styles.map((s) => s.score), 0.01), min = Math.min(...lp.styles.map((s) => s.score));
+  const bars = lp.styles.map((s) => el('div', { class: `lp-row${s.id === lp.top && lp.confidence ? ' top' : ''}` },
+    el('span', { class: 'lp-name' }, `${meta[s.id].emoji} ${s.id === 'listening' ? 'Hearing it' : meta[s.id].label}`, said.has(s.id) ? el('small', {}, ' · you said') : null),
+    el('span', { class: 'lp-bar' }, el('i', { style: `width:${Math.round(18 + 82 * ((s.score - min) / Math.max(0.0001, max - min)))}%` })),
+    el('span', { class: 'lp-val' }, s.watch != null && s.views >= 3 ? `${Math.round(s.watch * 100)}%` : '–')));
+  const top = lp.styles[0];
+  const head = !lp.confidence ? 'Your learning profile starts with your first lessons.'
+    : lp.measured ? `You learn best by ${meta[top.id].label.toLowerCase()}.` : `So far: ${meta[top.id].label.toLowerCase()}. Still learning about you.`;
+  const actions = [];
+  const p = me?.prefs || {};
+  if (lp.measured && top.id === 'visual' && p.visuals !== 'diagrams') actions.push(['Diagram-first lessons', async () => { await patchMe({ prefs: { ...p, visuals: 'diagrams' } }); toast('New lessons will lead with diagrams.'); }]);
+  if (lp.measured && top.id === 'listening' && p.voice === 'off') actions.push(['Turn narration on', async () => { await patchMe({ prefs: { ...p, voice: 'on' } }); toast('Narration is back on for new lessons.'); }]);
+  if (lp.measured && top.id === 'handson') actions.push(['Play a game', () => playGame(null)]);
+  if (lp.measured && top.id === 'reading') actions.push(['Lesson notes are under Why', () => toast('Tap Why on any lesson, then Lesson notes.')]);
+  card.replaceChildren(el('h3', {}, 'How you learn best'),
+    el('p', { class: 'lp-head' }, head),
+    el('div', { class: 'lp-bars' }, ...bars),
+    el('p', { class: 'fine lp-note' }, lp.insight || (lp.confidence ? 'Measured from what you finish, get right and replay. The percentages are how far through you watch.' : 'Measured from what you finish, get right and replay, starting with what you tell us.')),
+    el('div', { class: 'lp-actions' }, ...actions.map(([label, fn]) => el('button', { type: 'button', class: 'btn small', onclick: async () => { track('style_action', { action: label }); try { await fn(); } catch { toast("Couldn't do that."); } } }, label)),
+      el('button', { type: 'button', class: 'btn ghost small', onclick: openStylePicker }, said.size ? 'Change what I said' : 'Tell us how you like to learn')));
+}
+function openStylePicker() {
+  const chosen = new Set(me?.learning?.said || []);
+  const box = el('div', { class: 'chips' });
+  renderStyles(box, chosen);
+  openSheet('How do you like to learn?', el('div', {}, el('p', { class: 'muted' }, 'Pick any. Your feed starts there, then follows what you actually finish and get right: people often learn best in ways they would not have picked.'), box,
+    el('button', { type: 'button', class: 'btn primary', style: 'width:100%;margin-top:14px', onclick: async () => {
+      track('style_set', { styles: [...chosen].join(','), where: 'profile' });
+      try { await patchMe({ styles: [...chosen] }); me = (await api('GET', '/api/me')).user; closeSheet(); renderLearning(); toast('Saved.'); } catch { toast("Couldn't save that."); }
+    } }, 'Save')));
+}
 function renderProfile() {
   const p = me?.profile || {};
   const lvl = cfg.levels.find((l) => l.id === p.level);
@@ -1997,6 +2047,7 @@ function renderProfile() {
 
   renderCredits();
   renderInvite();
+  renderLearning();
   renderPushCard();
   const account = $('#account-card');
   if (me?.vidmoat) {

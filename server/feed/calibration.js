@@ -16,9 +16,9 @@ import { kv } from '../core/kv.js';
 import { FORMAT_VISUAL_DENSITY } from './ranking.js';
 import { experimentReport } from './experiments.js';
 
-export const RULES = ['quality', 'taste', 'diversity', 'fatigue', 'difficulty', 'freshness', 'context', 'retrieval', 'easing'];
+export const RULES = ['quality', 'taste', 'diversity', 'fatigue', 'difficulty', 'freshness', 'context', 'retrieval', 'easing', 'style'];
 /** Rules whose multipliers are judgement calls and may be shrunk; quality and taste are evidence-based already. */
-export const SHRINKABLE = ['diversity', 'fatigue', 'difficulty', 'freshness', 'context', 'retrieval', 'easing'];
+export const SHRINKABLE = ['diversity', 'fatigue', 'difficulty', 'freshness', 'context', 'retrieval', 'easing', 'style'];
 export const MIN_N = 150;          // outcomes per bucket before a weight is fitted
 const DECISION_TTL = 86400;
 const BUCKETS = ['up', 'flat', 'down'];
@@ -34,7 +34,7 @@ export function bucketOf(rule, value) {
 /** The per-rule multipliers of a pick, from the score parts the ranking returns. */
 export function rulesOf(parts = {}) {
   const taste = parts.formatAffinity != null ? 0.5 + 0.7 * parts.formatAffinity + 0.3 * (parts.topicAffinity ?? 0.5) : null;
-  return { quality: parts.quality ?? null, taste, diversity: parts.diversity ?? null, fatigue: parts.fatigue ?? null, difficulty: parts.difficulty ?? null, freshness: parts.freshness ?? null, context: parts.context ?? null, retrieval: parts.retrieval ?? null, easing: parts.easing ?? null };
+  return { quality: parts.quality ?? null, taste, diversity: parts.diversity ?? null, fatigue: parts.fatigue ?? null, difficulty: parts.difficulty ?? null, freshness: parts.freshness ?? null, context: parts.context ?? null, retrieval: parts.retrieval ?? null, easing: parts.easing ?? null, style: parts.style ?? null };
 }
 
 const dkey = (userId, videoId) => `decision:${userId}:${videoId}`;
