@@ -121,6 +121,17 @@ saved lessons, settings and member number stay, and new lessons start from the b
 your syllabus. *Reset everything* also clears your course, saved lessons and settings, and you
 set up again. Your account, member number, invites and free-lesson count always stay.
 
+**Where are the notes for a lesson?**
+Tap *Why* on the video, then *Lesson notes*: what the lesson set out to teach, its points,
+definitions, the quick check with the answer and the one-line takeaway. *Copy notes* puts it on
+your clipboard as text, with the lesson's link. In the Library, tap a unit's title to see the
+study plan StudyTok follows for it and which concepts are covered so far.
+
+**Are the lessons checked?**
+Every batch of scripts is written against the unit's study plan and then read by a reviewer
+model that checks facts, the quick check and the level, fixes small errors and drops anything
+unsound, before a video is made. The notes say "reviewed" when that pass ran.
+
 **What is recall mode (the "key terms hidden" chip)?**
 The video plays with its key terms blanked out of the on-screen text and the narration muted, so
 you have to supply them yourself: that is retrieval practice, the thing that makes knowledge

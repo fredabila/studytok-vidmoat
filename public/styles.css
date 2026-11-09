@@ -815,3 +815,32 @@ body.landing-on { background: var(--paper); }
 .xpack-foot { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 .xpack-foot .tags { margin-left: auto; font-family: var(--mono); font-size: 11px; color: var(--ink-3); }
 .explore-empty { text-align: center; padding: 30px 12px; color: var(--ink-3); }
+
+
+/* ============================================================================ lesson notes, unit plan */
+.notes-btn { width: 100%; margin-top: 12px; }
+.notes { display: grid; gap: 12px; }
+.notes-kicker { margin: 0; font-family: var(--mono); font-size: 11.5px; color: var(--ink-3); text-transform: uppercase; letter-spacing: .04em; }
+.notes-objective { margin: 0; font-size: 15px; line-height: 1.45; padding: 10px 12px; border-radius: 10px; background: var(--hl-2); }
+.notes-terms .chip-btn { padding: 5px 10px; font-size: 13px; cursor: default; }
+.notes-terms .chip-btn.on { background: var(--hl); border-color: var(--ink); }
+.notes-sec { padding: 12px; border-radius: 12px; background: #fff; border: 1.5px solid var(--line-2); }
+.notes-sec h4 { margin: 0 0 8px; font-family: var(--sans); font-size: 12px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--ink-3); }
+.notes-sec p, .notes-sec li { font-size: 14.5px; line-height: 1.5; margin: 0 0 6px; }
+.notes-sec ol { margin: 0; padding-left: 22px; }
+.notes-eq code { display: block; font-family: var(--mono); font-size: 15px; padding: 8px 10px; border-radius: 8px; background: var(--paper-2); }
+.notes-eq small { color: var(--ink-3); }
+.notes-opts li.right { font-weight: 700; background: linear-gradient(transparent 30%, var(--hl-2) 30%, var(--hl-2) 90%, transparent 90%); }
+.notes-takeaway { margin: 0; font-family: var(--serif); font-size: 19px; line-height: 1.3; padding: 12px 14px; border-left: 4px solid var(--hl); }
+.notes-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.unit-title { border: 0; background: none; padding: 0; font: inherit; color: inherit; text-align: left; cursor: pointer; text-decoration: underline dotted var(--line-2); text-underline-offset: 3px; }
+.unit-title:hover { text-decoration-color: var(--ink); }
+.plan-list { margin: 10px 0 0; padding-left: 22px; display: grid; gap: 10px; }
+.plan-list li { display: grid; gap: 2px; font-size: 14px; line-height: 1.4; }
+.plan-list li b { font-family: var(--serif); font-size: 16px; }
+.plan-list li small { color: var(--ink-3); }
+.plan-list li.done { opacity: .65; }
+.plan-list li.done b::after { content: ' ✓'; color: #15803d; }
+.plan h4 { margin: 16px 0 6px; font-family: var(--sans); font-size: 12px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--ink-3); }
+.plan-gloss { margin: 0; display: grid; grid-template-columns: auto 1fr; gap: 6px 12px; font-size: 13.5px; }
+.plan-gloss dt { font-weight: 700; } .plan-gloss dd { margin: 0; color: var(--ink-2); }

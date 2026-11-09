@@ -12,7 +12,9 @@ import { usingRedis, redisSource, redisLikeVarNames } from './core/kv.js';
 import * as db from './core/db.js';
 import { saveProfile, editProfile, prefetch, nextItems, publicVideo, library, topUpLibrary, cleanProfile, linkVidmoat, recordReferral, resetStudent } from './feed/index.js';
 import { extraMoments, setExtraMoments } from './feed/moments.js';
-import { resolveProgram, getProgram } from './curriculum/index.js';
+import { resolveProgram, getProgram, getUnit } from './curriculum/index.js';
+import { getPlan } from './lessons/plan.js';
+import { lessonKey } from './lessons/index.js';
 import { queueStats } from './video/generator.js';
 import { getMe, getMeAs } from './core/vidmoat.js';
 import { connectOwnAccount, disconnectOwnAccount, setMode, billingStatus } from './core/billing.js';
@@ -21,7 +23,7 @@ import { FORMATS, FORMAT_IDS } from './video/formats.js';
 import { ingest, stats as eventStats, studentStats } from './feed/events.js';
 import { syncUser, syncDaily, resyncAll, enabled as sheetEnabled } from './core/sheet.js';
 import { mastery } from './feed/ranking.js';
-import { getProgress } from './feed/index.js';
+import { getProgress, audienceFor } from './feed/index.js';
 import { kv } from './core/kv.js';
 import * as push from './core/push.js';
 import { originOf } from './core/auth.js';
@@ -344,6 +346,16 @@ async function route(req, res, url) {
   }
 
   if (key === 'GET /api/library') return send(res, 200, await library(userId));
+  // The study plan StudyTok follows for one of the student's units (what's in it, what is covered).
+  const planMatch = /^\/api\/units\/([A-Za-z0-9:_.-]{1,80})\/plan$/.exec(path);
+  if (req.method === 'GET' && planMatch) {
+    const [user, unit] = await Promise.all([db.getUser(userId), getUnit(planMatch[1])]);
+    if (!unit) return send(res, 404, { error: 'No such unit' });
+    const lk = lessonKey(unit.id, audienceFor(user));
+    const [plan, covered] = await Promise.all([getPlan(lk), kv.lrange(`covered:${lk}`, 0, 199)]);
+    const done = new Set((covered || []).map((c) => String(c).toLowerCase()));
+    return send(res, 200, { unit: { id: unit.id, title: unit.title, summary: unit.summary || '' }, plan: plan ? { ...plan, concepts: plan.concepts.map((c) => ({ ...c, covered: [...done].some((d) => d.includes(c.title.toLowerCase().slice(0, 18)) || c.title.toLowerCase().includes(d.slice(0, 18))) })) } : null, covered: covered || [] });
+  }
 
   // Web Push reminders (public/push.js): register / drop this device, or send a test to the caller.
   if (key === 'POST /api/push/subscribe') {

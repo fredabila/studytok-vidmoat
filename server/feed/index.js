@@ -459,6 +459,7 @@ export async function publicVideo(v, userId, { withDocument = true, why, pos, qu
     position: pos || undefined,
     starter: why?.starter ? true : undefined,
     queuedFor: queuedFor || undefined,
+    notes: ready ? notesOf(v) : undefined,
     document: document || undefined,
   };
 }
@@ -517,6 +518,38 @@ export function keyTerms(v) {
     if (out.length >= 12) break;
   }
   return out;
+}
+
+/**
+ * The lesson as a revision sheet: objective and key terms (from the unit plan), the points as
+ * spoken, definitions and equations shown, the quick check with its answer, the takeaway.
+ */
+export function notesOf(v) {
+  const l = v.lesson || {};
+  const defs = [];
+  const equations = [];
+  for (const b of l.beats || []) {
+    const vis = b.visual || {};
+    if (vis.kind === 'definition' && vis.title && vis.items?.[0]) defs.push({ term: vis.title, meaning: vis.items[0] });
+    if (vis.kind === 'equation' && vis.items?.length) equations.push({ lines: vis.items.slice(0, 3), meaning: vis.title || '' });
+  }
+  const points = [
+    ...(l.beats || []).map((b) => b.text),
+    ...(l.items || []).map((it) => (it.title ? `${it.title.replace('|', ' / ')}: ${it.text}` : it.text)),
+    ...(l.exam?.steps || []),
+  ].filter(Boolean);
+  const cards = (l.cards || []).map((c) => ({ q: c.q, a: c.a }));
+  const q = v.quiz || l.quiz;
+  return {
+    title: l.title || null,
+    objective: l.concept?.objective || null,
+    keyTerms: [...new Set([...(l.concept?.keyTerms || []), ...(l.beats || []).map((b) => b.keyTerm)].filter(Boolean))].slice(0, 8),
+    points, definitions: defs, equations, cards,
+    myth: l.myth || null, fact: l.fact || null,
+    quiz: q?.question && q.options?.length ? { question: q.question, options: q.options, answerIndex: q.answerIndex ?? 0, explanation: q.explanation || '' } : null,
+    takeaway: l.takeaway || null,
+    reviewed: Boolean(l.reviewed),
+  };
 }
 
 /** Saved videos, watch history and course progress for the Library screen. */
