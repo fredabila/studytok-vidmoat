@@ -3,7 +3,7 @@ title: The Art of War, the ideas
 kind: book
 topic: business
 level: lifelong
-by: StudyTok team
+by: StudyGraph team
 link: https://www.gutenberg.org/ebooks/132
 cta: Read it free on Gutenberg
 language: en

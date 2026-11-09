@@ -53,7 +53,7 @@ if (args.includes('--narrate')) {
 const [media, music, sfx] = await Promise.all([resolveLessonMedia(lesson, look.fallbackVisual), resolveMusic(skin.music), soundKit()]);
 flushKv();
 const { commands, segments, duration, quiz } = composeLesson({ ...lesson, chip: look.label }, { ...media, music, sfx, voice });
-const res = await createProject(`StudyTok preview · ${lesson.title}`, commands);
+const res = await createProject(`StudyGraph preview · ${lesson.title}`, commands);
 const failed = res.results.map((r, i) => [r, commands[i]]).filter(([r]) => !r.ok);
 console.log(`project ${res.project.id} (${lesson.format}): ${commands.length - failed.length}/${commands.length} commands applied, ${duration}s, music "${music?.query || '?'}"`);
 console.log('segments', segments.map((s) => `${s.id}@${s.start}`).join(' '), quiz ? `quiz from ${quiz.from} hold ${quiz.hold} reveal ${quiz.reveal}` : '');

@@ -1,4 +1,4 @@
-// StudyTok client.
+// StudyGraph client.
 //  - Onboarding: level -> studies -> syllabus (catalog match or live course research).
 //  - Feed: a paging controller (drag/flick, wheel/trackpad, keys, buttons) over a track of
 //    slides; live Vidmoat players only for the active slide ±1; ready videos are moved ahead of
@@ -27,7 +27,7 @@ const LEVEL_INFO = {
 const COUNTRIES = ['Ghana', 'Nigeria', 'Kenya', 'South Africa', 'Uganda', 'Tanzania', 'Rwanda', 'Ethiopia', 'Egypt', 'Morocco', 'Cameroon', "Côte d'Ivoire", 'Senegal', 'Zambia', 'Zimbabwe', 'Botswana', 'Malawi', 'United States', 'Canada', 'United Kingdom', 'Ireland', 'Germany', 'France', 'Spain', 'Italy', 'Netherlands', 'Sweden', 'Poland', 'Turkey', 'India', 'Pakistan', 'Bangladesh', 'Sri Lanka', 'Nepal', 'China', 'Japan', 'South Korea', 'Singapore', 'Malaysia', 'Indonesia', 'Philippines', 'Vietnam', 'Thailand', 'Australia', 'New Zealand', 'Brazil', 'Mexico', 'Argentina', 'Colombia', 'Chile', 'Peru', 'Saudi Arabia', 'United Arab Emirates', 'Qatar', 'Jamaica', 'Trinidad and Tobago'];
 
 let cfg;
-let me = null;               // the signed-in StudyTok user (from /api/me)
+let me = null;               // the signed-in StudyGraph user (from /api/me)
 let view = 'feed';
 let installPrompt = null;     // deferred beforeinstallprompt event
 
@@ -79,7 +79,7 @@ function toast(msg) {
 
 // ============================================================================ onboarding
 const ob = { level: null, step: 1, profile: {}, interests: new Set(), programs: [], selected: new Set(), who: 'self', styles: new Set() };
-// StudyGraph's four learning styles, in StudyTok's words.
+// StudyGraph's four learning styles, in StudyGraph's words.
 const LEARN_STYLES = [['visual', '👀', 'Seeing it', 'diagrams, cards, timelines'], ['listening', '🎧', 'Hearing it explained', 'stories, analogies'], ['reading', '📖', 'Reading it', 'flashcards, notes'], ['handson', '🧩', 'Doing it', 'guessing first, games']];
 const ageOf = () => { const n = Number($('#ob-age').value); return Number.isInteger(n) && n >= 5 && n <= 120 ? n : null; };
 const ageBand = (age) => (age == null ? '' : age < 13 ? 'under13' : age < 18 ? '13-17' : '18+');
@@ -356,7 +356,7 @@ function noteCredits(credits) {
     allowance: ['Your free lessons are used up', `Connect your Vidmoat account to keep new lessons coming${credits.unit ? ` (next up: ${credits.unit})` : ''}. Lessons already in the library stay free.`],
     exhausted: ["You're out of Vidmoat credits", 'Top up or upgrade on Vidmoat and new lessons resume automatically.'],
     plan: ['Your Vidmoat plan needs an upgrade', 'AI narration needs a Creator plan or above. Upgrade on Vidmoat to keep making lessons.'],
-    reconnect: ['Reconnect your Vidmoat account', 'StudyTok lost access to your account. Connect it again from your Profile.'],
+    reconnect: ['Reconnect your Vidmoat account', 'StudyGraph lost access to your account. Connect it again from your Profile.'],
   }[reason] || ['New lessons are paused', 'Check Credits on your Profile.'];
   const action = reason === 'allowance' || reason === 'reconnect'
     ? el('a', { class: 'btn vidmoat', href: '/api/auth/vidmoat/connect', onclick: () => { track('signin_click', { where: 'feed_connect' }); flush(true); } }, el('img', { class: 'vm-logo', src: 'https://www.vidmoat.com/logo-512.png', alt: '', width: '22', height: '22' }), reason === 'reconnect' ? 'Reconnect' : 'Use my Vidmoat account')
@@ -1289,7 +1289,7 @@ function openNotes(item) {
       d.pack?.link ? el('a', { class: 'btn small ghost', href: d.pack.link, target: '_blank', rel: 'noopener noreferrer' }, d.pack.cta || 'Source') : null));
   openSheet(n.title || d.title || 'Lesson notes', body);
 }
-/** What StudyTok plans to teach in a unit, and what it has covered so far. */
+/** What StudyGraph plans to teach in a unit, and what it has covered so far. */
 async function openUnitPlan(u) {
   track('plan_open', { unitId: u.id });
   const r = await api('GET', `/api/units/${encodeURIComponent(u.id)}/plan`).catch(() => null);
@@ -1553,7 +1553,7 @@ function nextBurst() {
       const blob = await renderCard({ kind: 'levelup', kicker: 'Level up', title: `I just mastered ${item.title}`, mark: item.title, subtitle: 'Quick checks passed, unit learned.',
         stats: [{ value: me?.stats?.mastered ?? 1, label: 'mastered', hl: true }, { value: me?.stats?.streak ?? 0, label: 'day streak' }, { value: me?.stats?.watched ?? 0, label: 'lessons' }],
         line: 'Another one down. Who is next?', mascot: mascot('cheer', 300), memberNo: me?.memberNo, accent: '#34d399', chips: [item.title], chipsLabel: 'Mastered' });
-      const how = await shareCard(blob, { text: `I just mastered ${item.title} on StudyTok. Join me: ${inviteLink()}`, filename: 'studytok-level-up.png' });
+      const how = await shareCard(blob, { text: `I just mastered ${item.title} on StudyGraph. Join me: ${inviteLink()}`, filename: 'studygraph-level-up.png' });
       if (how === 'saved') toast('Card saved to your device.');
     } catch { toast("Couldn't make the card."); }
     close();
@@ -1565,7 +1565,7 @@ function nextBurst() {
   if (navigator.vibrate) navigator.vibrate([30, 40, 60]);
   timer = setTimeout(close, 6000);
 }
-window.addEventListener('studytok:levelup', (e) => levelUp(e.detail));
+window.addEventListener('studygraph:levelup', (e) => levelUp(e.detail));
 
 /** The weekly recap postcard (this week, or last week's when this one is empty). */
 function recapCard(stats) {
@@ -1576,16 +1576,16 @@ function recapCard(stats) {
   const fmt = cfg.formats?.find((f) => f.id === r.topFormat)?.name;
   const line = r.mastered.length ? `${r.mastered.length} unit${r.mastered.length > 1 ? 's' : ''} mastered: ${r.mastered.slice(0, 2).join(', ')}.`
     : r.days >= 4 ? `${r.days} study days. That is a habit now.` : r.watched >= 5 ? `${r.unitCount} unit${r.unitCount > 1 ? 's' : ''} explored. Keep going.` : 'A start is a start. Swipe a few more.';
-  const text = `My StudyTok week: ${r.watched} lessons, ${r.minutes} min${acc ? `, ${acc} on quick checks` : ''}${r.mastered.length ? `, ${r.mastered.length} unit${r.mastered.length > 1 ? 's' : ''} mastered` : ''}. Join me: ${inviteLink()}`;
+  const text = `My StudyGraph week: ${r.watched} lessons, ${r.minutes} min${acc ? `, ${acc} on quick checks` : ''}${r.mastered.length ? `, ${r.mastered.length} unit${r.mastered.length > 1 ? 's' : ''} mastered` : ''}. Join me: ${inviteLink()}`;
   const share = el('button', { type: 'button', class: 'btn ghost', onclick: async () => {
     track('recap_share', { week: r.week });
     share.disabled = true;
     try {
       const blob = await renderCard({ kind: 'recap', kicker: past ? 'Last week with Noti' : 'My week with Noti', title: `${r.watched} lesson${r.watched === 1 ? '' : 's'} this week`, mark: `${r.watched} lesson${r.watched === 1 ? '' : 's'}`,
-        subtitle: me?.vidmoat?.name ? `${me.vidmoat.name.split(' ')[0]} is learning on StudyTok` : 'Learning on StudyTok',
+        subtitle: me?.vidmoat?.name ? `${me.vidmoat.name.split(' ')[0]} is learning on StudyGraph` : 'Learning on StudyGraph',
         stats: [{ value: r.minutes, label: 'minutes' }, { value: acc || '—', label: 'quizzes' }, { value: r.days, label: 'days', hl: r.days >= 4 }, { value: r.mastered.length, label: 'mastered', hl: r.mastered.length > 0 }],
         line, mascot: mascot(r.mastered.length || r.days >= 4 ? 'cheer' : 'happy', 300), memberNo: me?.memberNo, chips: r.units, chipsLabel: 'Units this week' });
-      const how = await shareCard(blob, { text, filename: `studytok-week-${r.week}.png` });
+      const how = await shareCard(blob, { text, filename: `studygraph-week-${r.week}.png` });
       if (how === 'saved') toast('Card saved to your device and the text copied.');
     } catch { toast("Couldn't make the card."); }
     share.disabled = false;
@@ -2029,11 +2029,11 @@ function renderProfile() {
   const shareMe = el('button', { type: 'button', class: 'btn ghost small', onclick: async () => {
     track('profile_share', {});
     try {
-      const blob = await renderCard({ kind: 'profile', kicker: 'StudyTok member', title: `Member #${me?.memberNo || '?'}`, mark: `#${me?.memberNo || '?'}`,
+      const blob = await renderCard({ kind: 'profile', kicker: 'StudyGraph member', title: `Member #${me?.memberNo || '?'}`, mark: `#${me?.memberNo || '?'}`,
         subtitle: `${me?.vidmoat?.name || 'A student'} · ${[lvl?.label, p.program].filter(Boolean).join(' · ') || 'learning every day'}`,
         stats: [{ value: stats?.streak ?? 0, label: 'day streak', hl: (stats?.streak ?? 0) >= 3 }, { value: stats?.watched ?? 0, label: 'lessons' }, { value: stats?.quizN ? `${Math.round((stats.quizRight / stats.quizN) * 100)}%` : '—', label: 'quizzes' }, { value: stats?.mastered ?? 0, label: 'mastered' }],
         line: buddyLine(stats), mascot: mascot(stats?.streak >= 3 ? 'cheer' : 'happy', 300), memberNo: me?.memberNo, chips: [p.program, p.exam ? `Preparing for ${p.exam}` : null, ...(me?.interests || []).slice(0, 3).map((t) => cfg.topics.find((x) => x.id === t)?.label)].filter(Boolean), chipsLabel: 'Studying' });
-      const how = await shareCard(blob, { text: inviteText(), filename: 'studytok-member.png' });
+      const how = await shareCard(blob, { text: inviteText(), filename: 'studygraph-member.png' });
       if (how === 'saved') toast('Card saved to your device.');
     } catch { toast("Couldn't make the card."); }
   } }, svgEl(svg_share), 'Share my card');
@@ -2053,14 +2053,14 @@ function renderProfile() {
   if (me?.vidmoat) {
     account.replaceChildren(el('h3', {}, 'Vidmoat account'),
       el('p', { class: 'muted' }, `Signed in as ${me.vidmoat.email || me.vidmoat.name}. Your course, progress and library follow you to any device where you sign in.`),
-      el('ul', { class: 'reassure' }, el('li', {}, 'StudyTok never uses your Vidmoat credits'), el('li', {}, 'We only read your name and email')),
+      el('ul', { class: 'reassure' }, el('li', {}, 'StudyGraph never uses your Vidmoat credits'), el('li', {}, 'We only read your name and email')),
       el('button', { type: 'button', class: 'btn ghost', onclick: signOut }, 'Sign out on this device'));
   } else {
     account.replaceChildren(el('h3', {}, 'Keep your progress everywhere'),
       el('p', { class: 'muted' }, 'Sign in with your Vidmoat account to save your course, progress and library, and pick up on any device.'),
       el('ul', { class: 'reassure' },
         el('li', {}, 'We only read your name and email'),
-        el('li', {}, 'StudyTok never uses your Vidmoat credits'),
+        el('li', {}, 'StudyGraph never uses your Vidmoat credits'),
         el('li', {}, 'Disconnect any time from your Vidmoat settings')),
       cfg.vidmoatSignIn
         ? el('a', { class: 'btn vidmoat', href: '/api/auth/vidmoat/start' }, el('img', { class: 'vm-logo', src: 'https://www.vidmoat.com/logo-512.png', alt: '', width: '22', height: '22' }), 'Sign in with Vidmoat')
@@ -2072,15 +2072,15 @@ function renderProfile() {
   const ios = /iphone|ipad|ipod/i.test(navigator.userAgent);
   install.hidden = Boolean(standalone) || (!installPrompt && !ios);
   if (!install.hidden) {
-    install.replaceChildren(...[el('h3', {}, 'Install StudyTok'),
-      el('p', { class: 'muted' }, installPrompt ? 'Add StudyTok to your home screen: it opens full screen, like an app.' : 'On iPhone or iPad: tap the Share button in Safari, then "Add to Home Screen".'),
+    install.replaceChildren(...[el('h3', {}, 'Install StudyGraph'),
+      el('p', { class: 'muted' }, installPrompt ? 'Add StudyGraph to your home screen: it opens full screen, like an app.' : 'On iPhone or iPad: tap the Share button in Safari, then "Add to Home Screen".'),
       installPrompt ? el('button', { type: 'button', class: 'btn primary', onclick: doInstall }, 'Install app') : null].filter(Boolean));
   }
 
   $('#studies-summary').replaceChildren(el('p', {}, [p.program, p.institution, p.country].filter(Boolean).join(' · ') || 'No course set'),
     el('p', {}, [lvl?.label, p.exam && `Preparing for ${p.exam}`].filter(Boolean).join(' · ')), ...[examChip(p)].filter(Boolean));
 }
-/** Who pays for new videos: the free allowance on StudyTok's account, or the student's own Vidmoat credits. */
+/** Who pays for new videos: the free allowance on StudyGraph's account, or the student's own Vidmoat credits. */
 function renderCredits() {
   const card = $('#credits-card');
   const b = me?.billing;
@@ -2104,7 +2104,7 @@ function renderCredits() {
   } }, 'Use my Vidmoat credits');
 
   if (b.mode === 'own') {
-    const problemText = { exhausted: "You're out of Vidmoat credits, so new lessons are paused. Top up and they resume on their own.", plan: 'Your Vidmoat plan does not include AI speech yet. Upgrade to keep making narrated lessons.', reconnect: 'StudyTok lost access to your account. Connect it again to keep going.' }[b.problem];
+    const problemText = { exhausted: "You're out of Vidmoat credits, so new lessons are paused. Top up and they resume on their own.", plan: 'Your Vidmoat plan does not include AI speech yet. Upgrade to keep making narrated lessons.', reconnect: 'StudyGraph lost access to your account. Connect it again to keep going.' }[b.problem];
     card.replaceChildren(el('h3', {}, me?.profile?.managedBy === 'guardian' ? "Credits · the parent's Vidmoat account" : 'Credits · your Vidmoat account'),
       el('div', { class: 'credit-big' }, b.credits == null ? '—' : `${b.credits.toLocaleString()} credits`),
       el('p', { class: 'muted' }, problemText || `New lessons you trigger are made on your account (about 20 credits each)${b.plan ? ` · ${b.plan} plan` : ''}. Lessons already in the library are free to watch.`),
@@ -2116,7 +2116,7 @@ function renderCredits() {
       el('div', { class: 'credit-row' }, el('span', {}, `${b.houseUsed} of ${b.freeVideos} free lessons used`), el('span', {}, `${b.houseLeft} left`)),
       el('p', { class: 'muted' }, b.houseLeft === 0
         ? 'Your free lessons are used up. Connect your Vidmoat account to keep generating new lessons with your own credits; everything already made stays free to watch.'
-        : 'Your first lessons are made on StudyTok’s Vidmoat account. Connect yours any time to make lessons with your own credits.'),
+        : 'Your first lessons are made on StudyGraph’s Vidmoat account. Connect yours any time to make lessons with your own credits.'),
       el('ul', { class: 'reassure' }, el('li', {}, 'Only lessons you trigger spend credits (about 20 each)'), el('li', {}, 'Never renders, exports or your voices'), el('li', {}, 'Disconnect any time')),
       el('div', { class: 'credit-actions' }, b.connected ? useOwn : connect(), ...(b.houseLeft === 0 && !b.connected ? [buy('Get Vidmoat credits')] : [])));
   }
@@ -2131,7 +2131,7 @@ async function doInstall() {
   const { outcome } = await installPrompt.userChoice.catch(() => ({}));
   track('install', { outcome: outcome || 'dismissed' });
   installPrompt = null;
-  if (outcome === 'accepted') toast('Installed! Find StudyTok on your home screen.');
+  if (outcome === 'accepted') toast('Installed! Find StudyGraph on your home screen.');
   renderProfile();
 }
 
@@ -2342,8 +2342,8 @@ const inviteLink = () => `${location.origin}/?ref=${me?.memberNo}`;
 async function shareLesson(item) {
   if (item.data.status !== 'ready') { toast('This lesson is still being made. Try again in a moment.'); return; }
   const url = `${location.origin}/v/${item.data.id}${me?.memberNo ? `?ref=${me.memberNo}` : ''}`;
-  const title = item.data.title || item.data.unit?.title || 'A StudyTok lesson';
-  const text = `${title}: a ${Math.round(item.data.duration || 30)}-second lesson on StudyTok. Watch it free:`;
+  const title = item.data.title || item.data.unit?.title || 'A StudyGraph lesson';
+  const text = `${title}: a ${Math.round(item.data.duration || 30)}-second lesson on StudyGraph. Watch it free:`;
   if (item.player && !feed.paused) { item.player.pause(); feed.paused = true; }
   try {
     if (navigator.share) { await navigator.share({ title, text, url }); sendEvent(item.data.id, 'lesson_share', { by: 'sheet' }); return; }
@@ -2351,7 +2351,7 @@ async function shareLesson(item) {
   try { await navigator.clipboard.writeText(`${text} ${url}`); toast('Link copied. Anyone can watch it, no account needed.'); } catch { toast(url); }
   sendEvent(item.data.id, 'lesson_share', { by: 'copy' });
 }
-const inviteText = () => `I'm member #${me?.memberNo} on StudyTok: short study videos made for your syllabus. Join me: ${inviteLink()}`;
+const inviteText = () => `I'm member #${me?.memberNo} on StudyGraph: short study videos made for your syllabus. Join me: ${inviteLink()}`;
 /** A funnel step counted on the server by day (landing seen, sign-in tapped, install). */
 const funnel = (step, extra = {}) => { try { navigator.sendBeacon?.('/api/funnel', new Blob([JSON.stringify({ step, ...extra })], { type: 'text/plain' })) || fetch('/api/funnel', { method: 'POST', body: JSON.stringify({ step, ...extra }), keepalive: true }); } catch { /* fine */ } };
 
@@ -2365,8 +2365,8 @@ async function renderPushCard() {
     const state = await push.pushState();
     if (state === 'unsupported') { card.hidden = true; return; }
     const copyFor = (s) => ({
-      'install-first': 'Add StudyTok to your Home Screen (Share, then Add to Home Screen) and reminders become available.',
-      denied: 'Notifications are blocked for StudyTok in your browser settings.',
+      'install-first': 'Add StudyGraph to your Home Screen (Share, then Add to Home Screen) and reminders become available.',
+      denied: 'Notifications are blocked for StudyGraph in your browser settings.',
       subscribed: 'Reminders are on for this device: a streak about to end, units due for review. One a day at most.',
     }[s] || 'Get one nudge when your streak is about to end or a review is due. Never more than one a day.');
     const copy = el('p', { class: 'muted' }, copyFor(state));
@@ -2395,7 +2395,7 @@ function renderInvite() {
   const share = async () => {
     track('invite_share', {});
     try {
-      if (navigator.share) { await navigator.share({ title: 'StudyTok', text: inviteText(), url: link }); toast('Thanks for spreading the word!'); return; }
+      if (navigator.share) { await navigator.share({ title: 'StudyGraph', text: inviteText(), url: link }); toast('Thanks for spreading the word!'); return; }
     } catch (err) { if (err?.name === 'AbortError') return; }
     try { await navigator.clipboard.writeText(inviteText()); toast('Invite copied. Paste it anywhere.'); } catch { toast(link); }
   };
@@ -2420,7 +2420,7 @@ function authNotice() {
     unavailable: 'Sign-in is not configured on this server yet.',
     connected: 'Connected! New lessons now use your Vidmoat credits.',
     mismatch: 'That is a different Vidmoat account. Connect the one you signed in with.',
-    scopes: 'Vidmoat did not grant the permissions StudyTok needs. Try again and allow all of them.',
+    scopes: 'Vidmoat did not grant the permissions StudyGraph needs. Try again and allow all of them.',
   }[auth] || null;
 }
 
@@ -2450,7 +2450,7 @@ async function boot() {
   } catch (err) {
     if (err.status !== 401) throw err;
   }
-  // Sign in with Vidmoat is the way in: the landing page explains StudyTok and hands over to
+  // Sign in with Vidmoat is the way in: the landing page explains StudyGraph and hands over to
   // Vidmoat; the callback brings the viewer back here signed in.
   if (cfg.signInRequired && !me?.vidmoat) {
     renderLanding(notice);
@@ -2486,5 +2486,5 @@ async function boot() {
 
 boot().catch((err) => {
   console.error(err);
-  toast('StudyTok could not start. Is the server running?');
+  toast('StudyGraph could not start. Is the server running?');
 });

@@ -1,4 +1,4 @@
-// Moments: short, animated cards StudyTok drops between lessons: a tip about the app, a piece
+// Moments: short, animated cards StudyGraph drops between lessons: a tip about the app, a piece
 // of news, or an offer. No video is made for them (they are rendered by the app), so they cost
 // nothing, and they are paced so the feed stays a feed: never for a brand-new student, at most
 // one every six lessons, at most three a day, and never twice within a moment's repeat window.
@@ -45,7 +45,7 @@ export const MOMENTS = [
     title: 'Send a lesson to a friend', lines: ['Tap Share on any lesson.', 'They can watch it with no account.', 'If they join, it counts as your invite.'],
     cta: { label: 'Next lesson', action: 'feed' }, when: (c) => c.watched >= 5 && (c.signals.shares || 0) === 0 },
   { id: 'tip-install', type: 'tip', theme: 'sky', emoji: '📲', mood: 'happy', repeatDays: 30,
-    title: 'Put StudyTok on your home screen', lines: ['Opens full screen, like an app.', 'Faster, and your sound settings stick.', 'Takes ten seconds.'],
+    title: 'Put StudyGraph on your home screen', lines: ['Opens full screen, like an app.', 'Faster, and your sound settings stick.', 'Takes ten seconds.'],
     cta: { label: 'Show me how', action: 'install' }, when: (c) => c.watched >= 3 && c.device.platform && !c.device.standalone },
   { id: 'tip-reminders', type: 'tip', theme: 'rose', emoji: '🔔', mood: 'happy', repeatDays: 30,
     title: 'A nudge at the right time', lines: ['One reminder a day, only if you have not studied.', 'No spam. Ever.', 'Turn it on in your Profile.'],
@@ -77,7 +77,7 @@ export const MOMENTS = [
     title: 'Bring a classmate', lines: ['Your invite link is in your Profile.', 'Every friend who joins shows up under your name.', 'Lessons are better argued over.'],
     cta: { label: 'Get my link', action: 'invite' }, when: (c) => c.watched >= 6 && c.invites === 0 },
   { id: 'offer-free', type: 'offer', theme: 'sun', emoji: '🆓', mood: 'happy', repeatDays: 14,
-    title: (c) => `${Math.max(0, c.freeLeft)} free lessons left`, lines: [(c) => `StudyTok makes your first ${c.freeTotal} brand-new lessons for you.`, 'Lessons already in the library stay free forever.', 'Connect your own Vidmoat account for unlimited.'],
+    title: (c) => `${Math.max(0, c.freeLeft)} free lessons left`, lines: [(c) => `StudyGraph makes your first ${c.freeTotal} brand-new lessons for you.`, 'Lessons already in the library stay free forever.', 'Connect your own Vidmoat account for unlimited.'],
     cta: { label: 'See my credits', action: 'profile' }, when: (c) => c.freeTotal > 0 && !c.ownAccount && c.freeLeft > 0 && c.freeLeft <= Math.ceil(c.freeTotal / 2) },
   { id: 'offer-unlimited', type: 'offer', theme: 'sky', emoji: '🚀', mood: 'cheer', repeatDays: 14,
     title: 'Unlimited lessons, your way', lines: ['Connect a Vidmoat account and every new lesson is yours.', 'Your syllabus, your pace, no waiting list.', 'It takes one tap in your Profile.'],

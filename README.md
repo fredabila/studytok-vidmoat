@@ -1,10 +1,12 @@
-# StudyTok
+# StudyGraph
+
+> **StudyGraph was called StudyTok until November 2026.** The app, the docs and everything students see now say StudyGraph. A few internal names keep the old one on purpose, so nothing breaks: the `STUDYTOK_*` environment variables, the `studytok.vidmoat.com` address (until a new domain is pointed at the app), this repository's name, and the `st_` keys in browsers and cookies (renaming them would sign everyone out).
 
 **Live at [studytok.vidmoat.com](https://studytok.vidmoat.com)**, a Vidmoat product, open source under the MIT licence.
 
 A TikTok-style vertical feed of short study videos that follows **your actual syllabus**.
 Students pick their level (middle school to postgraduate, professional, or just curious), their
-country, school and course or subjects, and the exam they are preparing for. StudyTok matches the
+country, school and course or subjects, and the exam they are preparing for. StudyGraph matches the
 course to a built-in catalog, or **researches what that institution teaches** (Claude with web
 search), then generates narrated lessons unit by unit as they scroll. Videos are made with the
 [Vidmoat API](https://developer.vidmoat.com/developer/docs) and play **live in Vidmoat's embed
@@ -126,7 +128,7 @@ lesson of any format (`server/lessons/samples.js`) into a real project and saves
 
 ## Community packs (`content/`)
 
-StudyTok is open source, so anyone can bring their own material: the ideas of a book they are
+StudyGraph is open source, so anyone can bring their own material: the ideas of a book they are
 reading, notes from a course, what their project or organisation does. A *pack* is one
 Markdown file, `content/<slug>/pack.md`, with a strict format (frontmatter, an About, 2-12
 units written in your own words, facts, an optional quiz bank) and an optional `assets/` folder
@@ -144,8 +146,8 @@ is a worked example.
 ## The app
 
 * **Installable (PWA)**: a manifest, maskable icons and a service worker (`public/sw.js`)
-  that caches the app shell (never the API), so StudyTok installs to the home screen and opens
-  full screen. Profile → *Install StudyTok* (Android/desktop), or Share → *Add to Home Screen*
+  that caches the app shell (never the API), so StudyGraph installs to the home screen and opens
+  full screen. Profile → *Install StudyGraph* (Android/desktop), or Share → *Add to Home Screen*
   on iPhone.
 * **Feed controls**: a paging controller, not native scroll-snap. Drag or flick one lesson at
   a time; on desktop one wheel/trackpad gesture moves exactly one lesson (momentum is ignored),
@@ -154,7 +156,7 @@ is a worked example.
 * **Tabs**: For You · Library (course progress rings, saved, history) · Profile (sign-in,
   install, edit studies). Each lesson shows "Unit n of N", and a *Why* sheet explains why the
   algorithm picked it.
-* **Landing page**: new visitors see what StudyTok is (sample cards of every format, how it
+* **Landing page**: new visitors see what StudyGraph is (sample cards of every format, how it
   works, what's inside), an *Install the app* button and *Continue with Vidmoat*, with a footer
   crediting Vidmoat, a Buzz Innovations Ltd. company, and linking to this repository.
 * **Age**: onboarding asks who the profile is for and their age. Vidmoat accounts are for
@@ -166,7 +168,7 @@ is a worked example.
   flow with the generation scopes, tokens sealed at rest) and every video they trigger spends
   their credits. When they run out, the app points them to credit packs or a plan upgrade on
   Vidmoat; the shared library keeps playing meanwhile. See [docs/BILLING.md](docs/BILLING.md).
-* **Sign in with Vidmoat** (required by default): identity only. StudyTok requests just the
+* **Sign in with Vidmoat** (required by default): identity only. StudyGraph requests just the
   read-only `account.read` scope, reads the account's name and email once and discards the
   tokens, so it can never spend a student's Vidmoat credits. The account is the student's
   identity across devices. Set `STUDYTOK_REQUIRE_SIGNIN=false` to allow guest profiles again
@@ -314,10 +316,10 @@ route (`vercel.json`). Generation and research keep running after the response v
    prefix works; `/api/health` shows which variable it found.
 3. **Environment variables**: `VIDMOAT_API_KEY` (required), `ANTHROPIC_API_KEY` (recommended),
    `CRON_SECRET` (any random string, for the daily top-up), and any tuning from `.env.example`.
-   **Sign in with Vidmoat** needs no setup: on the first sign-in StudyTok registers its own OAuth
+   **Sign in with Vidmoat** needs no setup: on the first sign-in StudyGraph registers its own OAuth
    client with Vidmoat (`POST /api/oauth/register`, once per domain) and keeps it in Redis.
 4. **Deploy**, then open `/api/health`: `"ok": true`, `"storage": "redis"`, `"lessons": "claude"`.
-5. **Optional: a Google Sheet of your students.** StudyTok can mirror every student, every join
+5. **Optional: a Google Sheet of your students.** StudyGraph can mirror every student, every join
    and a daily summary into a spreadsheet you own, written through a tiny Apps Script, so there
    is no database or admin panel to run. Setup in [scripts/sheet/README.md](scripts/sheet/README.md).
 
@@ -349,10 +351,10 @@ See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for a request walkthrough and
 
 ## Help and FAQ
 
-Plain-language answers for students and parents (what StudyTok is, how the feed chooses, quiz holds, credits, installing, privacy and data deletion) are in [docs/FAQ.md](docs/FAQ.md).
+Plain-language answers for students and parents (what StudyGraph is, how the feed chooses, quiz holds, credits, installing, privacy and data deletion) are in [docs/FAQ.md](docs/FAQ.md).
 
 ## Contributing and license
 
-StudyTok is open source under the [MIT license](LICENSE). Issues and pull requests are
+StudyGraph is open source under the [MIT license](LICENSE). Issues and pull requests are
 welcome: start with [CONTRIBUTING.md](CONTRIBUTING.md). Built by
 [Vidmoat](https://www.vidmoat.com), a Buzz Innovations Ltd. company.

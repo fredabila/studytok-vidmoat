@@ -92,12 +92,12 @@ test('a pack joins a course: units resolve, the library lists it as a course, le
   assert.equal(addPack(user, slug), true); assert.equal(user.units.length, 5); assert.equal(addPack(user, 'nope'), false);
   const lib = await library(user.id);
   const course = lib.programs.find((p) => p.key === `pack:${slug}`);
-  assert.ok(course, 'listed as a course'); assert.equal(course.pack.by, 'StudyTok examples'); assert.match(course.basis, /community pack/);
+  assert.ok(course, 'listed as a course'); assert.equal(course.pack.by, 'StudyGraph examples'); assert.match(course.basis, /community pack/);
   assert.equal(lib.units.filter((u) => u.programKey === `pack:${slug}`).length, 5);
   assert.equal(lib.packs.find((p) => p.slug === slug).added, true);
   // the writer's context
   const ctx = packContext(await getUnit(unitId));
-  assert.match(ctx[0], /SOURCE PACK: this unit comes from "Meditations, the ideas" \(book\) by StudyTok examples/);
+  assert.match(ctx[0], /SOURCE PACK: this unit comes from "Meditations, the ideas" \(book\) by StudyGraph examples/);
   assert.ok(ctx.some((l) => /asset:cover\.png \(image\)/.test(l)), 'assets offered by file name');
   assert.ok(ctx.some((l) => /Quiz bank/.test(l) && /Greek/.test(l)));
   assert.deepEqual(packContext({ id: 'hs-biology-u1' }), []);

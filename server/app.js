@@ -365,7 +365,7 @@ async function route(req, res, url) {
     await noteGame(userId, item, {});
     return send(res, 200, { item });
   }
-  // The study plan StudyTok follows for one of the student's units (what's in it, what is covered).
+  // The study plan StudyGraph follows for one of the student's units (what's in it, what is covered).
   const planMatch = /^\/api\/units\/([A-Za-z0-9:_.-]{1,80})\/plan$/.exec(path);
   if (req.method === 'GET' && planMatch) {
     const [user, unit] = await Promise.all([db.getUser(userId), getUnit(planMatch[1])]);
@@ -390,7 +390,7 @@ async function route(req, res, url) {
   }
   if (key === 'POST /api/push/test') {
     if (!push.enabled()) return send(res, 200, { enabled: false, sent: 0 });
-    const sent = await push.sendTo(userId, { title: 'StudyTok', body: 'Reminders are on. We will nudge you when a streak or a review is at stake.', url: '/#feed', tag: 'studytok-reminder' });
+    const sent = await push.sendTo(userId, { title: 'StudyGraph', body: 'Reminders are on. We will nudge you when a streak or a review is at stake.', url: '/#feed', tag: 'studygraph-reminder' });
     return send(res, 200, { enabled: true, sent });
   }
 

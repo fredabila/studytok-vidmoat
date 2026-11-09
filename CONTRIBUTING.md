@@ -1,6 +1,6 @@
-# Contributing to StudyTok
+# Contributing to StudyGraph
 
-Thanks for helping. StudyTok is a small, dependency-light Node app (no framework, no bundler,
+Thanks for helping. StudyGraph is a small, dependency-light Node app (no framework, no bundler,
 no build step), so most contributions are a single pull request against `main`. This guide
 covers how the code is laid out, how to run and test it, and what a good PR looks like.
 
@@ -53,7 +53,7 @@ Read [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) first: it walks one request fr
 * **Never spend a user's money by accident.** Anything that calls Vidmoat or Claude must be
   behind an explicit action (a feed request, a cron, a script) and must degrade when it fails
   (a lesson from the offline bank, a silent video, a cached clip).
-* **Privacy.** Events carry a StudyTok user id and coarse device context only (see
+* **Privacy.** Events carry a StudyGraph user id and coarse device context only (see
   [docs/EVENTS.md](docs/EVENTS.md)). Do not add anything that identifies a person or leaves
   the server.
 

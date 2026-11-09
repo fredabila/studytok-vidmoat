@@ -1,4 +1,4 @@
-// The StudyTok algorithm (docs/ALGORITHM.md). Pure functions: no I/O, so it is easy to test
+// The StudyGraph algorithm (docs/ALGORITHM.md). Pure functions: no I/O, so it is easy to test
 // and tune. Two stages:
 //
 // 1. WHICH UNIT: for each feed slot every candidate unit (the student's course units plus

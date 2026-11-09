@@ -1,17 +1,17 @@
 # Credits and billing
 
-StudyTok runs on Vidmoat, and every new video spends Vidmoat credits (speech, transcription).
+StudyGraph runs on Vidmoat, and every new video spends Vidmoat credits (speech, transcription).
 The model is freemium:
 
 1. **Free allowance (house).** Every student's first `STUDYTOK_FREE_VIDEOS` (default 15)
-   videos are made on StudyTok's own API key. Only videos a student *triggers* count: watching
+   videos are made on StudyGraph's own API key. Only videos a student *triggers* count: watching
    the shared library is free, and the cron top-up never counts against anyone.
 2. **Their own Vidmoat account (own).** From the Profile (or the end-of-feed prompt once the
    allowance is used up) a student taps *Use my Vidmoat account*. That runs the same OAuth
    flow with the generation scopes, and from then on every video they trigger is made on their
    account, with their credits. The library stays shared: a video made on one student's credits
    serves everyone on that unit.
-3. **Out of credits.** Vidmoat answers `402 insufficient_credits`; StudyTok records it, pauses
+3. **Out of credits.** Vidmoat answers `402 insufficient_credits`; StudyGraph records it, pauses
    that student's generation for 10 minutes, and the app shows *Buy credits or upgrade*
    (`STUDYTOK_VIDMOAT_BILLING_URL`, default https://www.vidmoat.com/pricing). A positive balance
    on the next `/v1/me` check clears it. `402 plan_required` (speech needs Creator or above)

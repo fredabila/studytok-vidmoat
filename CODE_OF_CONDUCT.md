@@ -1,6 +1,6 @@
 # Code of Conduct
 
-StudyTok is built for students, by people who want to help them learn. Everyone taking part
+StudyGraph is built for students, by people who want to help them learn. Everyone taking part
 in this project (issues, pull requests, discussions) is expected to:
 
 * Be respectful and patient. Assume good intent; disagree about ideas, not people.

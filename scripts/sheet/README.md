@@ -1,6 +1,6 @@
 # Google Sheet mirror
 
-StudyTok can keep a Google Sheet up to date with every student, every join and a daily summary,
+StudyGraph can keep a Google Sheet up to date with every student, every join and a daily summary,
 so the people running it can watch it grow without a database or an admin panel. The data lives
 in the app's own storage (Upstash Redis); the sheet is a mirror written by `server/core/sheet.js`.
 
@@ -34,10 +34,10 @@ under 150 outcomes in a bucket, so the rule still runs as designed. See docs/ALG
 ## The Dashboard tab
 
 The script builds a **Dashboard** tab the first time the app writes, and the sheet gets a
-**StudyTok** menu:
+**StudyGraph** menu:
 
 - **Rebuild dashboard** redraws it (after you change the script, or if you broke a formula).
-- **Pull fresh data from the app** asks StudyTok to resend every student right now.
+- **Pull fresh data from the app** asks StudyGraph to resend every student right now.
 - **Show / hide ID columns** reveals the technical ids in the Users tab.
 
 The dashboard shows headline numbers (students, signed in, active today and this week, joined

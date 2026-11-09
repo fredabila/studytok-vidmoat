@@ -115,12 +115,12 @@ export function pickReminder({ signals, progress, now = Date.now() }) {
   const mine = preferredHour(signals);
   // The cron runs hourly: a student is reminded in their own usual hour (or the evening for a streak at risk).
   if (streak >= 2 && !activeToday && (hour === mine || (hour >= 17 && hour <= 21))) {
-    return { title: 'StudyTok', body: `Your ${streak}-day streak ends tonight. One lesson keeps it.`, url: '/#feed', tag: 'studytok-reminder' };
+    return { title: 'StudyGraph', body: `Your ${streak}-day streak ends tonight. One lesson keeps it.`, url: '/#feed', tag: 'studygraph-reminder' };
   }
   const due = Object.values(progress || {}).filter((s) => s && s.box >= 0 && s.due && s.due <= now).length;
   // Due reviews: at the student's usual hour (18:00 until there is a pattern); the hourly cron finds it.
   if (due >= 2 && !activeToday && hour === mine) {
-    return { title: 'StudyTok', body: `${due} units are due for review. 5 minutes brings them back.`, url: '/#feed', tag: 'studytok-reminder' };
+    return { title: 'StudyGraph', body: `${due} units are due for review. 5 minutes brings them back.`, url: '/#feed', tag: 'studygraph-reminder' };
   }
   return null;
 }

@@ -1,6 +1,6 @@
 # Architecture
 
-StudyTok is a vertical feed of short study videos that are **written and produced while the
+StudyGraph is a vertical feed of short study videos that are **written and produced while the
 student scrolls** and **played live** in Vidmoat's embed player (no MP4 renders). This page
 follows one swipe through the code.
 
@@ -28,7 +28,7 @@ telemetry.js ── POST /api/events ───▶  feed/events.js ingest() → a
 ## 1. Identity and profile (`core/auth.js`, `feed/index.js`)
 
 Students sign in with Vidmoat (OAuth, PKCE, `account.read` only). The callback links or
-restores a StudyTok user (`user:{id}`) and sets a one-year cookie. Onboarding stores a
+restores a StudyGraph user (`user:{id}`) and sets a one-year cookie. Onboarding stores a
 profile (level, country, institution, program, exam), the chosen course units, interests and
 preferences. Sign-in is required by default (`STUDYTOK_REQUIRE_SIGNIN`).
 
@@ -213,7 +213,7 @@ preloading every clip of a document under a minute.
 
 If a device is still too slow, the remaining lever is rendering popular library videos to MP4
 with `POST /v1/projects/{id}/render` and playing the file instead of the document (costs a
-render per video and a plan with exports); StudyTok does not do that today.
+render per video and a plan with exports); StudyGraph does not do that today.
 
 ## The admin sheet (`core/sheet.js`)
 
@@ -240,7 +240,7 @@ and `STUDYTOK_VAPID_PRIVATE` are set: the routes answer `{ enabled: false }` and
 
 ## Who pays (`core/billing.js`)
 
-Each student's first videos are made on StudyTok's key; then they connect their own Vidmoat
+Each student's first videos are made on StudyGraph's key; then they connect their own Vidmoat
 account and the generator runs inside `withCredential(token)`, so the same pipeline makes the
 video on their account. Out-of-credit answers from Vidmoat pause that student's generation
 and the app sends them to buy credits or upgrade. See [BILLING.md](BILLING.md).

@@ -3,7 +3,7 @@ title: Climate change, the essentials
 kind: notes
 topic: earth
 level: high-school
-by: StudyTok team
+by: StudyGraph team
 link: https://www.ipcc.ch/report/ar6/syr/
 cta: Read the IPCC summary
 language: en

@@ -1,11 +1,11 @@
 # Community packs
 
 A *pack* is a folder in this directory with one Markdown file, `pack.md`, and optionally an
-`assets/` folder. StudyTok turns every pack into a small course: each unit in the file becomes
+`assets/` folder. StudyGraph turns every pack into a small course: each unit in the file becomes
 a unit a student can add from their Library, lessons are written from the pack's own words and
 facts, the pack's images and clips can appear in the videos, and every lesson made from the
 pack shows the author's name, link and call to action. That is the deal: you share something
-worth learning, StudyTok makes videos out of it, and students see who it came from.
+worth learning, StudyGraph makes videos out of it, and students see who it came from.
 
 What people put here: the ideas of a book they are reading (in their own words), notes from a
 course, what a project or organisation does, a creator's topic, an event. Anything a student
@@ -59,7 +59,7 @@ lesson writer works from, so be concrete: names, numbers, mechanisms, examples.
 
 ## Quiz bank
 - Q: A question? | A: the right answer | B: a wrong one | C: another wrong one
-- Up to 30. The first option is always the correct one; StudyTok shuffles them.
+- Up to 30. The first option is always the correct one; StudyGraph shuffles them.
 
 ## Assets
 | file | kind | shows | credit | license | size | duration |
@@ -95,7 +95,7 @@ labelled and yours to give.
 * **Images**: at most 2 MB; the short side at least 720 px, the long side at most 4000 px.
   Portrait (9:16, 4:5) fills the frame best; landscape is letterboxed over a blurred copy.
 * **Video**: `.mp4` (H.264 + AAC), at most 25 MB and 20 seconds, at least 720 px on the short
-  side. No burnt-in captions or logos, no music you do not own (StudyTok adds its own bed).
+  side. No burnt-in captions or logos, no music you do not own (StudyGraph adds its own bed).
 * **Audio**: `.mp3`, at most 5 MB and 30 seconds. Only your own recordings or CC0 sound.
 * **Labelled**: `shows` says what a viewer will see or hear (15-160 characters). It is the
   alt text, it is how the lesson writer decides when to use the asset, and it is what a
@@ -106,7 +106,7 @@ labelled and yours to give.
   logos beyond the thing the pack is about, no recognisable children, nothing you would not
   want shown under your name on a student's phone.
 
-## How StudyTok uses a pack
+## How StudyGraph uses a pack
 
 * Each `### Unit` becomes a unit with the id `pack:<slug>:<n>`. A student adds the whole pack
   from the Explore tab or by opening `?pack=<slug>`. The units then sit in their

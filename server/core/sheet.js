@@ -1,8 +1,8 @@
 // Google Sheet mirror: one row per student, a log of joins and milestones, and a daily summary,
-// so you can watch StudyTok grow in a spreadsheet without running a database of your own.
+// so you can watch StudyGraph grow in a spreadsheet without running a database of your own.
 //
 // The sheet is written by a tiny Google Apps Script bound to it (scripts/sheet/Code.gs), deployed
-// as a web app. StudyTok POSTs JSON to its URL with a shared secret:
+// as a web app. StudyGraph POSTs JSON to its URL with a shared secret:
 //   { secret, ops: [{ op: 'upsert', tab: 'Users', key: 'User ID', rows: [...] },
 //                   { op: 'append', tab: 'Joins', rows: [...] }] }
 // Nothing here is needed for the app to work: with no STUDYTOK_SHEET_URL every call is a no-op.

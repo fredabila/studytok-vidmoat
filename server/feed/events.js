@@ -14,7 +14,7 @@
 //   events:log           LIST   the last 20k raw events (for analysis and tuning)
 //   events:day:{date}    HASH   event counts per type per day
 //
-// Nothing here identifies a person beyond their StudyTok user id, and nothing is sent to a
+// Nothing here identifies a person beyond their StudyGraph user id, and nothing is sent to a
 // third party. Validation is strict: unknown types and fields are dropped, numbers clamped.
 
 import { kv } from '../core/kv.js';

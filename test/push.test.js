@@ -63,7 +63,7 @@ test('pickReminder: streak at risk at 18:00 local with no activity today', () =>
   const signals = { ...emptySignals(), days: daysBefore(3), device: { tz: 'Africa/Accra' } };
   const r = push.pickReminder({ signals, progress: {}, now: NOW });
   assert.equal(r.body, 'Your 3-day streak ends tonight. One lesson keeps it.');
-  assert.equal(r.tag, 'studytok-reminder'); assert.equal(r.url, '/#feed');
+  assert.equal(r.tag, 'studygraph-reminder'); assert.equal(r.url, '/#feed');
   // Already active today: nothing to save.
   assert.equal(push.pickReminder({ signals: { ...signals, days: { ...signals.days, [day(NOW)]: 1 } }, progress: {}, now: NOW }), null);
   // Same instant is 10:00 in Los Angeles: too early to nag.
@@ -117,7 +117,7 @@ test('a 410 from the push service removes that subscription and keeps the others
   await push.subscribe(id, subFor('dead'));
   await push.subscribe(id, subFor('alive'));
   failWith = { [subFor('dead').endpoint]: 410 };
-  const n = await push.sendTo(id, { title: 'StudyTok', body: 'test', url: '/', tag: 'studytok-reminder' });
+  const n = await push.sendTo(id, { title: 'StudyGraph', body: 'test', url: '/', tag: 'studygraph-reminder' });
   failWith = {};
   assert.equal(n, 1);
   assert.deepEqual((await push.subscriptions(id)).map((s) => s.endpoint), [subFor('alive').endpoint]);
