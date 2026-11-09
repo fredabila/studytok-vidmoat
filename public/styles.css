@@ -991,3 +991,9 @@ body.channel-open { overflow: hidden; }
 .course-handle p { margin: 0; }
 .name-sheet { display: grid; gap: 12px; }
 .name-sheet > p { margin: 0; color: var(--ink-2); }
+
+/* A sheet opened from a profile (Change handle) sits above it. */
+body.channel-open .sheet { z-index: 70; }
+.ch-rename { display: inline-block; margin-top: 12px; border: 0; background: none; padding: 4px 0; font-size: 13.5px; color: var(--ink-2); text-decoration: underline; cursor: pointer; }
+.handle-note[data-ok=""] { color: var(--ink-3); }
+.similar-note { margin-top: 12px !important; font-weight: 600; }

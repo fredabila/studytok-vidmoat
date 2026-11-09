@@ -79,6 +79,10 @@ course (one StudyGraph researched for your school) or add your own topic, you pi
 If the course or topic is already on StudyGraph, you follow the existing one instead, so
 everyone studying it shares the same lessons.
 
+**Can I change a handle?** If you brought the course, yes: open its profile and tap *Change
+handle* (up to three times a month). Followers and lessons stay, and links to the old handle
+keep working: they open the new one. Official courses keep their handle.
+
 **What does following do?** You follow your own courses automatically. Following another
 course mixes its lessons into your feed. Unfollowing a course you study removes it from your
 course too. Looking at a profile also leans your feed towards it for about 20 minutes.

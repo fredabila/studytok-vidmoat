@@ -94,6 +94,7 @@ Every `leave` and `quiz_answer` is also joined to the decision that served the v
 | `channel_follow` / `channel_unfollow` | `handle`, `source` | followed / unfollowed a course profile (state changes via `POST`/`DELETE /api/channels/:handle/follow`) |
 | `channel_play` / `channel_lesson_open` | `handle`, `from` / `id` | played a profile's lessons as a feed, from the start / from one tile |
 | `channel_share` | `handle`, `by` | shared a profile link |
+| `channel_rename` | `handle`, `from` | the student who brought a course changed its handle |
 | `channel_search` | `q`, `results` | searched course profiles (Explore, or adding a topic that already exists) |
 | `unit_toggle` | `unitId`, `on` | ticked / unticked a unit in the Library |
 | `library_open` | `tab` course/saved/history | Library tab |
