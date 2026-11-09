@@ -62,7 +62,7 @@ export async function writeEpisodes({ unit, audience, covered = [], count = 3, f
     unit.fun && 'This is a BREATHER: the student is tired or frustrated and about to leave. Make these episodes fun, surprising and light: true, delightful facts or stories from next door to their subject. No exam framing, no "marks", no revision tone. Stay accurate. The quiz is easy and playful.',
     `Student: ${audience.audience}`,
     audience.age && `Age: ${audience.age}${audience.minor ? '. A minor: age-appropriate language and examples, nothing graphic, violent, sexual or about drugs or gambling; hot takes and dilemmas stay school-safe.' : ''}${audience.child ? ' A child under 13: short words, concrete everyday examples, a playful tone, nothing frightening.' : ''}`,
-    audience.country && `Country: ${audience.country}`,
+    audience.country ? `Country: ${audience.country}` : 'Country: not given. Use examples familiar to students anywhere; nothing that only makes sense in one country (local transport, currencies, brands, school systems).',
     audience.institution && `Institution: ${audience.institution}`,
     audience.exam && `Preparing for: ${audience.exam}`,
     ...prefLines(audience.prefs),

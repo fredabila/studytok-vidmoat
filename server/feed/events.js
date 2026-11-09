@@ -27,6 +27,7 @@ import { recordOutcome, recordQuizOutcome } from './calibration.js';
 import { armOutcomeWrites, armCountWrites } from './experiments.js';
 import { gameOutcome } from './games.js';
 import { FORMAT_IDS } from '../video/formats.js';
+import { TOPIC_BY_ID as TOPIC_BY_ID_EVENTS } from '../curriculum/topics.js';
 
 // ---- Taxonomy ------------------------------------------------------------------------------------
 // video: the event is about a video (videoId required). fields: name -> type ('n' number 0..1e6,
@@ -86,6 +87,13 @@ export const EVENT_SPECS = {
   channel_lesson_open: { fields: { handle: 's', id: 's' } },
   channel_search: { fields: { q: 's', results: 'i' } },
   channel_rename: { fields: { handle: 's', from: 's' } },
+  // Explore (feed/discover.js): what students open there, and what they search.
+  explore_tile_open: { fields: { id: 's', pos: 'i', topic: 's', why: 's' } },
+  explore_topic: { fields: { topic: 's' } },
+  explore_course_open: { fields: { handle: 's', where: 's' } },
+  search_submit: { fields: { q: 's', results: 'i', where: 's' } },
+  search_pick: { fields: { type: 's', value: 's' } },
+  settings_open: { fields: { card: 's' } },
   pack_remove: { fields: { slug: 's' } },
   pack_link: { fields: { slug: 's' } },
   library_search: { fields: { q: 's' } },
@@ -411,6 +419,11 @@ export async function ingest(userId, batch) {
       case 'gen_wait': writes.push(kv.hincrby('stats:generation', e.outcome === 'ready' ? 'waitedReady' : 'waitedGaveUp', 1), kv.hincrby('stats:generation', 'waitMs', Math.round(e.ms || 0))); break;
       case 'pref_change': if (e.key) signals.prefs[e.key.slice(0, 16)] = e.value; break;
       case 'session_start': session.served = session.served || 0; break;
+      case 'explore_tile_open': case 'explore_topic': {
+        // Topics opened in Explore lean the Explore grid towards them (feed/discover.js discoverFor).
+        if (TOPIC_BY_ID_EVENTS[e.topic]) { signals.explore ||= {}; signals.explore[e.topic] = Math.min(50, (signals.explore[e.topic] || 0) + 1); }
+        break;
+      }
       case 'channel_view': case 'channel_follow': case 'channel_unfollow': case 'channel_share': case 'channel_play': case 'channel_lesson_open': {
         const h = String(e.handle || '').toLowerCase();
         if (!CHANNEL_HANDLE.test(h)) break;

@@ -236,6 +236,33 @@ so it costs nothing, and it is paced so the feed stays a feed. `feed/moments.js`
   never counts as a view, a served video or syllabus progress. `moment_view` and `moment_cta`
   events say which ones get read and tapped (the Daily sheet counts them under "Moments shown").
 
+## Lessons are made for your country (`lessons/index.js` regionOf)
+
+Lessons use everyday examples from the student's country (a trotro fare in Accra, the Tube in
+London), so the lesson key carries the country (`|loc:ghana`). A student is served lessons from
+two pools only: their country's, and lessons written with no country (examples familiar
+anywhere). Another country's lessons are never served by the feed, the starters or Explore. On
+a course profile they are labelled "Made for Ghana", and only play when tapped. "No duplicates"
+applies to courses, not lessons: one course profile holds every version of its lessons (per
+level, country, exam and preference), and the feed picks, or makes, the one written for you.
+Lessons made before this were re-filed once under the country of the student they were made
+for (`feed/regions.js`).
+
+## Explore (`feed/discover.js`)
+
+* **Grid**: from a shared pool of the newest 400 ready lessons (rebuilt every 10 minutes), the
+  ones that suit the student's country, not yet seen, scored
+  `(0.35 + quality) × (0.6 + topic taste + Explore taps) × level fit × novelty × freshness × jitter`.
+  Novelty is 0.45 for the student's own course (Explore is for what is next door) and 0.8 for
+  courses they follow. At most 2 lessons per unit and 4 per course. Each tile says why it was
+  picked. Topic chips filter it; topics opened in Explore lean it (`signals.explore`).
+* **Courses for you**: the most followed courses with lessons, not yet followed, boosted for
+  topics the student likes and their level.
+* **Search**: typeahead over courses, lessons (title, hook, unit, key terms; prefix match on the
+  last word), topics, packs and popular searches; recent searches stay on the device. Popular
+  searches are queries that found something, searched by at least two students, never
+  offensive (`search:q:<week>`).
+
 ## Course profiles (`feed/channels.js`)
 
 Every course has one public profile with a unique handle: catalog programs and community packs

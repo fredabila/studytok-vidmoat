@@ -170,7 +170,7 @@ test('students can add their own topics, file them in a course, and toggle units
   assert.deepEqual(u2.prefs, { ...DEFAULT_PREFS, voice: 'off', length: 'deep' });
   const a = audienceFor(u2);
   assert.equal(a.lessonStyle, '|l:deep', 'only non-default lesson preferences change the lesson key');
-  assert.equal(lessonKey('x', a), 'x|high-school|wassce|l:deep');
+  assert.equal(lessonKey('x', a), 'x|high-school|wassce|l:deep|loc:ghana', 'lessons are written per country');
   const lib = await library(user.id);
   assert.equal(lib.units.filter((u) => u.active).length, 1);
   assert.equal(lib.units.length, bio.units.length, 'inactive course units stay listed so they can be re-added');

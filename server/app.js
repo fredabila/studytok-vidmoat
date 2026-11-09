@@ -5,7 +5,7 @@
 import { waitUntil } from '@vercel/functions';
 import { PACKS, publicPack } from './curriculum/packs.js';
 import { config } from './core/config.js';
-import { INTEREST_TOPICS } from './curriculum/topics.js';
+import { INTEREST_TOPICS, TOPIC_BY_ID } from './curriculum/topics.js';
 import { LEVELS } from './curriculum/levels.js';
 import { catalogNames } from './curriculum/catalog.js';
 import { usingRedis, redisSource, redisLikeVarNames } from './core/kv.js';
@@ -14,7 +14,7 @@ import { saveProfile, editProfile, prefetch, nextItems, publicVideo, library, to
 import { extraMoments, setExtraMoments } from './feed/moments.js';
 import { resolveProgram, getProgram, getUnit, customUnitId } from './curriculum/index.js';
 import { getPlan } from './lessons/plan.js';
-import { lessonKey } from './lessons/index.js';
+import { lessonKey, regionOf } from './lessons/index.js';
 import { queueStats } from './video/generator.js';
 import { getMe, getMeAs } from './core/vidmoat.js';
 import { connectOwnAccount, disconnectOwnAccount, setMode, billingStatus } from './core/billing.js';
@@ -35,6 +35,8 @@ import { publicLesson, watchPage, notFoundPage, refOf, SITE_URL } from './core/w
 import { sitemapXml, SITEMAP_LIMIT } from './core/sitemap.js';
 import { profilePage } from './core/profile.js';
 import * as channels from './feed/channels.js';
+import { migrateRegions } from './feed/regions.js';
+import * as discover from './feed/discover.js';
 import { noteProfileVisit } from './feed/index.js';
 
 
@@ -86,7 +88,7 @@ async function readJson(req, limit = 64 * 1024) {
 /** Grid tiles for a course profile: [{ id, at }] → [{ id, title, poster, duration, format, unit, at }]. */
 async function lessonTiles(ids) {
   const vids = await Promise.all(ids.map(({ id }) => db.getVideo(id)));
-  return vids.map((v, i) => (v?.status === 'ready' ? { id: v.id, title: v.lesson?.title || null, poster: v.poster || null, duration: v.duration || null, format: FORMATS[v.format || 'explain']?.tag || null, unit: v.unitTitle || null, at: ids[i].at } : null)).filter(Boolean);
+  return vids.map((v, i) => (v?.status === 'ready' ? { id: v.id, title: v.lesson?.title || null, poster: v.poster || null, duration: v.duration || null, format: FORMATS[v.format || 'explain']?.tag || null, unit: v.unitTitle || null, loc: v.loc || null, at: ids[i].at } : null)).filter(Boolean);
 }
 
 /**
@@ -316,6 +318,7 @@ async function route(req, res, url) {
   // Cron top-up (Vercel Cron sends Authorization: Bearer $CRON_SECRET).
   if (key === 'GET /api/cron/topup') {
     if (!process.env.CRON_SECRET || req.headers.authorization !== `Bearer ${process.env.CRON_SECRET}`) return send(res, 401, { error: 'Unauthorized' });
+    await migrateRegions().catch((err) => console.warn('[regions]', err.message)); // before topping up, so new lessons land in the right pools
     const pending = await topUpLibrary();
     if (pending.length) waitUntil(Promise.allSettled(pending));
     waitUntil(syncDaily());
@@ -461,7 +464,7 @@ async function route(req, res, url) {
     waitUntil(syncUser(userId)); // keeps the admin sheet's row fresh (throttled)
     const invites = u.memberNo ? await db.referralCount(u.memberNo) : 0;
     const learning = learningProfile(await getSignals(userId), u.styles);
-    return send(res, 200, { user: { ...safe, setupDone, seen, liked, billing, stats, invites, following, learning: { ...learning, insight: insightOf(learning) } } });
+    return send(res, 200, { user: { ...safe, setupDone, seen, liked, billing, stats, invites, following, region: regionOf(u.profile?.country) || null, learning: { ...learning, insight: insightOf(learning) } } });
   }
 
   // Credits: switch between the free allowance and the student's own account, or disconnect it.
@@ -539,6 +542,30 @@ async function route(req, res, url) {
     await db.saveUser(user);
     return send(res, 200, { following: false, followers: r.followers, left, user: left ? user : undefined });
   }
+  // ---- Explore (feed/discover.js) ----
+  // The page: a personalised grid of lessons (?topic= filters it), courses to follow, topics, trending searches, packs.
+  if (key === 'GET /api/explore') {
+    const topic = url.searchParams.get('topic');
+    const [user, signals] = await Promise.all([db.getUser(userId), getSignals(userId)]);
+    const t = topic && TOPIC_BY_ID[topic] ? topic : null;
+    const [videos, courses, trending] = await Promise.all([discover.discoverFor(user, signals, { limit: 60, topic: t }), t ? [] : discover.suggestCourses(user, signals, { limit: 10 }), discover.trendingSearches(8)]);
+    return send(res, 200, {
+      topic: t, videos: videos.map(discover.tileOf), courses, trending, topics: discover.topicChips(user, signals),
+      packs: t ? [] : PACKS.map((p) => ({ slug: p.slug, title: p.title, by: p.by, topic: p.topic, kind: p.kind, units: p.units.length, added: (user.packs || []).includes(p.slug) })),
+    });
+  }
+  if (key === 'GET /api/search/suggest') {
+    const q = url.searchParams.get('q') || '';
+    return send(res, 200, { suggestions: await discover.suggest(q, await db.getUser(userId)) });
+  }
+  if (key === 'GET /api/search') {
+    const q = url.searchParams.get('q') || '';
+    const user = await db.getUser(userId);
+    const r = await discover.search(q, user);
+    waitUntil(discover.noteSearch(userId, q, r.courses.length + r.lessons.length + r.packs.length > 0));
+    return send(res, 200, r);
+  }
+
   // The student who brought a course renames its handle: { handle }. The old handle keeps redirecting.
   const renameMatch = /^\/api\/channels\/([a-z0-9._-]{3,40})\/rename$/.exec(path);
   if (req.method === 'POST' && renameMatch) {
@@ -572,6 +599,7 @@ async function route(req, res, url) {
 
   if (key === 'GET /api/feed') {
     const count = Math.min(5, Math.max(1, Number(url.searchParams.get('count')) || 3));
+    waitUntil(migrateRegions().catch((err) => console.warn('[regions]', err.message))); // once: re-file older lessons by country
     const { items, pending, credits } = await nextItems(userId, count);
     // Keep generating after the response (serverless) / let it run (long-lived server).
     if (pending.length) waitUntil(Promise.allSettled(pending));

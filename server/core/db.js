@@ -13,6 +13,7 @@
 //   media:{url}           JSON  imported stock media, keyed by stock download URL
 
 import { kv } from './kv.js';
+import { indexLesson } from './search.js';
 
 const STALE_GENERATING_MS = 6 * 60 * 1000; // a generation that ran longer than this was cut off
 
@@ -43,6 +44,7 @@ export async function markReady(v) {
   if (v.level) await kv.zadd(`ready:any:${v.level}`, entry);
   await kv.zadd('ready:any', entry);
   if (v.unitId) await kv.zadd(`ready:unit:${v.unitId}`, entry); // course profiles list lessons by unit (feed/channels.js)
+  await indexLesson(v); // Explore search (core/search.js)
   if (v._poolOnly) return; // backfill: already filed under its unit and counted
   await kv.zadd(`ready:${v.readyKey}`, entry);
   await kv.hincrby('stats:library', 'ready', 1);

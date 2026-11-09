@@ -202,12 +202,12 @@
           <div class="page-head"><h1 class="page-title">Explore</h1><button type="button" class="refresh-btn" data-refresh="explore" aria-label="Refresh"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/></svg></button></div>
           <label class="lib-search">
             <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
-            <input id="explore-search" type="search" placeholder="Search packs: books, courses, projects" autocomplete="off" aria-label="Search packs">
+            <input id="explore-search" type="search" placeholder="Search courses, lessons, topics" autocomplete="off" enterkeyhint="search" aria-label="Search courses, lessons and topics" aria-autocomplete="list" aria-controls="x-suggest">
             <button type="button" class="lib-clear" aria-label="Clear search" hidden>×</button>
           </label>
-          <div id="explore-filters" class="chips explore-filters" role="group" aria-label="Filter by topic"></div>
+          <div id="x-suggest" class="x-suggest" role="listbox" aria-label="Suggestions" hidden></div>
+          <div id="explore-filters" class="x-chips" role="group" aria-label="Filter by topic"></div>
         </div>
-        <p class="muted explore-intro">Packs are courses people have shared: the ideas of a book, notes from a class, what a project does. Add one and its units join your Library.</p>
         <div id="explore-list" class="explore-list"></div>
         <p class="fine">Anyone can add a pack: a Markdown file in the repo. <a href="https://github.com/fredabila/studytok-vidmoat/blob/main/content/README.md" target="_blank" rel="noopener noreferrer">How to submit one</a></p>
       </div>
@@ -219,23 +219,26 @@
         <div class="page-top"><div class="page-head"><h1 class="page-title">Profile</h1><button type="button" class="refresh-btn" data-refresh="profile" aria-label="Refresh"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/></svg></button></div></div>
         <div id="profile-card" class="card profile-card"></div>
         <div id="profile-tiles"></div>
-        <div id="credits-card" class="card"></div>
         <div id="learning-card" class="card learning-card" hidden></div>
+        <nav id="settings-list" class="settings-list" aria-label="Settings"></nav>
+        <!-- Settings cards live here and open in a sheet from the list above (app.js renderSettingsList). -->
+        <div id="profile-drawer" hidden>
+        <div id="credits-card" class="card"></div>
         <div id="invite-card" class="card invite-card" hidden></div>
         <div id="account-card" class="card"></div>
         <div id="push-card" class="card" hidden></div>
         <div id="install-card" class="card" hidden></div>
-        <div class="card">
+        <div id="tune-card" class="card">
           <h3>Tune your feed</h3>
           <p class="muted">Topics you want to see, and how lessons are made for you.</p>
           <button type="button" class="btn ghost" id="open-tune">Open feed settings</button>
         </div>
-        <div class="card">
+        <div id="studies-card" class="card">
           <h3>Your studies</h3>
           <div id="studies-summary" class="muted"></div>
           <button type="button" class="btn ghost" id="edit-studies">Edit level, course & interests</button>
         </div>
-        <div class="card reset-card">
+        <div id="reset-card" class="card reset-card">
           <h3>Start fresh</h3>
           <p class="muted">Feed gone stale, or someone else used your phone? Reset and the algorithm forgets what it learned.</p>
           <div class="reset-actions">
@@ -243,6 +246,7 @@
             <button type="button" class="btn ghost danger" id="reset-all">Reset everything</button>
           </div>
           <p class="fine reset-fine">Resetting the feed keeps your course, saved lessons and member number. Resetting everything also clears your course, saved lessons and settings; your account, invites and free-lesson count stay.</p>
+        </div>
         </div>
         <p class="fine">StudyGraph makes videos with the Vidmoat API and plays them live, with no downloads. Stock footage and music are from Pexels, Pixabay, Wikimedia Commons and Freesound.
           <a href="https://github.com/fredabila/studytok-vidmoat/blob/main/docs/FAQ.md" target="_blank" rel="noopener noreferrer">Help &amp; FAQ</a> · <a href="https://github.com/fredabila/studytok-vidmoat/blob/main/docs/FAQ.md#privacy" target="_blank" rel="noopener noreferrer">Privacy</a></p>

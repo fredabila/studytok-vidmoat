@@ -1368,6 +1368,8 @@ async function openUnitPlan(u) {
 function openSheet(title, body, onClose = null) {
   // At the top level, so it can sit above a course profile (#app is fixed: its own stacking context).
   if ($('#sheet').parentElement !== document.body) document.body.append($('#sheet'));
+  // A sheet opened from inside another: let the first one tidy up (a settings card goes home).
+  if (!$('#sheet').hidden && sheetOnClose) { const cb = sheetOnClose; sheetOnClose = null; cb(); }
   $('#sheet-title').textContent = title;
   $('#sheet-body').replaceChildren(body);
   $('#sheet').hidden = false;
@@ -1858,50 +1860,196 @@ async function showLibrary() {
 }
 
 // ============================================================================ explore (community packs)
-let explorePacks = null;
-let exploreTopic = '';
-async function renderExplore() {
+// ---- Explore (server/feed/discover.js) --------------------------------------------------------------
+// Like the explore page of a social app: a search box with typeahead (courses, lessons, topics,
+// packs, popular searches, your recent ones), topic chips, courses picked for you, community
+// packs, and a grid of lessons outside your feed chosen by the algorithm. Tapping a tile plays
+// the grid from there as a feed. Search results have Top / Courses / Lessons / Packs tabs.
+const xp = { data: null, topic: '', at: 0, shown: 30, q: '', results: null, tab: 'top', packs: null, seq: 0 };
+const RECENT_KEY = 'st_recent_searches';
+const recentSearches = () => { try { return JSON.parse(store.get(RECENT_KEY) || '[]').slice(0, 8); } catch { return []; } };
+const rememberSearch = (q) => store.set(RECENT_KEY, JSON.stringify([q, ...recentSearches().filter((x) => x !== q)].slice(0, 8)));
+const forgetSearch = (q) => store.set(RECENT_KEY, JSON.stringify(recentSearches().filter((x) => x !== q)));
+const regionName = (loc) => String(loc || '').split('-').map((w) => w[0]?.toUpperCase() + w.slice(1)).join(' ');
+
+async function renderExplore({ fresh = false } = {}) {
   const list = $('#explore-list');
-  if (!explorePacks) {
-    list.replaceChildren(el('div', { class: 'explore-empty' }, el('span', { class: 'spinner' })));
-    try { explorePacks = (await api('GET', '/api/packs')).packs; } catch { list.replaceChildren(el('div', { class: 'explore-empty' }, "Couldn't load the packs. Pull to refresh.")); return; }
+  $('section[data-view="explore"] .lib-clear').hidden = !$('#explore-search').value;
+  if (xp.q) return renderSearchResults();
+  const seq = ++xp.seq;
+  if (fresh || !xp.data || xp.data.topic !== (xp.topic || null) || Date.now() - xp.at > 120000) {
+    if (!xp.data) list.replaceChildren(el('div', { class: 'explore-empty' }, el('span', { class: 'spinner' })));
+    try {
+      xp.data = await api('GET', `/api/explore${xp.topic ? `?topic=${encodeURIComponent(xp.topic)}` : ''}`);
+      xp.at = Date.now();
+      xp.shown = 30;
+    } catch { list.replaceChildren(el('div', { class: 'explore-empty' }, "Couldn't load Explore. Pull to refresh.")); return; }
   }
-  const added = new Set(me?.packs || []);
-  // topic filter chips: only topics that have packs
-  const topics = [...new Set(explorePacks.map((p) => p.topic))].map((id) => cfg.topics.find((t) => t.id === id)).filter(Boolean);
-  const filters = $('#explore-filters');
-  filters.replaceChildren(el('button', { type: 'button', class: 'chip-btn', 'aria-pressed': String(!exploreTopic), onclick: () => { exploreTopic = ''; renderExplore(); } }, `All · ${explorePacks.length}`),
-    ...topics.map((t) => el('button', { type: 'button', class: 'chip-btn', 'aria-pressed': String(exploreTopic === t.id), onclick: () => { exploreTopic = exploreTopic === t.id ? '' : t.id; renderExplore(); } }, `${t.emoji} ${t.label}`)));
-  const q = ($('#explore-search').value || '').trim().toLowerCase();
-  $('[data-view="explore"] .lib-clear').hidden = !q;
-  const shown = explorePacks.filter((p) => (!exploreTopic || p.topic === exploreTopic) && (!q || `${p.title} ${p.by} ${p.kind} ${p.about} ${p.tags.join(' ')} ${p.units.map((u) => u.title).join(' ')}`.toLowerCase().includes(q)));
-  const seq = (renderExplore.seq = (renderExplore.seq || 0) + 1);
-  const courses = await exploreChannels(q);
-  if (seq !== renderExplore.seq) return; // a newer search (or chip) has rendered since
-  if (!shown.length) { list.replaceChildren(...(courses ? [courses] : []), el('div', { class: 'explore-empty' }, svgEl(mascot('think', 100)), el('b', { style: 'display:block;color:var(--ink);font-family:var(--serif);font-size:20px;margin:6px 0' }, explorePacks.length ? 'No pack matches' : 'No packs yet'), explorePacks.length ? 'Try another word or topic.' : 'Be the first to share one on GitHub.')); return; }
-  list.replaceChildren(...(courses ? [courses, el('h2', { class: 'xch-title' }, 'Packs')] : []), ...shown.map((p) => {
-    const topic = cfg.topics.find((t) => t.id === p.topic);
-    const isAdded = added.has(p.slug);
-    const btn = el('button', { type: 'button', class: `btn small ${isAdded ? 'ghost' : 'primary'}` }, isAdded ? 'Remove from Library' : 'Add to Library');
-    btn.onclick = async () => {
-      btn.disabled = true;
-      try {
-        if (isAdded) { track('pack_remove', { slug: p.slug }); await patchMe({ removePack: p.slug }); toast(`Removed "${p.title}".`); }
-        else { track('pack_add', { slug: p.slug, by: 'explore' }); const { added: a } = await patchMe({ addPack: p.slug }); if (!a?.pack) throw new Error('no'); toast(`Added "${p.title}". Lessons are on their way.`); }
-        me = (await api('GET', '/api/me')).user;
-        renderExplore();
-      } catch { btn.disabled = false; toast("Couldn't change that pack."); }
-    };
-    return el('article', { class: `xpack${isAdded ? ' added' : ''}`, style: `--accent:${topic?.accent || '#ffe580'}` },
-      el('div', { class: 'xpack-head' }, el('div', { class: 'xpack-emoji', 'aria-hidden': 'true' }, topic?.emoji || '📘'),
-        el('div', {}, el('h3', {}, p.title), el('small', {}, `${p.kind} · ${topic?.label || 'General'} · by ${p.by}${isAdded ? ' · in your Library' : ''}`)),
-        el('span', { class: 'sbadge', style: '--r:3deg' }, `${p.units.length} units`)),
-      el('p', { class: 'xpack-about' }, p.about),
-      el('details', {}, el('summary', {}, `What you will learn`), el('ol', {}, ...p.units.map((u) => el('li', {}, u.title)))),
-      el('div', { class: 'xpack-foot' }, btn,
-        p.link ? el('a', { class: 'btn small ghost', href: p.link, target: '_blank', rel: 'noopener noreferrer', onclick: () => track('pack_link', { slug: p.slug }) }, p.cta || 'Find out more') : null,
-        p.tags?.length ? el('span', { class: 'tags' }, p.tags.slice(0, 3).map((t) => `#${t}`).join(' ')) : null));
-  }));
+  if (seq !== xp.seq) return; // a newer render (chip, search) has taken over
+  const d = xp.data;
+  renderTopicChips(d.topics);
+  const parts = [];
+  if (d.courses?.length) parts.push(el('section', { class: 'x-sec' }, el('h2', { class: 'x-h' }, 'Courses for you'),
+    el('div', { class: 'x-row' }, ...d.courses.map((c) => courseChip(c)))));
+  if (d.packs?.length) parts.push(el('section', { class: 'x-sec' }, el('h2', { class: 'x-h' }, 'Community packs'),
+    el('div', { class: 'x-row' }, ...d.packs.map((p) => packChip(p)))));
+  parts.push(el('section', { class: 'x-sec' }, el('h2', { class: 'x-h' }, xp.topic ? `${cfg.topics.find((t) => t.id === xp.topic)?.label || d.topics.find((t) => t.id === xp.topic)?.label || 'Lessons'}` : 'For you'),
+    d.videos.length ? lessonGrid(d.videos.slice(0, xp.shown), { source: 'explore', all: d.videos })
+      : el('div', { class: 'explore-empty' }, svgEl(mascot('think', 90)), el('b', {}, 'Nothing new here yet'), el('span', {}, "You've seen everything in this corner. Try another topic.")),
+    d.videos.length > xp.shown ? el('button', { type: 'button', class: 'btn ghost x-more', onclick: () => { xp.shown += 30; renderExplore(); } }, 'Show more') : null));
+  list.replaceChildren(...parts);
+}
+
+function renderTopicChips(topics) {
+  const chip = (id, label) => el('button', { type: 'button', class: 'x-chip', 'aria-pressed': String((xp.topic || '') === id), onclick: () => {
+    xp.topic = xp.topic === id ? '' : id;
+    if (xp.topic) track('explore_topic', { topic: xp.topic });
+    renderExplore();
+  } }, label);
+  $('#explore-filters').replaceChildren(chip('', 'For you'), ...topics.map((t) => chip(t.id, `${t.emoji} ${t.label}`)));
+}
+
+/** A grid of lesson tiles; every 9th one is large. Tapping plays the grid from that tile. */
+function lessonGrid(tiles, { source, all = tiles } = {}) {
+  const fits = (t) => !t.loc || t.loc === localRegion();
+  return el('div', { class: 'x-grid' }, ...tiles.map((t, i) => el('button', { type: 'button', class: `x-tile${i % 9 === 4 ? ' big' : ''}`, 'aria-label': t.title, onclick: () => {
+    track('explore_tile_open', { id: t.id, pos: i, topic: t.topic || '', why: t.why || '' });
+    queueLessons(all.slice(all.indexOf(t)).filter((x) => x === t || fits(x)).slice(0, 12), source);
+  } },
+    t.poster ? el('img', { src: t.poster, alt: '', loading: 'lazy', decoding: 'async' }) : el('span', { class: 'x-tile-blank', style: `--accent:${cfg.topics.find((x) => x.id === t.topic)?.accent || '#ffd93d'}` }, cfg.topics.find((x) => x.id === t.topic)?.emoji || '📚'),
+    t.why ? el('span', { class: 'x-why' }, t.why) : null,
+    el('span', { class: 'x-tile-meta' }, el('span', { class: 'x-tile-title' }, t.title || 'Lesson'),
+      el('span', { class: 'x-tile-sub' }, [t.handle ? `@${t.handle}` : t.unit, t.duration ? minsOf(t.duration) : null].filter(Boolean).join(' · '))))));
+}
+const localRegion = () => me?.region || ''; // the server's key for the student's country (lessons/index.js regionOf)
+
+/** A course in a horizontal row: avatar, name, handle, followers, Follow. */
+function courseChip(c) {
+  const btn = el('button', { type: 'button', class: `btn small ${c.following ? 'ghost' : 'primary'}` }, c.following ? 'Following' : 'Follow');
+  btn.onclick = async (e) => {
+    e.stopPropagation();
+    btn.disabled = true;
+    try { await setFollow(c.handle, !c.following, { source: 'explore' }); c.following = !c.following; btn.textContent = c.following ? 'Following' : 'Follow'; btn.className = `btn small ${c.following ? 'ghost' : 'primary'}`; } catch { toast("Couldn't change that."); }
+    btn.disabled = false;
+  };
+  return el('article', { class: 'x-course', style: `--accent:${c.topic?.accent || '#ffe580'}`, tabindex: '0', onclick: () => { track('explore_course_open', { handle: c.handle, where: 'row' }); openChannel(c.handle, { source: 'explore' }); } },
+    el('div', { class: 'x-course-av', 'aria-hidden': 'true' }, c.topic?.emoji || '📚'),
+    el('strong', {}, c.name), el('small', {}, `@${c.handle}`),
+    el('small', { class: 'x-course-n' }, `${fmtCount(c.lessons)} lessons · ${fmtCount(c.followers)} follower${c.followers === 1 ? '' : 's'}`),
+    c.why ? el('small', { class: 'x-course-why' }, c.why) : null, btn);
+}
+
+function packChip(p) {
+  const topic = cfg.topics.find((t) => t.id === p.topic);
+  return el('button', { type: 'button', class: `x-pack${p.added ? ' added' : ''}`, style: `--accent:${topic?.accent || '#ffe580'}`, onclick: () => openPack(p.slug) },
+    el('span', { class: 'x-pack-emoji', 'aria-hidden': 'true' }, topic?.emoji || '📘'),
+    el('strong', {}, p.title), el('small', {}, `${p.kind} · ${p.units} units${p.added ? ' · added' : ''}`));
+}
+
+/** A community pack in a sheet: what it covers, add or remove, its link. */
+async function openPack(slug) {
+  try { xp.packs ||= (await api('GET', '/api/packs')).packs; } catch { return toast("Couldn't load that pack."); }
+  const p = xp.packs.find((x) => x.slug === slug);
+  if (!p) return;
+  const topic = cfg.topics.find((t) => t.id === p.topic);
+  const isAdded = (me?.packs || []).includes(p.slug);
+  const btn = el('button', { type: 'button', class: `btn ${isAdded ? 'ghost' : 'primary'}` }, isAdded ? 'Remove from my course' : 'Add to my course');
+  btn.onclick = async () => {
+    btn.disabled = true;
+    try {
+      if (isAdded) { track('pack_remove', { slug: p.slug }); await patchMe({ removePack: p.slug }); toast(`Removed "${p.title}".`); }
+      else { track('pack_add', { slug: p.slug, by: 'explore' }); const { added: a } = await patchMe({ addPack: p.slug }); if (!a?.pack) throw new Error('no'); toast(`Added "${p.title}". Lessons are on their way.`); }
+      me = (await api('GET', '/api/me')).user;
+      await closeSheet();
+      renderExplore({ fresh: true });
+    } catch { btn.disabled = false; toast("Couldn't change that pack."); }
+  };
+  openSheet(p.title, el('div', { class: 'xpack-sheet', style: `--accent:${topic?.accent || '#ffe580'}` },
+    el('small', { class: 'muted' }, `${p.kind} · ${topic?.label || 'General'} · by ${p.by}`),
+    el('p', {}, p.about),
+    el('h4', {}, 'What you will learn'), el('ol', {}, ...p.units.map((u) => el('li', {}, u.title))),
+    el('div', { class: 'xpack-foot' }, btn,
+      el('button', { type: 'button', class: 'btn ghost', onclick: () => openChannel(p.slug, { source: 'pack' }) }, `@${p.slug}`),
+      p.link ? el('a', { class: 'btn ghost', href: p.link, target: '_blank', rel: 'noopener noreferrer', onclick: () => track('pack_link', { slug: p.slug }) }, p.cta || 'Find out more') : null)));
+}
+
+// ---- search: typeahead and results ----
+let suggestSeq = 0;
+let suggestTimer = null;
+/** Typeahead after a short pause in typing. */
+function queueSuggestions() { clearTimeout(suggestTimer); suggestTimer = setTimeout(showSuggestions, 150); }
+async function showSuggestions() {
+  const box = $('#x-suggest');
+  const q = $('#explore-search').value.trim();
+  const mine = ++suggestSeq;
+  if (!q) {
+    const recent = recentSearches();
+    const trending = xp.data?.trending || [];
+    if (!recent.length && !trending.length) { box.hidden = true; return; }
+    box.replaceChildren(
+      ...(recent.length ? [el('p', { class: 'x-sg-h' }, 'Recent'), ...recent.map((r) => el('div', { class: 'x-sg-row', role: 'option' },
+        el('button', { type: 'button', class: 'x-sg-main', onclick: () => submitSearch(r, 'recent') }, el('span', { class: 'x-sg-ic' }, '🕘'), el('span', {}, r)),
+        el('button', { type: 'button', class: 'x-sg-x', 'aria-label': `Forget ${r}`, onclick: (e) => { e.stopPropagation(); forgetSearch(r); showSuggestions(); } }, '×')))] : []),
+      ...(trending.length ? [el('p', { class: 'x-sg-h' }, 'Popular searches'), el('div', { class: 'x-sg-chips' }, ...trending.map((t) => el('button', { type: 'button', class: 'x-chip', onclick: () => submitSearch(t, 'trending') }, `🔥 ${t}`)))] : []));
+    box.hidden = false;
+    return;
+  }
+  let res;
+  try { res = await api('GET', `/api/search/suggest?q=${encodeURIComponent(q)}`); } catch { return; }
+  if (mine !== suggestSeq) return;
+  const rows = res.suggestions.map((s) => {
+    const [icon, label, sub, act] = s.type === 'course' ? [s.emoji, s.name, `@${s.handle} · ${fmtCount(s.followers)} followers`, () => { openChannel(s.handle, { source: 'search' }); }]
+      : s.type === 'lesson' ? ['▶', s.title, s.unit || 'Lesson', () => queueLessons([{ id: s.id }], 'search')]
+      : s.type === 'topic' ? [s.emoji, s.label, 'Topic', () => { $('#explore-search').value = ''; xp.q = ''; xp.topic = s.id; hideSuggestions(); renderExplore(); }]
+      : s.type === 'pack' ? ['📘', s.title, 'Community pack', () => openPack(s.slug)]
+      : ['🔍', s.text, 'Popular search', () => submitSearch(s.text, 'suggest')];
+    return el('button', { type: 'button', class: 'x-sg-row x-sg-main', role: 'option', onclick: () => { track('search_pick', { type: s.type, value: (s.handle || s.id || s.slug || s.text || '').slice(0, 60) }); if (s.type !== 'query') rememberSearch(q); hideSuggestions(); act(); } },
+      el('span', { class: 'x-sg-ic' }, icon), el('span', { class: 'x-sg-text' }, el('span', {}, label), el('small', {}, sub)));
+  });
+  box.replaceChildren(...rows, el('button', { type: 'button', class: 'x-sg-row x-sg-main x-sg-all', onclick: () => submitSearch(q, 'enter') }, el('span', { class: 'x-sg-ic' }, '🔍'), el('span', {}, `Search for "${q.slice(0, 40)}"`)));
+  box.hidden = false;
+}
+const hideSuggestions = () => { clearTimeout(suggestTimer); suggestSeq++; $('#x-suggest').hidden = true; };
+
+async function submitSearch(q, where = 'enter') {
+  q = String(q || '').trim();
+  if (q.length < 2) return;
+  $('#explore-search').value = q;
+  $('#explore-search').blur();
+  hideSuggestions();
+  rememberSearch(q);
+  xp.q = q; xp.tab = 'top'; xp.results = null;
+  $('section[data-view="explore"] .lib-clear').hidden = false;
+  $('#explore-list').replaceChildren(el('div', { class: 'explore-empty' }, el('span', { class: 'spinner' })));
+  try { xp.results = await api('GET', `/api/search?q=${encodeURIComponent(q)}`); } catch { xp.results = { courses: [], lessons: [], packs: [] }; }
+  if (xp.q !== q) return;
+  const r = xp.results;
+  track('search_submit', { q: q.slice(0, 60), results: r.courses.length + r.lessons.length + r.packs.length, where });
+  renderSearchResults();
+}
+
+function renderSearchResults() {
+  const r = xp.results;
+  if (!r) return;
+  const tabs = [['top', 'Top'], ['courses', `Courses · ${r.courses.length}`], ['lessons', `Lessons · ${r.lessons.length}`], ['packs', `Packs · ${r.packs.length}`]];
+  $('#explore-filters').replaceChildren(...tabs.map(([k, label]) => el('button', { type: 'button', class: 'x-chip', 'aria-pressed': String(xp.tab === k), onclick: () => { xp.tab = k; renderSearchResults(); } }, label)));
+  const courses = (n) => r.courses.length ? el('div', { class: 'xch-list' }, ...r.courses.slice(0, n).map((c) => channelCard(c))) : null;
+  const lessons = (n) => r.lessons.length ? lessonGrid(r.lessons.slice(0, n), { source: 'search' }) : null;
+  const packs = () => r.packs.length ? el('div', { class: 'x-row wrap' }, ...r.packs.map((p) => packChip({ slug: p.slug, title: p.title, topic: p.topic, kind: p.kind, units: p.units.length, added: (me?.packs || []).includes(p.slug) }))) : null;
+  const none = !r.courses.length && !r.lessons.length && !r.packs.length;
+  const body = none ? [el('div', { class: 'explore-empty' }, svgEl(mascot('think', 90)), el('b', {}, `Nothing for "${xp.q}" yet`),
+    el('span', {}, 'Add it as your own topic and StudyGraph will make lessons for it.'),
+    el('button', { type: 'button', class: 'btn primary small', onclick: async () => { if (await addCustomTopic(xp.q)) { clearSearch(); } } }, `Study "${xp.q.slice(0, 30)}"`))]
+    : xp.tab === 'courses' ? [courses(50)] : xp.tab === 'lessons' ? [lessons(60)] : xp.tab === 'packs' ? [packs()]
+      : [r.courses.length ? el('h2', { class: 'x-h' }, 'Courses') : null, courses(3), r.lessons.length ? el('h2', { class: 'x-h' }, 'Lessons') : null, lessons(12), r.packs.length ? el('h2', { class: 'x-h' }, 'Packs') : null, packs()];
+  $('#explore-list').replaceChildren(...body.filter(Boolean));
+}
+
+function clearSearch() {
+  $('#explore-search').value = '';
+  xp.q = ''; xp.results = null;
+  hideSuggestions();
+  renderExplore();
 }
 
 // ---- Library search -------------------------------------------------------------------------------
@@ -1911,7 +2059,7 @@ function applyLibrarySearch() {
   const input = $('#lib-search');
   if (!input) return;
   const q = input.value.trim().toLowerCase();
-  $('[data-view="library"] .lib-clear').hidden = !q;
+  $('section[data-view="library"] .lib-clear').hidden = !q;
   const counts = {};
   for (const panel of $$('.seg-panel')) {
     let n = 0;
@@ -2096,17 +2244,20 @@ function renderProfile() {
   } }, svgEl(svg_share), 'Share my card');
   $('#profile-card').replaceChildren(svgEl(mascot(stats?.streak >= 3 ? 'cheer' : 'happy')),
     el('div', {}, el('h3', {}, me?.vidmoat?.name || 'Guest learner'), el('p', {}, [me?.memberNo ? `Member #${me.memberNo}` : null, lvl?.label, p.institution, p.age ? `age ${p.age}` : null].filter(Boolean).join(' · ') || 'Exploring'),
+      el('div', { class: 'p-counts' },
+        el('button', { type: 'button', class: 'p-count', onclick: openFollowing }, el('strong', {}, fmtCount((me?.following || []).length)), 'following'),
+        el('button', { type: 'button', class: 'p-count', onclick: () => { showView('library'); setTimeout(() => $('.segmented [data-seg="saved"]')?.click(), 300); } }, el('strong', {}, fmtCount(me?.liked || 0)), 'liked')),
       el('div', { class: 'bubble' }, buddyLine(stats)),
       badges.length ? el('div', { class: 'badges' }, ...badges) : null,
       el('div', { class: 'badges' }, shareMe)),
     goalRing(stats));
   $('#profile-tiles').replaceChildren(...[statTiles(stats), recapCard(stats)].filter(Boolean));
 
-  renderFollowing();
   renderCredits();
   renderInvite();
   renderLearning();
-  renderPushCard();
+  renderSettingsList();
+  renderPushCard().then(renderSettingsList).catch(() => {});
   const account = $('#account-card');
   if (me?.vidmoat) {
     account.replaceChildren(el('h3', {}, 'Vidmoat account'),
@@ -2274,12 +2425,17 @@ function wireChrome() {
   let searchTimer = null;
   search.oninput = () => { clearTimeout(searchTimer); searchTimer = setTimeout(() => { applyLibrarySearch(); if (search.value.trim()) track('library_search', { q: search.value.trim().slice(0, 40) }); }, 120); };
   search.onkeydown = (e) => { if (e.key === 'Escape') { search.value = ''; applyLibrarySearch(); search.blur(); } };
-  $('[data-view="library"] .lib-clear').onclick = () => { search.value = ''; applyLibrarySearch(); search.focus(); };
+  $('section[data-view="library"] .lib-clear').onclick = () => { search.value = ''; applyLibrarySearch(); search.focus(); };
   const xs = $('#explore-search');
-  let xsTimer = null;
-  xs.oninput = () => { clearTimeout(xsTimer); xsTimer = setTimeout(() => { renderExplore(); if (xs.value.trim()) track('explore_search', { q: xs.value.trim().slice(0, 40) }); }, 120); };
-  xs.onkeydown = (e) => { if (e.key === 'Escape') { xs.value = ''; renderExplore(); xs.blur(); } };
-  $('[data-view="explore"] .lib-clear').onclick = () => { xs.value = ''; renderExplore(); xs.focus(); };
+  // Explore search: typeahead while typing, recent and popular searches on focus, results on Enter.
+  xs.oninput = () => { $('section[data-view="explore"] .lib-clear').hidden = !xs.value; queueSuggestions(); };
+  xs.onfocus = () => showSuggestions();
+  xs.onkeydown = (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); submitSearch(xs.value, 'enter'); }
+    if (e.key === 'Escape') { if (xs.value) clearSearch(); else hideSuggestions(); xs.blur(); }
+  };
+  document.addEventListener('pointerdown', (e) => { if (!e.target.closest('#x-suggest, #explore-search')) hideSuggestions(); });
+  $('section[data-view="explore"] .lib-clear').onclick = () => { clearSearch(); xs.focus(); };
   document.addEventListener('keydown', (e) => { if (e.key === '/' && (view === 'library' || view === 'explore') && !e.target.closest('input, textarea')) { e.preventDefault(); (view === 'explore' ? xs : search).focus(); } });
   window.addEventListener('resize', markOverflow);
   $('#edit-studies').onclick = editStudies;
@@ -2732,7 +2888,7 @@ function openRename(d) {
       track('channel_rename', { handle: channel.handle, from });
       me = { ...me, following: (me?.following || []).map((h) => (h === from ? channel.handle : h)) };
       feed.items.forEach((it) => { if (it.data?.channel?.handle === from) { it.data.channel.handle = channel.handle; renderChannelChip(it); } });
-      topChannelsCache = null;
+      xp.data = null;
       channelUi.handle = channel.handle;
       channelUi.data = channel;
       history.replaceState({ channel: channel.handle }, '', `#@${channel.handle}`);
@@ -2750,15 +2906,18 @@ function openRename(d) {
 function fillGrid(grid) {
   const list = channelUi.lessons;
   if (!list.length) { grid.replaceChildren(el('p', { class: 'ch-empty' }, 'The first lessons for this course are being made. Follow it and they will come to your feed.')); return; }
+  // A course's lessons are made for students in different countries; ones made for another country say so.
   grid.replaceChildren(...list.map((l, i) => el('button', { type: 'button', class: 'ch-tile', onclick: () => playChannel(i, 'tile') },
     l.poster ? el('img', { src: l.poster, alt: '', loading: 'lazy', decoding: 'async' }) : el('span', { class: 'ch-tile-blank' }),
+    l.loc && l.loc !== localRegion() ? el('span', { class: 'ch-tile-loc' }, `Made for ${regionName(l.loc)}`) : null,
     el('span', { class: 'ch-tile-meta' }, el('span', { class: 'ch-tile-title' }, l.title || l.unit || 'Lesson'), el('span', { class: 'ch-tile-len' }, [l.format, l.duration ? minsOf(l.duration) : null].filter(Boolean).join(' · '))))));
 }
 
 /** Plays the profile's lessons as a feed, starting at `i`. */
 async function playChannel(i, how) {
   const h = channelUi.handle;
-  const list = channelUi.lessons.slice(i);
+  // The tapped lesson always plays; the ones after it are the student's country's (or no country's).
+  const list = channelUi.lessons.slice(i).filter((l, k) => k === 0 || !l.loc || l.loc === localRegion());
   if (!list.length) return;
   track(how === 'play' ? 'channel_play' : 'channel_lesson_open', how === 'play' ? { handle: h, from: 'profile' } : { handle: h, id: list[0].id });
   closeChannel();
@@ -2847,33 +3006,49 @@ async function addCustomTopic(title, { programKey = null } = {}) {
   return added;
 }
 
-/** "Courses to follow" for Explore: search results for `q`, or the most followed (cached for a minute). */
-let topChannelsCache = null;
-async function exploreChannels(q) {
-  const box = el('section', { class: 'xch' }, el('h2', { class: 'xch-title' }, q ? 'Courses' : 'Courses to follow'));
-  try {
-    const fresh = !q && topChannelsCache && Date.now() - topChannelsCache.at < 60000 ? topChannelsCache.channels : null;
-    const { channels } = fresh ? { channels: fresh } : await api('GET', `/api/channels${q ? `?q=${encodeURIComponent(q)}` : ''}`);
-    if (!q) topChannelsCache = { at: Date.now(), channels };
-    if (!channels.length) { if (q) return null; box.append(el('p', { class: 'muted' }, 'No courses yet.')); return box; }
-    box.append(el('div', { class: 'xch-list' }, ...channels.slice(0, q ? 8 : 10).map((c) => channelCard(c, { onFollowChange: () => { topChannelsCache = null; renderExplore(); } }))));
-    return box;
-  } catch { return null; }
-}
-
-/** The Following card on the Profile tab. */
-async function renderFollowing() {
-  let card = $('#following-card');
-  if (!card) {
-    card = el('div', { id: 'following-card', class: 'card' });
-    $('#profile-tiles')?.after(card);
-  }
+/** The courses a student follows, in a sheet (from the "following" count on their profile). */
+async function openFollowing() {
+  const body = el('div', { class: 'name-sheet' }, el('div', { class: 'ch-loading' }, el('span', { class: 'spinner' })));
+  openSheet('Following', body, () => { if (view === 'profile') renderProfile(); });
   try {
     const { channels } = await api('GET', '/api/me/following');
-    card.replaceChildren(el('h3', {}, `Following · ${channels.length}`),
-      channels.length ? el('div', { class: 'xch-list' }, ...channels.map((c) => channelCard(c, { onFollowChange: renderFollowing })))
-        : el('p', { class: 'muted' }, 'Follow courses from Explore, or from the @handle on any lesson.'));
-  } catch { card.replaceChildren(el('h3', {}, 'Following'), el('p', { class: 'muted' }, "Couldn't load who you follow.")); }
+    body.replaceChildren(channels.length ? el('div', { class: 'xch-list' }, ...channels.map((c) => channelCard(c)))
+      : el('p', { class: 'muted' }, 'Follow courses from Explore, or from the @handle on any lesson.'));
+  } catch { body.replaceChildren(el('p', { class: 'muted' }, "Couldn't load who you follow.")); }
+}
+
+/**
+ * The Profile tab's settings as one short list. Each row opens its card in a sheet; the cards
+ * live in #profile-drawer and go back there when the sheet closes, so their render functions
+ * keep finding them by id.
+ */
+function renderSettingsList() {
+  const list = $('#settings-list');
+  if (!list) return;
+  const b = me?.billing;
+  const p = me?.profile || {};
+  const lvl = cfg.levels.find((l) => l.id === p.level);
+  const rows = [
+    ['credits-card', '🎟️', 'Credits', b ? (b.mode === 'own' ? 'Using your Vidmoat credits' : `${b.houseLeft ?? 0} free lesson${b.houseLeft === 1 ? '' : 's'} left`) : ''],
+    ['studies-card', '🎓', 'Your studies', [p.program, lvl?.label].filter(Boolean).join(' · ') || 'Level, course and interests'],
+    ['tune-card', '🎚️', 'Feed settings', 'Topics, narration, length, difficulty'],
+    ['invite-card', '💌', 'Invite friends', `${me?.invites || 0} joined with your link`],
+    ['push-card', '🔔', 'Reminders', 'Streak and review nudges'],
+    ['account-card', '👤', 'Account', me?.vidmoat ? (me.vidmoat.email || me.vidmoat.name) : 'Sign in to keep your progress'],
+    ['install-card', '📲', 'Install the app', 'Full screen, from your home screen'],
+    ['reset-card', '♻️', 'Start fresh', 'Reset your feed or everything'],
+  ].filter(([id]) => $(`#${id}`) && !$(`#${id}`).hidden);
+  list.replaceChildren(...rows.map(([id, icon, title, sub]) => el('button', { type: 'button', class: 'set-row', onclick: () => (id === 'tune-card' ? (track('tune_open'), openTune()) : openSettingsCard(id, title)) },
+    el('span', { class: 'set-ic', 'aria-hidden': 'true' }, icon), el('span', { class: 'set-text' }, el('strong', {}, title), sub ? el('small', {}, sub) : null), el('span', { class: 'set-go', 'aria-hidden': 'true' }, '›'))));
+}
+
+function openSettingsCard(id, title) {
+  const card = $(`#${id}`);
+  if (!card) return;
+  track('settings_open', { card: id.replace('-card', '') });
+  const back = () => { $('#profile-drawer').append(card); card.classList.remove('in-sheet'); renderSettingsList(); };
+  card.classList.add('in-sheet');
+  openSheet(title, card, back);
 }
 
 /** ?c=<handle> opens a profile; ?follow=<handle> follows it too (links from the public /@handle page). */
