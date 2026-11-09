@@ -218,12 +218,15 @@ async function route(req, res, url) {
   }
 
   // ---- Course profiles (feed/channels.js): public pages, share cards and the JSON the app reads ----
-  const profileMatch = /^\/(?:api\/)?(?:c\/|@)([a-z0-9._-]{3,40})$/.exec(path);
+  const profileMatch = /^\/(?:api\/)?(?:c\/|@)([A-Za-z0-9._-]{3,40})$/.exec(path);
   if (req.method === 'GET' && profileMatch) {
-    const ch = await channels.getChannel(profileMatch[1]);
+    const asked = profileMatch[1];
+    const ch = await channels.getChannel(asked);
     const html = { 'Content-Type': 'text/html; charset=utf-8' };
     const site = siteOrigin(req);
-    if (!ch) return send(res, 404, notFoundPage({ url: `${site}/@${profileMatch[1]}` }).replace("This lesson isn't here.", "This course isn't here."), { ...html, 'Cache-Control': 'no-store' });
+    if (!ch) return send(res, 404, notFoundPage({ url: `${site}/@${asked.toLowerCase()}` }).replace("This lesson isn't here.", "This course isn't here."), { ...html, 'Cache-Control': 'no-store' });
+    // An old handle (renamed profile) or different capitals: one canonical address.
+    if (ch.handle !== asked) { res.writeHead(301, { Location: `/@${ch.handle}`, 'Cache-Control': 'public, max-age=300' }); res.end(); return; }
     const [pub, ids] = await Promise.all([channels.publicChannel(ch, { withUnits: true }), channels.channelLessonIds(ch, { limit: 30 })]);
     const lessons = await lessonTiles(ids);
     waitUntil(Promise.allSettled([channels.statOf(ch.handle, 'pageViews'), kv.hincrby(`events:day:${new Date().toISOString().slice(0, 10)}`, 'profile_page_view', 1)]));
@@ -246,8 +249,10 @@ async function route(req, res, url) {
   if (key === 'GET /api/channels') {
     const q = (url.searchParams.get('q') || '').slice(0, 80);
     const viewer = await cookieUser(req);
-    const found = q ? await channels.searchChannels(q, 12) : await channels.topChannels(20);
-    const list = (await Promise.all(found.map(async ({ handle }) => { const ch = await channels.getChannel(handle); return ch ? channels.publicChannel(ch, { userId: viewer }) : null; }))).filter(Boolean);
+    if (!q) return send(res, 200, { channels: await channels.forViewer(await channels.topPublic({ limit: 20 }), viewer) }); // "Courses to follow": courses with lessons, most followed first
+    const user = viewer ? await db.getUser(viewer) : null;
+    const found = await channels.searchChannels(q, 12);
+    const list = (await Promise.all(found.map(async ({ handle }) => { const ch = await channels.getChannel(handle); return ch ? channels.publicChannel(ch, { userId: viewer, user }) : null; }))).filter(Boolean);
     return send(res, 200, { channels: list });
   }
   if (key === 'GET /api/channels/check') {
@@ -523,20 +528,33 @@ async function route(req, res, url) {
     const user = await db.getUser(userId);
     if (req.method === 'POST') {
       const r = await channels.follow(userId, followMatch[1]);
-      if (user.unfollowed?.includes(r.channel.handle)) { user.unfollowed = user.unfollowed.filter((h) => h !== r.channel.handle); await db.saveUser(user); }
+      if (user.unfollowed?.some((x) => x === r.channel.handle || x === r.channel.ref)) { user.unfollowed = user.unfollowed.filter((x) => x !== r.channel.handle && x !== r.channel.ref); await db.saveUser(user); }
       waitUntil(prefetch(userId).then((pending) => Promise.allSettled(pending)).catch(() => {}));
       return send(res, 200, { following: true, followers: r.followers });
     }
     const r = await channels.unfollow(userId, followMatch[1]);
     const left = channels.ownRefs(user).includes(r.channel.ref) && channels.leaveCourse(user, r.channel);
-    if (!left) user.unfollowed = [...new Set([...(user.unfollowed || []), r.channel.handle])].slice(-100);
+    if (!left) user.unfollowed = [...new Set([...(user.unfollowed || []), r.channel.ref])].slice(-100);
     user.channelsSig = channels.ownRefs(user).sort().join(',');
     await db.saveUser(user);
     return send(res, 200, { following: false, followers: r.followers, left, user: left ? user : undefined });
   }
+  // The student who brought a course renames its handle: { handle }. The old handle keeps redirecting.
+  const renameMatch = /^\/api\/channels\/([a-z0-9._-]{3,40})\/rename$/.exec(path);
+  if (req.method === 'POST' && renameMatch) {
+    const body = await readJson(req, 2048);
+    try {
+      const { channel, from } = await channels.renameChannel(userId, renameMatch[1], body.handle);
+      return send(res, 200, { channel: await channels.publicChannel(channel, { userId, withUnits: true }), from });
+    } catch (err) {
+      if (err.status) return send(res, err.status, { error: err.message });
+      throw err;
+    }
+  }
   if (key === 'GET /api/me/following') {
     const handles = await channels.followingOf(userId);
-    const list = (await Promise.all(handles.slice(0, 100).map(async (h) => { const ch = await channels.getChannel(h); return ch ? channels.publicChannel(ch, { userId }) : null; }))).filter(Boolean);
+    const me = await db.getUser(userId);
+    const list = (await Promise.all(handles.slice(0, 100).map(async (h) => { const ch = await channels.getChannel(h); return ch ? channels.publicChannel(ch, { userId, user: me }) : null; }))).filter((c, i, all) => c && all.findIndex((x) => x?.handle === c.handle) === i); // an old handle and its new one are the same course
     return send(res, 200, { channels: list.sort((a, b) => Number(b.mine) - Number(a.mine) || b.followers - a.followers) });
   }
 

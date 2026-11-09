@@ -38,9 +38,17 @@ export const HANDLE_MAX = 40;
 // Paths and words a handle must not take: app routes, and names that would mislead.
 export const RESERVED = new Set(['api', 'v', 'og', 'c', 'admin', 'administrator', 'root', 'studygraph', 'study-graph', 'studytok', 'vidmoat', 'official',
   'support', 'help', 'about', 'explore', 'library', 'profile', 'settings', 'login', 'logout', 'signin', 'signup', 'me', 'you', 'feed', 'home',
-  'sitemap', 'robots', 'privacy', 'terms', 'faq', 'news', 'team', 'staff', 'moderator', 'mod', 'null', 'undefined', 'anonymous', 'everyone']);
-const FOLLOW_UNITS_PER_CHANNEL = 16; // a followed course adds at most this many units to the feed
-const FOLLOW_CHANNELS_MAX = 12;      // and at most this many followed courses are read per page
+  'sitemap', 'robots', 'privacy', 'terms', 'faq', 'news', 'team', 'staff', 'moderator', 'mod', 'null', 'undefined', 'anonymous', 'everyone',
+  // API path segments under /api/channels/ (a handle named like one would be unreachable)
+  'check', 'for', 'search', 'following', 'follow', 'rename', 'lessons', 'new', 'edit', 'channels']);
+// Never inside a handle: impersonation of StudyGraph/Vidmoat, and obvious abuse.
+// (Only slurs and profanity: history topics such as "nazi-germany" and courses such as "business-administration" stay possible.)
+const BLOCKED = ['studygraph', 'study-graph', 'studytok', 'vidmoat', 'fuck', 'shit', 'bitch', 'cunt', 'nigger', 'nigga', 'faggot', 'porn', 'kkk'];
+// Official courses' handles (catalog ids, pack slugs) belong to them, even before their profile is made.
+const OFFICIAL = new Set([...CATALOG.map((p) => p.id), ...PACKS.map((p) => p.slug)]);
+const FOLLOW_UNITS_PER_CHANNEL = 10; // a followed course adds at most this many units to a feed page
+const FOLLOW_CHANNELS_MAX = 8;       // and at most this many followed courses (a fresh random pick each page)
+const RENAMES_PER_30_DAYS = 3;
 export const INTENT_MS = 20 * 60 * 1000; // a profile visit leans the feed towards that course for 20 minutes
 
 /** Lower-cases, drops a leading @ and surrounding space. */
@@ -53,7 +61,8 @@ export function checkHandle(raw) {
   if (h.length > HANDLE_MAX) return { ok: false, handle: h, reason: `At most ${HANDLE_MAX} characters.` };
   if (!HANDLE.test(h)) return { ok: false, handle: h, reason: 'Letters, numbers, dots, dashes and underscores; start and end with a letter or number.' };
   if (/[._-]{2}/.test(h)) return { ok: false, handle: h, reason: 'No two dots, dashes or underscores in a row.' };
-  if (RESERVED.has(h)) return { ok: false, handle: h, reason: 'That handle is reserved.' };
+  if (RESERVED.has(h) || BLOCKED.some((w) => h.replace(/[._-]/g, '').includes(w.replace(/-/g, '')))) return { ok: false, handle: h, reason: 'That handle is not available.' };
+  if (OFFICIAL.has(h)) return { ok: false, handle: h, reason: 'That handle belongs to an official course.' };
   return { ok: true, handle: h };
 }
 
@@ -103,6 +112,11 @@ export async function getChannel(handle) {
   const h = cleanHandle(handle);
   if (!HANDLE.test(h)) return null;
   let ch = await kv.get(`channel:${h}`);
+  // A renamed profile: its old handles keep working (links, follows in flight) and point to the new one.
+  if (!ch) {
+    const to = await kv.get(`channel:alias:${h}`);
+    if (to && to !== h) ch = await kv.get(`channel:${to}`);
+  }
   // Official courses have a profile from the start: made on first visit under their official handle.
   if (!ch) {
     const officialRef = CATALOG.some((p) => p.id === h) ? `cat:${h}` : PACK_BY_SLUG[h] ? `pack:${h}` : null;
@@ -127,7 +141,7 @@ export async function channelForRef(ref) {
 export async function handleAvailable(raw) {
   const c = checkHandle(raw);
   if (!c.ok) return c;
-  if (await kv.get(`channel:${c.handle}`)) return { ok: false, handle: c.handle, taken: true, reason: `@${c.handle} is taken.` };
+  if (await kv.get(`channel:${c.handle}`) || await kv.get(`channel:alias:${c.handle}`)) return { ok: false, handle: c.handle, taken: true, reason: `@${c.handle} is taken.` };
   return c;
 }
 
@@ -153,9 +167,11 @@ export async function ensureChannel(ref, { handle = null, createdBy = null } = {
   if (!src) return null;
   // Official courses (catalog, packs) keep their official handle; students name only what they bring.
   const wanted = !src.official && handle && checkHandle(handle).ok ? cleanHandle(handle) : null;
-  const tries = [...(wanted ? [wanted] : []), await freeHandleNear(src.suggest || src.name)];
+  const first = src.official ? src.suggest : wanted; // an official handle is reserved for its course, so it is tried as is
+  const tries = first ? [first] : [];
   for (let attempt = 0; attempt < 4; attempt++) {
     const h = tries[attempt] || await freeHandleNear(src.suggest || src.name);
+    if (await kv.get(`channel:alias:${h}`)) continue; // an old handle of a renamed profile
     const rec = {
       handle: h, ref, kind: src.kind, official: src.official, name: src.name, bio: src.bio || '', level: src.level || null, topic: src.topic || null,
       by: src.by || null, units: src.units, createdBy: src.official ? null : createdBy || null, createdAt: new Date().toISOString(),
@@ -177,12 +193,13 @@ export async function ensureChannel(ref, { handle = null, createdBy = null } = {
 }
 
 /** The channel a lesson's unit belongs to (made on first need for any course that has a source). */
-export async function channelOfUnit(unitId) {
+export async function channelOfUnit(unitId, { by = null } = {}) {
   if (!unitId) return null;
   const h = await kv.get(`channel:unit:${unitId}`);
   if (h) return getChannel(h);
   const ref = refOfUnit(await getUnit(unitId));
-  return ref ? (await ensureChannel(ref))?.channel || null : null;
+  // Made from a lesson: credited to the student whose request made that lesson (they brought the course).
+  return ref ? (await ensureChannel(ref, { createdBy: by }))?.channel || null : null;
 }
 
 // ------------------------------------------------------------------------------ following
@@ -235,7 +252,8 @@ export async function syncOwnChannels(user, { handles = {} } = {}) {
   for (const ref of ownRefs(user)) {
     const made = await ensureChannel(ref, { handle: handles[ref] || null, createdBy: user.id }).catch(() => null);
     if (!made) continue;
-    if (!user.unfollowed?.includes(made.channel.handle)) await follow(user.id, made.channel.handle, { auto: true });
+    // A course the student studies is followed (unfollowing it takes it off their course, so the two never disagree).
+    await follow(user.id, made.channel.handle, { auto: true });
     out.push({ ref, handle: made.channel.handle, existed: made.existed, gotRequested: made.gotRequested });
   }
   return out;
@@ -252,8 +270,8 @@ export function leaveCourse(user, channel) {
   if (channel.ref.startsWith('pack:')) user.packs = (user.packs || []).filter((s) => `pack:${s}` !== channel.ref);
   user.units = (user.units || []).filter((id) => !units.has(id) && id !== channel.ref);
   for (const id of units) delete user.unitGroups?.[id];
-  // Remember the choice, so the next sync does not follow it again.
-  user.unfollowed = [...new Set([...(user.unfollowed || []), channel.handle])].slice(-100);
+  // A record of the choice (by course ref, which survives renames).
+  user.unfollowed = [...new Set([...(user.unfollowed || []), channel.ref])].slice(-100);
   return JSON.stringify([user.programKeys, user.packs, user.units]) !== before;
 }
 
@@ -263,18 +281,24 @@ export function leaveCourse(user, channel) {
  * in the last INTENT_MS gets `intent` (0..1, fading), which the ranking adds to the unit score.
  */
 export async function followCandidates(user, { skip = new Set(), intent = null, now = Date.now() } = {}) {
-  const handles = (await followingOf(user.id)).sort().slice(0, FOLLOW_CHANNELS_MAX);
+  const all = await followingOf(user.id);
+  // A fresh random handful each page, so a student who follows many courses sees all of them over time.
+  for (let i = all.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [all[i], all[j]] = [all[j], all[i]]; }
   const lean = intent?.handle && now - (intent.at || 0) < INTENT_MS ? { handle: intent.handle, w: +(1 - (now - intent.at) / INTENT_MS).toFixed(3) } : null;
-  if (lean && !handles.includes(lean.handle)) handles.push(lean.handle); // visiting a profile leans the feed even before following
-  const out = [];
-  for (const h of handles) {
+  const handles = all.filter((h) => h !== lean?.handle).slice(0, FOLLOW_CHANNELS_MAX - (lean ? 1 : 0));
+  if (lean) handles.unshift(lean.handle); // a profile just visited leans the feed, followed or not
+  const followed = new Set(all);
+  const lists = await Promise.all(handles.map(async (h) => {
     const ch = await getChannel(h);
-    if (!ch) continue;
+    if (!ch) return [];
     const ids = (ch.units || []).filter((id) => !skip.has(id)).slice(0, FOLLOW_UNITS_PER_CHANNEL);
     const units = (await Promise.all(ids.map((id) => getUnit(id)))).filter(Boolean);
-    units.forEach((unit, i) => out.push({ unit, kind: 'follow', group: `ch:${h}`, channel: h, order: i, intent: lean?.handle === h ? lean.w : 0, pos: { index: i + 1, total: (ch.units || []).length } }));
-  }
-  return out;
+    // 'follow' for courses the student follows; 'visit' for one they only looked at (ranked like an interest, plus intent).
+    const kind = followed.has(h) || followed.has(ch.handle) ? 'follow' : 'visit';
+    const w = lean && (lean.handle === h || lean.handle === ch.handle) ? lean.w : 0;
+    return units.map((unit) => ({ unit, kind, group: `ch:${ch.handle}`, channel: ch.handle, order: (ch.units || []).indexOf(unit.id), intent: w, pos: { index: (ch.units || []).indexOf(unit.id) + 1, total: (ch.units || []).length } }));
+  }));
+  return lists.flat();
 }
 
 // ------------------------------------------------------------------------------ lessons of a channel
@@ -371,18 +395,87 @@ export async function searchChannels(q, limit = 12) {
 }
 
 // ------------------------------------------------------------------------------ public shape
-export async function publicChannel(ch, { userId = null, withUnits = false } = {}) {
+export async function publicChannel(ch, { userId = null, user: known = null, withUnits = false } = {}) {
   const look = TOPIC_BY_ID[ch.topic] || null;
-  const [followers, lessons, following, stats, user] = await Promise.all([followerCount(ch.handle), lessonCount(ch), isFollowing(userId, ch.handle), kv.hgetall(`channel:${ch.handle}:stats`), userId ? db.getUser(userId) : null]);
+  const [followers, lessons, following, stats, user] = await Promise.all([followerCount(ch.handle), lessonCount(ch), isFollowing(userId, ch.handle), kv.hgetall(`channel:${ch.handle}:stats`), known || (userId ? db.getUser(userId) : null)]);
   let units;
   if (withUnits) units = (await Promise.all((ch.units || []).slice(0, 60).map((id) => getUnit(id)))).filter(Boolean).map((u) => ({ id: u.id, title: u.title, summary: u.summary || '' }));
   return {
     handle: ch.handle, name: ch.name, bio: ch.bio || '', kind: ch.kind, official: Boolean(ch.official), by: ch.by || null,
     level: ch.level && LEVEL_BY_ID[ch.level] ? { id: ch.level, label: levelOf(ch.level).label } : null,
     topic: look ? { id: look.id, label: look.label, emoji: look.emoji, accent: look.accent } : null,
-    followers: Number(followers) || 0, lessons, views: Number(stats?.views) || 0, following,
+    followers: Number(followers) || 0, lessons, views: (Number(stats?.views) || 0) + (Number(stats?.pageViews) || 0), following,
     mine: Boolean(userId && ch.createdBy === userId), createdAt: ch.createdAt, units,
+    canRename: Boolean(userId && ch.createdBy === userId && !ch.official),
     // Part of the viewer's own course: unfollowing it takes it off their course too.
     inCourse: Boolean(user && ownRefs(user).includes(ch.ref)),
   };
+}
+
+// ------------------------------------------------------------------------------ renaming
+/**
+ * The student who brought a course renames its handle (official courses cannot be renamed).
+ * Everything keyed by the handle moves; the old handle becomes an alias, so shared links and
+ * old follows keep working and nobody else can take it. At most RENAMES_PER_30_DAYS.
+ * @returns {Promise<{ channel, from }>}
+ */
+export async function renameChannel(userId, handle, wanted, { now = Date.now() } = {}) {
+  const ch = await getChannel(handle);
+  if (!ch) throw Object.assign(new Error('No such course profile'), { status: 404 });
+  if (ch.official || !userId || ch.createdBy !== userId) throw Object.assign(new Error('Only the student who brought this course can rename it.'), { status: 403 });
+  const from = ch.handle;
+  const to = cleanHandle(wanted);
+  if (to === from) return { channel: ch, from };
+  const recent = (ch.renames || []).filter((t) => now - Date.parse(t) < 30 * 86400000);
+  if (recent.length >= RENAMES_PER_30_DAYS) throw Object.assign(new Error(`A course can be renamed ${RENAMES_PER_30_DAYS} times a month. Try again later.`), { status: 429 });
+  const check = checkHandle(to);
+  if (!check.ok) throw Object.assign(new Error(check.reason), { status: 400 });
+  // Taking back one of this profile's own old handles is fine; anyone else's is not.
+  const aliasOf = await kv.get(`channel:alias:${to}`);
+  if (aliasOf && aliasOf !== from) throw Object.assign(new Error(`@${to} is taken.`), { status: 409 });
+  const { units: _fresh, ...stored } = ch; // catalog/pack units are refreshed on read; store what was stored
+  const rec = { ...(await kv.get(`channel:${from}`)) || stored, handle: to, renames: [...recent, new Date(now).toISOString()], aliases: [...new Set([...(ch.aliases || []), from])].filter((a) => a !== to) };
+  if (!(await kv.set(`channel:${to}`, rec, { nx: true }))) throw Object.assign(new Error(`@${to} is taken.`), { status: 409 });
+
+  const [fans, stats, followers] = await Promise.all([kv.smembers(`channel:${from}:fans`), kv.hgetall(`channel:${from}:stats`), followerCount(from)]);
+  await Promise.all([
+    kv.set(`channel:ref:${ch.ref}`, to),
+    ...(rec.units || []).map(async (u) => { if ((await kv.get(`channel:unit:${u}`)) === from) await kv.set(`channel:unit:${u}`, to); }),
+    // Every old handle of this profile now points at the new one; the new one is no longer an alias.
+    ...rec.aliases.map((a) => kv.set(`channel:alias:${a}`, to)),
+    kv.del(`channel:alias:${to}`),
+    ...(fans?.length ? [kv.sadd(`channel:${to}:fans`, ...fans)] : []),
+    ...(fans || []).map((uid) => Promise.all([kv.srem(`user:${uid}:following`, from), kv.sadd(`user:${uid}:following`, to)])),
+    ...Object.entries(stats || {}).map(([f, n]) => kv.hincrby(`channel:${to}:stats`, f, Number(n) || 0)),
+    kv.zadd('channels', { score: Number(followers) || 0, member: to }),
+    kv.zrem('channels', from),
+    kv.hset('channels:names', { [to]: `${ch.name} ${ch.by || ''}`.toLowerCase().trim() }),
+    kv.hdel('channels:names', from),
+  ]);
+  await Promise.all([kv.del(`channel:${from}`), kv.del(`channel:${from}:fans`), kv.del(`channel:${from}:stats`)]);
+  await kv.hincrby(`events:day:${new Date(now).toISOString().slice(0, 10)}`, 'channel_rename', 1);
+  return { channel: await getChannel(to), from };
+}
+
+/**
+ * The public fields of the most followed courses that have lessons (no viewer fields), cached for
+ * a minute: Explore opens this on every visit and each course costs a dozen reads to describe.
+ */
+export async function topPublic({ limit = 20 } = {}) {
+  const cached = await kv.get('cache:channels:top');
+  if (cached?.at && Date.now() - cached.at < 60000) return cached.list.slice(0, limit);
+  const found = await topChannels(80);
+  const list = (await Promise.all(found.map(async ({ handle }) => { const ch = await getChannel(handle); return ch ? publicChannel(ch) : null; })))
+    .filter((c) => c && c.lessons > 0).sort((a, b) => b.followers - a.followers || b.lessons - a.lessons).slice(0, 40);
+  await kv.set('cache:channels:top', { at: Date.now(), list }, { ex: 120 });
+  return list.slice(0, limit);
+}
+
+/** Adds the viewer's fields (following, inCourse, mine, canRename) to public channels in two reads. */
+export async function forViewer(list, userId) {
+  if (!userId || !list.length) return list;
+  const [flags, user] = await Promise.all([kv.smismember(`user:${userId}:following`, list.map((c) => c.handle)), db.getUser(userId)]);
+  const refs = new Set(user ? ownRefs(user) : []);
+  const records = await Promise.all(list.map((c) => kv.get(`channel:${c.handle}`)));
+  return list.map((c, i) => ({ ...c, following: flags?.[i] === 1, inCourse: Boolean(records[i] && refs.has(records[i].ref)), mine: records[i]?.createdBy === userId, canRename: records[i]?.createdBy === userId && !records[i]?.official }));
 }

@@ -85,6 +85,7 @@ export const EVENT_SPECS = {
   channel_play: { fields: { handle: 's', from: 's' } },
   channel_lesson_open: { fields: { handle: 's', id: 's' } },
   channel_search: { fields: { q: 's', results: 'i' } },
+  channel_rename: { fields: { handle: 's', from: 's' } },
   pack_remove: { fields: { slug: 's' } },
   pack_link: { fields: { slug: 's' } },
   library_search: { fields: { q: 's' } },

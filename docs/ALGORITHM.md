@@ -245,6 +245,10 @@ One course has exactly one profile (`channel:ref:<ref>`), so the next student wh
 the same course or types the same topic is shown the existing profile and follows it instead of
 making a duplicate, and both share its lessons.
 
+* **Renaming**: the student who brought a course can change its handle (3 times in 30 days;
+  `POST /api/channels/:handle/rename`). Followers, counters, the lesson index and search move
+  to the new handle; old handles become aliases (`channel:alias:<old>`) that redirect and can
+  never be taken by another course.
 * **Following**: students follow every course they study automatically. Following someone
   else's course adds its units to the feed (kind `follow`, above). Unfollowing a course the
   student studies takes it off their course; the choice is remembered so it is not re-followed.

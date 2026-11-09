@@ -172,7 +172,7 @@ export async function editProfile(userId, body) {
   if (madeRef) {
     const made = await ensureChannel(madeRef, { handle: body.addCustom?.handle || null, createdBy: user.id }).catch(() => null);
     if (made) {
-      user.unfollowed = (user.unfollowed || []).filter((h) => h !== made.channel.handle);
+      user.unfollowed = (user.unfollowed || []).filter((x) => x !== made.channel.handle && x !== made.channel.ref);
       await followChannel(user.id, made.channel.handle, { auto: true });
       added = { ...added, channel: { handle: made.channel.handle, existed: made.existed, gotRequested: made.gotRequested } };
     }
@@ -477,7 +477,7 @@ export async function publicVideo(v, userId, { withDocument = true, why, pos, qu
     userId ? db.inSet(userId, 'liked', v.id) : false,
     userId ? db.inSet(userId, 'saved', v.id) : false,
     ready && withDocument ? db.getDocument(v.id) : undefined,
-    channelOfUnit(v.unitId).catch(() => null),
+    channelOfUnit(v.unitId, { by: v.requestedBy || null }).catch(() => null),
   ]);
   return {
     id: v.id,

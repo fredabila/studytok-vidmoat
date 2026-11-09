@@ -228,6 +228,11 @@ function courseHandleBox(p) {
     ob.handles[p.key] = start;
     box.replaceChildren(el('p', {}, "You're the first to bring this course to StudyGraph. Name its profile: classmates who pick the same course will find and follow it."),
       handleField(start, (h) => { if (h) ob.handles[p.key] = h; }));
+    // Close matches (the same course researched with a different exam or spelling): follow instead of duplicating.
+    api('GET', `/api/channels?q=${encodeURIComponent(p.name)}`).then(({ channels }) => {
+      const similar = channels.filter((c) => c.kind === 'course' && !c.official).slice(0, 3);
+      if (similar.length) box.append(el('p', { class: 'similar-note' }, 'Similar courses already on StudyGraph. Follow one to share its lessons:'), el('div', { class: 'xch-list' }, ...similar.map((c) => channelCard(c))));
+    }).catch(() => {});
   }).catch(() => box.replaceChildren());
   return box;
 }
@@ -1361,6 +1366,8 @@ async function openUnitPlan(u) {
   openSheet(u.title, body);
 }
 function openSheet(title, body, onClose = null) {
+  // At the top level, so it can sit above a course profile (#app is fixed: its own stacking context).
+  if ($('#sheet').parentElement !== document.body) document.body.append($('#sheet'));
   $('#sheet-title').textContent = title;
   $('#sheet-body').replaceChildren(body);
   $('#sheet').hidden = false;
@@ -1868,7 +1875,9 @@ async function renderExplore() {
   const q = ($('#explore-search').value || '').trim().toLowerCase();
   $('[data-view="explore"] .lib-clear').hidden = !q;
   const shown = explorePacks.filter((p) => (!exploreTopic || p.topic === exploreTopic) && (!q || `${p.title} ${p.by} ${p.kind} ${p.about} ${p.tags.join(' ')} ${p.units.map((u) => u.title).join(' ')}`.toLowerCase().includes(q)));
+  const seq = (renderExplore.seq = (renderExplore.seq || 0) + 1);
   const courses = await exploreChannels(q);
+  if (seq !== renderExplore.seq) return; // a newer search (or chip) has rendered since
   if (!shown.length) { list.replaceChildren(...(courses ? [courses] : []), el('div', { class: 'explore-empty' }, svgEl(mascot('think', 100)), el('b', { style: 'display:block;color:var(--ink);font-family:var(--serif);font-size:20px;margin:6px 0' }, explorePacks.length ? 'No pack matches' : 'No packs yet'), explorePacks.length ? 'Try another word or topic.' : 'Be the first to share one on GitHub.')); return; }
   list.replaceChildren(...(courses ? [courses, el('h2', { class: 'xch-title' }, 'Packs')] : []), ...shown.map((p) => {
     const topic = cfg.topics.find((t) => t.id === p.topic);
@@ -2535,10 +2544,6 @@ async function boot() {
   }
 }
 
-boot().catch((err) => {
-  console.error(err);
-  toast('StudyGraph could not start. Is the server running?');
-});
 
 // ============================================================================ course profiles
 // Every course has a public profile, @handle (server/feed/channels.js). Students follow and
@@ -2608,6 +2613,7 @@ function channelRoot() {
 async function openChannel(handle, { source = 'app' } = {}) {
   const h = String(handle || '').replace(/^@/, '').toLowerCase();
   if (!HANDLE_RE.test(h)) return;
+  if (!$('#sheet').hidden) closeSheet(); // a profile opened from a sheet replaces it
   const root = channelRoot();
   Object.assign(channelUi, { handle: h, data: null, lessons: [], more: false });
   root.hidden = false;
@@ -2619,6 +2625,8 @@ async function openChannel(handle, { source = 'app' } = {}) {
   try {
     const { channel, lessons, more } = await api('GET', `/api/channels/${h}`);
     if (channelUi.handle !== h) return;
+    // An old handle of a renamed course: show and address it by its current one.
+    if (channel.handle !== h) { channelUi.handle = channel.handle; history.replaceState({ channel: channel.handle }, '', `#@${channel.handle}`); }
     Object.assign(channelUi, { data: channel, lessons, more });
     track('channel_view', { handle: h, source });
     renderChannel();
@@ -2704,7 +2712,39 @@ function renderChannelHead() {
     d.bio ? el('p', { class: 'ch-bio' }, d.bio) : null,
     el('div', { class: 'ch-actions' }, followBtn,
       el('button', { type: 'button', class: 'btn ghost', disabled: !channelUi.lessons.length, onclick: () => playChannel(0, 'play') }, '▶ Play all'),
-      el('button', { type: 'button', class: 'btn ghost', 'aria-label': 'Share', onclick: () => shareChannel(d.handle) }, svgEl(svg_share))));
+      el('button', { type: 'button', class: 'btn ghost', 'aria-label': 'Share', onclick: () => shareChannel(d.handle) }, svgEl(svg_share))),
+    d.canRename ? el('button', { type: 'button', class: 'link ch-rename', onclick: () => openRename(d) }, '✏️ Change handle') : null);
+}
+
+/** The student who brought a course changes its handle; the old one keeps redirecting. */
+function openRename(d) {
+  let handle = null;
+  const save = el('button', { type: 'button', class: 'btn primary', disabled: '' }, 'Save');
+  const body = el('div', { class: 'name-sheet' },
+    el('p', {}, `Links to @${d.handle} keep working: they open the new handle. Followers stay. You can change it up to 3 times a month.`),
+    handleField(d.handle, (h) => { handle = h; save.disabled = !h; save.textContent = h ? `Change to @${h}` : 'Save'; }, { current: d.handle }),
+    save);
+  save.onclick = async () => {
+    if (!handle) return;
+    save.disabled = true;
+    try {
+      const { channel, from } = await api('POST', `/api/channels/${d.handle}/rename`, { handle });
+      track('channel_rename', { handle: channel.handle, from });
+      me = { ...me, following: (me?.following || []).map((h) => (h === from ? channel.handle : h)) };
+      feed.items.forEach((it) => { if (it.data?.channel?.handle === from) { it.data.channel.handle = channel.handle; renderChannelChip(it); } });
+      topChannelsCache = null;
+      channelUi.handle = channel.handle;
+      channelUi.data = channel;
+      history.replaceState({ channel: channel.handle }, '', `#@${channel.handle}`);
+      await closeSheet();
+      renderChannel();
+      toast(`Your course is now @${channel.handle}.`);
+    } catch (err) {
+      toast(err.message || "Couldn't change the handle.");
+      save.disabled = false;
+    }
+  };
+  openSheet('Change handle', body);
 }
 
 function fillGrid(grid) {
@@ -2729,7 +2769,7 @@ async function playChannel(i, how) {
  * A handle field: "@" + input with a live availability check. `onChange(handle|null)` gets the
  * handle while it is valid and free, null otherwise.
  */
-function handleField(initial, onChange) {
+function handleField(initial, onChange, { current = null } = {}) {
   const input = el('input', { type: 'text', class: 'handle-input', value: initial || '', maxlength: '40', autocapitalize: 'none', autocomplete: 'off', spellcheck: 'false', 'aria-label': 'Course handle' });
   const note = el('small', { class: 'handle-note' }, '');
   let timer = null;
@@ -2739,6 +2779,7 @@ function handleField(initial, onChange) {
     if (input.value !== v) input.value = v;
     const mine = ++seq;
     if (!v) { note.textContent = 'Pick a handle for this course.'; note.dataset.ok = 'false'; onChange(null); return; }
+    if (v === current) { note.textContent = 'This is the current handle.'; note.dataset.ok = ''; onChange(null); return; }
     try {
       const r = await api('GET', `/api/channels/check?handle=${encodeURIComponent(v)}`);
       if (mine !== seq) return;
@@ -2791,7 +2832,7 @@ async function addCustomTopic(title, { programKey = null } = {}) {
         el('button', { type: 'button', class: 'btn primary', onclick: () => { resolve({ handle: found.channel.handle, existing: true }); closeSheet(); } }, `Follow @${found.channel.handle}`));
     } else {
       const go = el('button', { type: 'button', class: 'btn primary', disabled: '' }, 'Create course');
-      body.append(el('p', {}, `You're the first to study "${title}" here. Give it a handle: it becomes the course's profile, study-graph.com/@handle, and anyone who adds the same topic will follow it.`),
+      body.append(el('p', {}, `"${title}" has no course profile yet. Give it a handle: it becomes the course's profile, study-graph.com/@handle, and anyone who adds the same topic will follow it.`),
         handleField(found.suggestion, (h) => { handle = h; go.disabled = !h; go.textContent = h ? `Create @${h}` : 'Create course'; }), go);
       go.onclick = () => { resolve({ handle }); closeSheet(); };
     }
@@ -2806,14 +2847,16 @@ async function addCustomTopic(title, { programKey = null } = {}) {
   return added;
 }
 
-/** "Courses to follow" for Explore: search results for `q`, or the most followed. */
+/** "Courses to follow" for Explore: search results for `q`, or the most followed (cached for a minute). */
+let topChannelsCache = null;
 async function exploreChannels(q) {
   const box = el('section', { class: 'xch' }, el('h2', { class: 'xch-title' }, q ? 'Courses' : 'Courses to follow'));
   try {
-    const { channels } = await api('GET', `/api/channels${q ? `?q=${encodeURIComponent(q)}` : ''}`);
-    if (q) track('channel_search', { q: q.slice(0, 60), results: channels.length });
+    const fresh = !q && topChannelsCache && Date.now() - topChannelsCache.at < 60000 ? topChannelsCache.channels : null;
+    const { channels } = fresh ? { channels: fresh } : await api('GET', `/api/channels${q ? `?q=${encodeURIComponent(q)}` : ''}`);
+    if (!q) topChannelsCache = { at: Date.now(), channels };
     if (!channels.length) { if (q) return null; box.append(el('p', { class: 'muted' }, 'No courses yet.')); return box; }
-    box.append(el('div', { class: 'xch-list' }, ...channels.slice(0, q ? 8 : 10).map((c) => channelCard(c, { onFollowChange: () => renderExplore() }))));
+    box.append(el('div', { class: 'xch-list' }, ...channels.slice(0, q ? 8 : 10).map((c) => channelCard(c, { onFollowChange: () => { topChannelsCache = null; renderExplore(); } }))));
     return box;
   } catch { return null; }
 }
@@ -2854,3 +2897,9 @@ async function applyPendingChannel() {
   if (pending.follow && !isFollowingHandle(pending.h)) await setFollow(pending.h, true, { source: 'link' }).catch(() => {});
   openChannel(pending.h, { source: 'link' });
 }
+
+// Last: every top-level declaration above must exist before boot's synchronous start runs.
+boot().catch((err) => {
+  console.error(err);
+  toast('StudyGraph could not start. Is the server running?');
+});

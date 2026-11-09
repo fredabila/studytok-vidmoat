@@ -66,6 +66,13 @@ test('handles: rules, reserved words, slugs', () => {
   assert.equal(ch.checkHandle('has space').ok, false);
   assert.equal(ch.slugHandle('Computer Science 101 (Légon) & Friends'), 'computer-science-101-legon-and-friends');
   assert.ok(ch.checkHandle(ch.slugHandle('Ɔkomfo Anokye')).ok);
+  // Real course names stay possible; impersonation, official handles and abuse do not.
+  assert.equal(ch.checkHandle('business-administration').ok, true);
+  assert.equal(ch.checkHandle('nazi-germany').ok, true);
+  assert.equal(ch.checkHandle('studygraph-team').ok, false);
+  assert.equal(ch.checkHandle('vid.moat').ok, false);
+  assert.equal(ch.checkHandle('hs-biology').ok, false, 'an official course handle');
+  assert.equal(ch.checkHandle('for').ok, false, 'an API path segment');
 });
 
 test('one profile per course: the official catalog handle, reused on the second ensure', async () => {
@@ -115,9 +122,12 @@ test('follow / unfollow keep the counts; unfollowing your own course takes it of
   assert.equal(after.programKeys.includes(`cat:${bio.id}`), false);
   assert.equal(after.units.some((id) => bio.units.some((b) => b.id === id)), false);
   assert.equal(await ch.followerCount(BIO), before - 1);
-  // The next sync does not follow it again behind the student's back.
-  await ch.syncOwnChannels({ ...after, programKeys: [`cat:${bio.id}`] });
+  // It stays unfollowed until the student studies it again; picking it again follows it.
+  await ch.syncOwnChannels(after);
   assert.equal(await ch.isFollowing(u.id, BIO), false);
+  await ch.syncOwnChannels({ ...after, programKeys: [`cat:${bio.id}`] });
+  assert.equal(await ch.isFollowing(u.id, BIO), true);
+  await ch.unfollow(u.id, BIO);
   // Following again by hand clears that.
   const f = await call('POST', `/api/channels/${BIO}/follow`, { cookie: u.id });
   assert.equal(f.json().following, true);
@@ -264,4 +274,72 @@ test('official profiles exist from the start: on first visit, and seeded for Exp
   const top = await ch.topChannels(500);
   assert.ok(top.length >= CATALOG.length + PACKS.length - 1);
   assert.ok((await ch.searchChannels(PACKS[0].title.split(' ')[0])).length >= 1);
+});
+
+test('renaming: only the creator, the old handle redirects, followers and lessons move', async () => {
+  const owner = await saveProfile(null, { profile, units: [], interests: ['space'] });
+  const fan = await saveProfile(null, { profile, units: [], interests: ['space'] });
+  const { added } = await editProfile(owner.id, { addCustom: { title: 'Rocket engines', handle: 'rocket.engines' } });
+  await seed(added.id, 2);
+  await ch.follow(fan.id, 'rocket.engines');
+  await ingest(fan.id, { events: [{ type: 'channel_view', handle: 'rocket.engines' }] });
+
+  // Not the creator, not an official course, not a bad handle, not a taken one.
+  assert.equal((await call('POST', '/api/channels/rocket.engines/rename', { cookie: fan.id, body: { handle: 'mine-now' } })).status, 403);
+  assert.equal((await call('POST', `/api/channels/${BIO}/rename`, { cookie: owner.id, body: { handle: 'bio' } })).status, 403);
+  assert.equal((await call('POST', '/api/channels/rocket.engines/rename', { cookie: owner.id, body: { handle: 'a' } })).status, 400);
+  assert.equal((await call('POST', '/api/channels/rocket.engines/rename', { cookie: owner.id, body: { handle: 'chess.openings' } })).status, 409);
+
+  const r = await call('POST', '/api/channels/rocket.engines/rename', { cookie: owner.id, body: { handle: 'Rockets101' } });
+  assert.equal(r.status, 200);
+  assert.equal(r.json().channel.handle, 'rockets101');
+  assert.equal(r.json().from, 'rocket.engines');
+  assert.equal(r.json().channel.followers, 2);
+  assert.equal(r.json().channel.lessons, 2);
+  assert.ok(r.json().channel.views >= 1, 'counters move');
+  // Everything keyed by the handle follows it.
+  assert.equal(await ch.isFollowing(fan.id, 'rockets101'), true);
+  assert.equal(await ch.isFollowing(fan.id, 'rocket.engines'), false);
+  assert.equal((await ch.channelForRef(added.id)).handle, 'rockets101');
+  assert.equal(await kv.get(`channel:unit:${added.id}`), 'rockets101');
+  assert.equal((await ch.searchChannels('rocket')).map((x) => x.handle).join(), 'rockets101');
+  const [vid] = await kv.zrange(`ready:unit:${added.id}`, 0, 0);
+  assert.equal((await publicVideo(await db.getVideo(vid), fan.id, { withDocument: false })).channel.handle, 'rockets101');
+  // The old handle still works: page redirects, API answers with the new handle, nobody else can take it.
+  const old = await call('GET', '/@rocket.engines');
+  assert.equal(old.status, 301);
+  assert.equal(old.headers.Location, '/@rockets101');
+  assert.equal((await call('GET', '/@ROCKETS101')).status, 301, 'one canonical address');
+  assert.equal((await call('GET', '/api/channels/rocket.engines')).json().channel.handle, 'rockets101');
+  assert.equal((await ch.handleAvailable('rocket.engines')).ok, false);
+  const other = await saveProfile(null, { profile, units: [], interests: ['space'] });
+  const { added: x } = await editProfile(other.id, { addCustom: { title: 'Jet engines', handle: 'rocket.engines' } });
+  assert.notEqual(x.channel.handle, 'rocket.engines');
+  // Following by an old handle follows the course itself.
+  await ch.unfollow(fan.id, 'rocket.engines');
+  assert.equal(await ch.isFollowing(fan.id, 'rockets101'), false);
+  await ch.follow(fan.id, 'rocket.engines');
+  assert.equal(await ch.isFollowing(fan.id, 'rockets101'), true);
+  // The creator may take back an old handle of their own; renames are limited.
+  const back = await call('POST', '/api/channels/rockets101/rename', { cookie: owner.id, body: { handle: 'rocket.engines' } });
+  assert.equal(back.status, 200);
+  assert.equal(back.json().channel.handle, 'rocket.engines');
+  assert.equal((await call('GET', '/@rockets101')).headers.Location, '/@rocket.engines');
+  assert.equal((await call('POST', '/api/channels/rocket.engines/rename', { cookie: owner.id, body: { handle: 'rocket-three' } })).status, 200);
+  assert.equal((await call('POST', '/api/channels/rocket-three/rename', { cookie: owner.id, body: { handle: 'rocket-four' } })).status, 429);
+  assert.equal((await call('GET', '/@rockets101')).headers.Location, '/@rocket-three', 'every old handle points at the current one');
+  // The following list has the course once.
+  const list = (await call('GET', '/api/me/following', { cookie: fan.id })).json().channels.filter((c) => c.name === 'Rocket engines');
+  assert.equal(list.length, 1);
+});
+
+test('Explore lists only courses with lessons, with the viewer fields', async () => {
+  const u = await saveProfile(null, { profile, units: [], interests: ['space'] });
+  await ch.follow(u.id, 'chess.openings');
+  await kv.del('cache:channels:top');
+  const list = (await call('GET', '/api/channels', { cookie: u.id })).json().channels;
+  assert.ok(list.length > 0);
+  assert.ok(list.every((c) => c.lessons > 0));
+  assert.equal(list.find((c) => c.handle === BIO)?.following, false);
+  assert.ok(list.every((c, i) => i === 0 || list[i - 1].followers >= c.followers));
 });
