@@ -240,6 +240,17 @@ test('the backfill files lessons made before the unit index existed', async () =
   const r = await ch.backfillUnitIndex({ force: true });
   assert.ok(r.filed >= 1);
   assert.equal(await kv.zcard(`ready:unit:${v.unitId}`), 1);
+  // A custom topic with lessons but no profile yet gets one, credited to whoever asked for its first lesson.
+  const unit = await (await import('../server/curriculum/index.js')).customUnit('Operations research');
+  const owner = crypto.randomUUID();
+  const w = { id: crypto.randomUUID(), unitId: unit.id, topic: 'math', status: 'ready', createdAt: new Date().toISOString(), requestedBy: owner, lesson: { title: 'or' } };
+  await db.saveVideo(w);
+  await kv.zadd('ready:any', { score: Date.now(), member: w.id });
+  const again = await ch.backfillUnitIndex({ force: true });
+  assert.ok(again.profiles >= 1);
+  const made = await ch.channelForRef(unit.id);
+  assert.equal(made.handle, 'operations-research');
+  assert.equal(made.createdBy, owner);
 });
 
 test('official profiles exist from the start: on first visit, and seeded for Explore', async () => {

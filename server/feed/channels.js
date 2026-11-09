@@ -278,21 +278,38 @@ export async function followCandidates(user, { skip = new Set(), intent = null, 
 }
 
 // ------------------------------------------------------------------------------ lessons of a channel
-const MIGRATION = 'migr:readyunit:v1';
+const MIGRATION = 'migr:readyunit:v2';
 
-/** One-off: files every ready video under ready:unit:<unitId> (new ones are filed by db.markReady). */
+/**
+ * One-off: files every ready video under ready:unit:<unitId> (new ones are filed by db.markReady),
+ * and gives every course that already has lessons its profile. A custom topic's profile is
+ * credited to the student whose request made its first lesson.
+ */
 export async function backfillUnitIndex({ force = false } = {}) {
   if (!force && await kv.get(MIGRATION)) return { skipped: true };
   if (!(await kv.set(`${MIGRATION}:lock`, 1, { nx: true, ex: 120 }))) return { busy: true };
   try {
     const ids = await kv.zrange('ready:any', 0, -1);
     let filed = 0;
+    const firstBy = new Map(); // unitId → { at, by } of its earliest lesson
     for (let i = 0; i < ids.length; i += 40) {
       const vids = await Promise.all(ids.slice(i, i + 40).map((id) => db.getVideo(id)));
-      await Promise.all(vids.filter((v) => v?.status === 'ready' && v.unitId).map((v) => { filed++; return kv.zadd(`ready:unit:${v.unitId}`, { score: Date.parse(v.createdAt) || Date.now(), member: v.id }); }));
+      await Promise.all(vids.filter((v) => v?.status === 'ready' && v.unitId).map((v) => {
+        filed++;
+        const at = Date.parse(v.createdAt) || Date.now();
+        if (!firstBy.has(v.unitId) || at < firstBy.get(v.unitId).at) firstBy.set(v.unitId, { at, by: v.requestedBy || null });
+        return kv.zadd(`ready:unit:${v.unitId}`, { score: at, member: v.id });
+      }));
     }
-    await kv.set(MIGRATION, { at: new Date().toISOString(), filed });
-    return { filed };
+    let profiles = 0;
+    for (const [unitId, { by }] of firstBy) {
+      const ref = refOfUnit(await getUnit(unitId).catch(() => null));
+      if (!ref) continue;
+      const made = await ensureChannel(ref, { createdBy: ref.startsWith('cu:') ? by : null }).catch(() => null);
+      if (made && !made.existed) profiles++;
+    }
+    await kv.set(MIGRATION, { at: new Date().toISOString(), filed, profiles });
+    return { filed, profiles };
   } finally {
     await kv.del(`${MIGRATION}:lock`);
   }
@@ -334,6 +351,7 @@ export async function seedOfficial({ force = false } = {}) {
 /** Top channels by followers: [{ handle, followers }]. */
 export async function topChannels(limit = 20) {
   await seedOfficial();
+  await backfillUnitIndex(); // profiles for courses that already have lessons
   const flat = await kv.zrange('channels', 0, limit - 1, { rev: true, withScores: true });
   const out = [];
   for (let i = 0; i + 1 < flat.length; i += 2) out.push({ handle: flat[i], followers: Number(flat[i + 1]) || 0 });
