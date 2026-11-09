@@ -31,6 +31,7 @@ import { PACK_BY_SLUG, PACKS } from '../curriculum/packs.js';
 import { getProgram, getUnit } from '../curriculum/index.js';
 import { TOPIC_BY_ID } from '../curriculum/topics.js';
 import { level as levelOf, LEVEL_BY_ID } from '../curriculum/levels.js';
+import { decodeAvatar, moderateAvatar, storeAvatar, dropAvatar, avatarPath } from '../core/avatars.js';
 
 export const HANDLE = /^[a-z0-9](?:[a-z0-9._-]{1,38}[a-z0-9])$/;
 export const HANDLE_MIN = 3;
@@ -407,6 +408,7 @@ export async function publicChannel(ch, { userId = null, user: known = null, wit
     followers: Number(followers) || 0, lessons, views: (Number(stats?.views) || 0) + (Number(stats?.pageViews) || 0), following,
     mine: Boolean(userId && ch.createdBy === userId), createdAt: ch.createdAt, units,
     canRename: Boolean(userId && ch.createdBy === userId && !ch.official),
+    avatar: avatarPath(ch.avatar),
     // Part of the viewer's own course: unfollowing it takes it off their course too.
     inCourse: Boolean(user && ownRefs(user).includes(ch.ref)),
   };
@@ -478,4 +480,41 @@ export async function forViewer(list, userId) {
   const refs = new Set(user ? ownRefs(user) : []);
   const records = await Promise.all(list.map((c) => kv.get(`channel:${c.handle}`)));
   return list.map((c, i) => ({ ...c, following: flags?.[i] === 1, inCourse: Boolean(records[i] && refs.has(records[i].ref)), mine: records[i]?.createdBy === userId, canRename: records[i]?.createdBy === userId && !records[i]?.official }));
+}
+
+// ------------------------------------------------------------------------------ pictures
+const AVATARS_PER_DAY = 10; // per student: each one is checked by a model
+
+/**
+ * The student who brought a course sets its picture (a data URL from the app, already cropped).
+ * Checked before it is stored (core/avatars.js); a rejected picture throws 422 with the reason.
+ */
+export async function setChannelAvatar(userId, handle, dataUrl, { moderate = moderateAvatar, now = Date.now() } = {}) {
+  const ch = await getChannel(handle);
+  if (!ch) throw Object.assign(new Error('No such course profile'), { status: 404 });
+  if (ch.official || !userId || ch.createdBy !== userId) throw Object.assign(new Error('Only the student who brought this course can change its picture.'), { status: 403 });
+  const image = decodeAvatar(dataUrl);
+  const counter = `avatar:count:${userId}:${new Date(now).toISOString().slice(0, 10)}`;
+  if ((await kv.hincrby('avatar:counts', counter, 1)) > AVATARS_PER_DAY) throw Object.assign(new Error('That is a lot of pictures for one day. Try again tomorrow.'), { status: 429 });
+  const verdict = await moderate(image);
+  if (!verdict.ok) {
+    await kv.hincrby(`events:day:${new Date(now).toISOString().slice(0, 10)}`, 'avatar_rejected', 1);
+    throw Object.assign(new Error(verdict.reason), { status: 422 });
+  }
+  const id = await storeAvatar(image);
+  const rec = await kv.get(`channel:${ch.handle}`);
+  const old = rec.avatar?.id;
+  await kv.set(`channel:${ch.handle}`, { ...rec, avatar: { id, type: image.type, at: new Date(now).toISOString() } });
+  await Promise.all([dropAvatar(old), kv.del('cache:channels:top'), kv.hincrby(`events:day:${new Date(now).toISOString().slice(0, 10)}`, 'avatar_set', 1)]);
+  return getChannel(ch.handle);
+}
+
+/** Back to the topic emoji. */
+export async function clearChannelAvatar(userId, handle) {
+  const ch = await getChannel(handle);
+  if (!ch) throw Object.assign(new Error('No such course profile'), { status: 404 });
+  if (ch.official || !userId || ch.createdBy !== userId) throw Object.assign(new Error('Only the student who brought this course can change its picture.'), { status: 403 });
+  const rec = await kv.get(`channel:${ch.handle}`);
+  if (rec.avatar?.id) { await dropAvatar(rec.avatar.id); const { avatar, ...rest } = rec; await kv.set(`channel:${ch.handle}`, rest); await kv.del('cache:channels:top'); }
+  return getChannel(ch.handle);
 }

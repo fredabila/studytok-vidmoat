@@ -33,6 +33,9 @@ export const FORMAT_STYLE = {
   thisorthat: { handson: 0.6, reading: 0.4 }, truefalse: { handson: 0.6, reading: 0.4 },
   examdrill: { handson: 0.6, reading: 0.4 }, spotmistake: { handson: 0.7, reading: 0.3 }, guess: { handson: 0.8, listening: 0.2 },
   challenge: { handson: 0.8, reading: 0.2 }, wyr: { handson: 0.7, listening: 0.3 }, predict: { handson: 0.5, visual: 0.5 },
+  detective: { handson: 0.5, listening: 0.5 }, teachback: { handson: 0.7, listening: 0.3 }, numbers: { visual: 0.8, listening: 0.2 },
+  zoom: { visual: 0.8, listening: 0.2 }, interview: { reading: 0.6, listening: 0.4 }, debate: { listening: 0.7, handson: 0.3 },
+  connect: { listening: 0.5, visual: 0.5 }, howto: { handson: 0.6, visual: 0.4 },
 };
 /** Games count towards doing it, and the word games towards reading it too. */
 const GAME_STYLE = { match: { handson: 0.5, reading: 0.5 }, order: { handson: 0.7, visual: 0.3 }, sort: { handson: 0.7, visual: 0.3 }, truefalse: { handson: 0.8, reading: 0.2 }, fillgap: { handson: 0.5, reading: 0.5 } };

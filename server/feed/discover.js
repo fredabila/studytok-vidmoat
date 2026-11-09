@@ -166,12 +166,35 @@ export async function trendingSearches(limit = 8) {
   return [...n].filter(([q, c]) => c >= 2 && !BLOCKED.some((w) => q.includes(w))).sort((x, y) => y[1] - x[1]).slice(0, limit).map(([q]) => q);
 }
 
-/** Counts a search that found something, once per student per query per day. */
+/**
+ * Counts a search, once per student per query per day. One that found something feeds the
+ * popular searches; one that found nothing is demand: `search:gaps` ranks missing topics by how
+ * many different students looked for them (feed/gaps.js turns the top ones into courses).
+ */
 export async function noteSearch(userId, q, found) {
   const nq = normQuery(q);
-  if (!found || nq.length < 3 || nq.length > 40 || !userId) return;
+  if (nq.length < 3 || nq.length > 40 || !userId) return;
   if (!(await kv.set(`search:seen:${userId}:${nq}`, 1, { nx: true, ex: 86400 }))) return;
-  await kv.zincrby(`search:q:${weekOf()}`, 1, nq);
+  if (found) { await kv.zincrby(`search:q:${weekOf()}`, 1, nq); return; }
+  if (BLOCKED.some((w) => nq.includes(w))) return;
+  await kv.sadd(`search:gapusers:${nq}`, userId);
+  await kv.zadd('search:gaps', { score: Number(await kv.scard(`search:gapusers:${nq}`)) || 1, member: nq });
+}
+
+/** Missing topics, most-wanted first: [{ q, students }]. */
+export async function searchGaps(limit = 30) {
+  const flat = await kv.zrange('search:gaps', 0, limit - 1, { rev: true, withScores: true });
+  const out = [];
+  for (let i = 0; i + 1 < flat.length; i += 2) out.push({ q: flat[i], students: Number(flat[i + 1]) || 0 });
+  return out;
+}
+
+/** Popular searches with their counts (admin insights; no minimum). */
+export async function searchCounts(limit = 30) {
+  const flat = await kv.zrange(`search:q:${weekOf()}`, 0, limit - 1, { rev: true, withScores: true });
+  const out = [];
+  for (let i = 0; i + 1 < flat.length; i += 2) out.push({ q: flat[i], searches: Number(flat[i + 1]) || 0 });
+  return out;
 }
 
 /**
@@ -186,7 +209,7 @@ export async function suggest(q, user, { limit = 8 } = {}) {
   const out = [];
   for (const t of trending.filter((x) => x.startsWith(nq) && x !== nq).slice(0, 2)) out.push({ type: 'query', text: t });
   for (const t of TOPICS.filter((t) => t.label.toLowerCase().startsWith(nq) || t.id.startsWith(nq)).slice(0, 2)) out.push({ type: 'topic', id: t.id, label: t.label, emoji: t.emoji });
-  const chs = (await Promise.all(courses.map(async ({ handle, followers }) => { const ch = await getChannel(handle); return ch ? { type: 'course', handle: ch.handle, name: ch.name, emoji: TOPIC_BY_ID[ch.topic]?.emoji || '📚', followers } : null; }))).filter(Boolean);
+  const chs = (await Promise.all(courses.map(async ({ handle, followers }) => { const ch = await getChannel(handle); return ch ? { type: 'course', handle: ch.handle, name: ch.name, emoji: TOPIC_BY_ID[ch.topic]?.emoji || '📚', avatar: ch.avatar?.id ? `/a/${ch.avatar.id}` : null, followers } : null; }))).filter(Boolean);
   out.push(...chs.slice(0, 3));
   out.push(...lessons.slice(0, 3).map((x) => ({ type: 'lesson', id: x.id, title: x.t, unit: x.ut, poster: x.p })));
   for (const p of PACKS.filter((p) => p.title.toLowerCase().includes(nq)).slice(0, 1)) out.push({ type: 'pack', slug: p.slug, title: p.title });

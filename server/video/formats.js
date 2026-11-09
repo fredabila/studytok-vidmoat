@@ -660,6 +660,159 @@ export const FORMATS = {
       { id: 'outro', kind: 'outro', spoken: `How many did you get? ${sentence(l.takeaway)}`, minDur: 3, label: 'Score yourself' },
     ],
   },
+  // ---- Third wave: built from the same scenes, for the reasons people keep watching and remember:
+  // a mystery to solve (curiosity), saying it back (the generation effect), numbers you can feel,
+  // a change of scale, an object that talks, two sides of an argument, a link to another subject,
+  // and a skill you can use today.
+
+  detective: {
+    name: 'Case file', tag: 'Case file',
+    blurb: 'A mystery in one line, three clues that each teach something, then the case is SOLVED. The viewer tries to crack it first.',
+    spec: 'hook: the mystery as a question (max 80 chars, e.g. "Why do onions make you cry?"). beats: exactly 3 clues in order, each one spoken sentence that teaches one fact the answer depends on, keyTerm = the clue in 1-3 words, a teaching visual where it helps. fact: the solution, max 90 chars, that follows from the clues. quiz required (apply the solution to a new case). Leave items, myth, cards, exam.question and chat empty.',
+    weights: { default: 2, biology: 3, chemistry: 3, physics: 3, health: 3, earth: 3, history: 2, psychology: 3 },
+    skin: {
+      hook: { fontFamily: 'Oswald', fontWeight: 700, fontSize: 150, uppercase: true, animIn: 'slide-up' },
+      term: { fontFamily: 'Oswald', fontWeight: 700, uppercase: true },
+      captions: { preset: 'Dark Pill', y: 430, maxWordsPerLine: 4 },
+      filter: 'Moody', transition: 'zoom', music: ['suspense', 'tension'], voice: 'onyx', cards: 'dark', scrim: 0.68, stampSfx: true,
+    },
+    scenes: (l) => [
+      { id: 'hook', kind: 'hook', spoken: `The case: ${question(l.hook)}`, minDur: 3 },
+      ...l.beats.slice(0, 3).map((b, i) => ({ id: `beat${i}`, kind: 'beat', index: i, spoken: sentence(b.text), captions: true, beat: b, kicker: `CLUE ${i + 1}` })),
+      { id: 'solved', kind: 'stamp', spoken: `Case solved: ${sentence(l.fact)}`, label: 'SOLVED', text: l.fact, color: '#2bbf6a', minDur: 3.5 },
+      ...quizScenes(l, 'New case.'), outro(l, 'Case notes'),
+    ],
+  },
+
+  teachback: {
+    name: 'Explain it back', tag: 'Say it back',
+    blurb: 'Two short beats teach the idea, then the screen asks the viewer to say it in one sentence, out loud, before the model answer appears.',
+    spec: 'beats: exactly 2, each one spoken sentence that teaches the idea (keyTerm, teaching visual). fact: the model one-sentence explanation a student should be able to say, max 90 chars, in plain words. hook: a promise ("In 40 seconds you will be able to explain X"). quiz required. Leave items, myth, cards, exam.question and chat empty.',
+    weights: { default: 2, biology: 3, physics: 3, chemistry: 3, economics: 3, 'computer-science': 2, psychology: 2, math: 2 },
+    skin: {
+      hook: { fontFamily: 'Montserrat', fontWeight: 900, fontSize: 150, uppercase: false, animIn: 'slide-up' },
+      term: { fontFamily: 'Montserrat', fontWeight: 900 },
+      captions: { preset: 'Clean', y: 470, maxWordsPerLine: 4 },
+      filter: 'cool-clean', transition: 'fade', music: ['calm piano', 'soft piano'], voice: 'cedar', cards: 'paper', scrim: 0.7,
+    },
+    scenes: (l) => [
+      { id: 'hook', kind: 'hook', spoken: sentence(l.hook), minDur: 3 },
+      ...l.beats.slice(0, 2).map((b, i) => ({ id: `beat${i}`, kind: 'beat', index: i, spoken: sentence(b.text), captions: true, beat: b, kicker: i === 0 ? 'LEARN IT' : 'AND' })),
+      { id: 'yourturn', kind: 'callout', spoken: 'Your turn. Say it in one sentence, out loud, before the answer appears.', label: 'YOUR TURN', text: 'Say it in one sentence, out loud.', color: '#ffd93d', captions: false, pauseAfter: 5, minDur: 3 },
+      { id: 'model', kind: 'stamp', spoken: `Here's one way: ${sentence(l.fact)}`, label: 'SAY IT LIKE THIS', text: l.fact, color: '#2bbf6a', minDur: 3.5 },
+      ...quizScenes(l, 'Now check it.'), outro(l, 'You can explain it'),
+    ],
+  },
+
+  numbers: {
+    name: 'By the numbers', tag: 'By the numbers',
+    blurb: 'Three or four real numbers that make the idea feel huge or tiny, each on a big stat or chart, and what each one means.',
+    spec: 'beats: 3-4, each one spoken sentence explaining what a real, well-established number means; visual kind "stat" (value, unit, title = what it measures) or "bars" (2-5 "label|number" rows), never invented figures, round where unsure; keyTerm = what the number is about. hook: the most surprising number as a question. quiz required (which number, or what it means). Leave items, myth, fact, cards, exam.question and chat empty.',
+    weights: { default: 1, space: 4, earth: 4, economics: 4, biology: 3, physics: 3, health: 3, history: 2, business: 3 },
+    skin: {
+      hook: { fontFamily: 'Bebas Neue', fontWeight: 400, fontSize: 190, uppercase: true, animIn: 'word-slam' },
+      term: { fontFamily: 'Bebas Neue', fontWeight: 400, uppercase: true },
+      captions: { preset: 'Hormozi', y: 440, maxWordsPerLine: 3 },
+      filter: 'Blockbuster', transition: 'zoom-blur', music: ['epic', 'energetic'], voice: 'onyx', cards: 'dark', scrim: 0.62,
+    },
+    scenes: (l) => [
+      { id: 'hook', kind: 'hook', spoken: sentence(l.hook), minDur: 2.8 },
+      ...l.beats.slice(0, 4).map((b, i) => ({ id: `beat${i}`, kind: 'beat', index: i, spoken: sentence(b.text), captions: true, beat: b, kicker: `NUMBER ${i + 1}` })),
+      ...quizScenes(l, 'Which number was it?'), outro(l, 'The number to remember'),
+    ],
+  },
+
+  zoom: {
+    name: 'Zoom', tag: 'Zoom in',
+    blurb: 'The same idea seen at three or four scales, zooming in (or out) at each step: from what you can see to what makes it work.',
+    spec: 'beats: 3-4 in order of scale (e.g. a whole leaf, a cell, a chloroplast, a molecule; or a town, a country, a planet), each one spoken sentence about what happens at that scale; keyTerm = the scale ("A cell", "×1,000"); visual: photo or footage of that scale, or a diagram. hook: "Zoom in on X" style. quiz required. Leave items, myth, fact, cards, exam.question and chat empty.',
+    weights: { default: 1, biology: 4, chemistry: 3, physics: 3, space: 4, earth: 3, 'computer-science': 2 },
+    skin: {
+      hook: { fontFamily: 'Montserrat', fontWeight: 900, fontSize: 160, uppercase: true, animIn: 'pop' },
+      term: { fontFamily: 'Montserrat', fontWeight: 900, uppercase: true },
+      captions: { preset: 'Karaoke', y: 430, maxWordsPerLine: 4 },
+      filter: 'Teal', transition: 'zoom', music: ['ambient', 'cinematic'], voice: 'echo', cards: 'dark', scrim: 0.55,
+    },
+    scenes: (l) => [
+      { id: 'hook', kind: 'hook', spoken: sentence(l.hook), minDur: 2.8 },
+      ...l.beats.slice(0, 4).map((b, i) => ({ id: `beat${i}`, kind: 'beat', index: i, spoken: sentence(b.text), captions: true, beat: b, kicker: i === 0 ? 'START HERE' : `ZOOM ${i}` })),
+      ...quizScenes(l, 'Zoom out. Quick check.'), outro(l, 'At every scale'),
+    ],
+  },
+
+  interview: {
+    name: 'Interview', tag: 'Interview',
+    blurb: 'The student interviews the thing itself (a mitochondrion, a volcano, an atom, the Moon), which answers in the first person, bubble by bubble.',
+    spec: 'chat.contact: the THING being interviewed, never a real person living or dead (e.g. "A mitochondrion", "Mount Kilimanjaro", "Carbon"). chat.messages: 5-6 messages alternating the student (first, a question) and the thing (answering in the first person, accurate, a little funny), each 6-22 words; the last message is the student summing it up. hook: the first question in one line. quiz required. Leave beats, items, myth, fact, cards and exam.question empty.',
+    weights: { default: 1, biology: 3, chemistry: 3, earth: 3, space: 3, physics: 2, 'computer-science': 2 },
+    skin: {
+      hook: { fontFamily: 'Inter', fontWeight: 800, fontSize: 140, uppercase: false, animIn: 'slide-up' },
+      term: { fontFamily: 'Inter', fontWeight: 800 },
+      captions: { preset: 'Minimal', y: 520, maxWordsPerLine: 6 },
+      filter: 'Warm', transition: 'push', music: ['lofi', 'chill beat'], voice: 'fable', cards: 'dark', scrim: 0.7,
+    },
+    scenes: (l) => [
+      { id: 'hook', kind: 'hook', spoken: sentence(l.hook), minDur: 2.6 },
+      ...l.chat.messages.map((m, i) => ({ id: `msg${i}`, kind: 'chat', index: i, spoken: sentence(m), contact: l.chat.contact, messages: l.chat.messages.slice(0, i + 1), captions: false, minDur: 2.4 })),
+      ...quizScenes(l, 'Were you listening?'), outro(l, 'In one line'),
+    ],
+  },
+
+  debate: {
+    name: 'Debate', tag: 'Debate',
+    blurb: 'A real question people disagree on, the best point FOR, the best point AGAINST, then the VERDICT from the evidence.',
+    spec: 'hook: the question, max 80 chars, one where reasonable people or textbooks disagree (never politics, religion or anything a school would not teach). beats: exactly 4 alternating FOR, AGAINST, FOR, AGAINST, each one spoken sentence with a real argument and a teaching visual where it helps; keyTerm = the argument in 1-3 words. fact: the verdict from the evidence, or "it depends on X", max 90 chars. quiz required (which argument is strongest, or what the evidence says). Leave items, myth, cards, exam.question and chat empty.',
+    weights: { default: 1, economics: 4, history: 3, psychology: 3, business: 3, law: 4, health: 2, earth: 2 },
+    skin: {
+      hook: { fontFamily: 'DM Serif Display', fontWeight: 400, fontSize: 150, uppercase: false, animIn: 'fade-in' },
+      term: { fontFamily: 'Archivo Black', fontWeight: 400, uppercase: true },
+      captions: { preset: 'Clean Subtitle', y: 480, maxWordsPerLine: 5 },
+      filter: 'Matte', transition: 'push', music: ['dramatic', 'tension'], voice: 'sage', cards: 'dark', scrim: 0.66, stampSfx: true,
+    },
+    scenes: (l) => [
+      { id: 'hook', kind: 'hook', spoken: question(l.hook), minDur: 3 },
+      ...l.beats.slice(0, 4).map((b, i) => ({ id: `beat${i}`, kind: 'beat', index: i, spoken: sentence(b.text), captions: true, beat: b, kicker: i % 2 === 0 ? 'FOR' : 'AGAINST' })),
+      { id: 'verdict', kind: 'stamp', spoken: `The verdict: ${sentence(l.fact)}`, label: 'VERDICT', text: l.fact, color: '#5fb0ff', minDur: 3.5 },
+      ...quizScenes(l, 'Your call.'), outro(l, 'The evidence says'),
+    ],
+  },
+
+  connect: {
+    name: 'It connects', tag: 'Connections',
+    blurb: 'The idea in this subject, the same idea hiding in a completely different subject, and the link that makes both easier to remember.',
+    spec: 'beats: exactly 3: HERE (the idea in this unit), ALSO HERE (the same idea in another subject or everyday life, named), THE LINK (what they share); each one spoken sentence with keyTerm and a visual (compare cards suit THE LINK). hook: "What do X and Y have in common?" style. quiz required. Leave items, myth, fact, cards, exam.question and chat empty.',
+    weights: { default: 2, math: 3, physics: 3, biology: 2, chemistry: 2, economics: 3, 'computer-science': 3, psychology: 2 },
+    skin: {
+      hook: { fontFamily: 'Archivo Black', fontWeight: 400, fontSize: 150, uppercase: true, animIn: 'pop' },
+      term: { fontFamily: 'Archivo Black', fontWeight: 400, uppercase: true },
+      captions: { preset: 'Dark Pill', y: 430, maxWordsPerLine: 4 },
+      filter: 'Teal', transition: 'whip-pan', music: ['upbeat', 'funky'], voice: 'echo', cards: 'dark', scrim: 0.6,
+    },
+    scenes: (l) => [
+      { id: 'hook', kind: 'hook', spoken: question(l.hook), minDur: 2.8 },
+      ...l.beats.slice(0, 3).map((b, i) => ({ id: `beat${i}`, kind: 'beat', index: i, spoken: sentence(b.text), captions: true, beat: b, kicker: ['HERE', 'ALSO HERE', 'THE LINK'][i] })),
+      ...quizScenes(l, 'Connect it.'), outro(l, 'The link'),
+    ],
+  },
+
+  howto: {
+    name: 'How to', tag: 'How to',
+    blurb: 'A skill in 3-5 numbered steps the viewer can use today (solve, draw, label, calculate, revise), with footage of each step and a recap.',
+    spec: 'items: 3-5 steps in order (title = "Step N: verb + object", max 28 chars; text = one spoken sentence of 8-16 words saying exactly what to do; visual = stock footage query of that action). hook: "How to X in N steps" style. quiz required (what comes next, or which step was skipped). Leave beats, myth, fact, cards, exam.question and chat empty.',
+    weights: { default: 1, math: 4, chemistry: 3, physics: 3, 'computer-science': 4, language: 3, business: 3, health: 2 },
+    skin: {
+      hook: { fontFamily: 'Oswald', fontWeight: 700, fontSize: 150, uppercase: true, animIn: 'slide-up' },
+      term: { fontFamily: 'Oswald', fontWeight: 700 },
+      captions: { preset: 'Clean', y: 470, maxWordsPerLine: 4 },
+      filter: 'cool-clean', transition: 'slide', music: ['upbeat', 'lofi'], voice: 'marin', cards: 'paper', scrim: 0.6, countdown: true,
+    },
+    scenes: (l) => [
+      { id: 'hook', kind: 'hook', spoken: sentence(l.hook), minDur: 2.6 },
+      ...l.items.map((it, i) => ({ id: `item${i}`, kind: 'item', index: i, total: l.items.length, spoken: sentence(it.text), captions: true, item: it })),
+      { id: 'recap', kind: 'recap', spoken: '', items: l.items.map((it) => it.title), minDur: 3.4 },
+      ...quizScenes(l, 'Try it.'), outro(l, 'Remember the steps'),
+    ],
+  },
 };
 
 export const FORMAT_IDS = Object.keys(FORMATS);
@@ -682,10 +835,10 @@ export function pickFormats(topic, count = 3, { recent = [], rand = Math.random,
 }
 
 /** Light, fun, still-accurate formats the feed uses for a breather (feed/breathers.js). */
-export const BREATHER_FORMATS = ['wow', 'whatif', 'realworld', 'story', 'pov', 'onething', 'eli5', 'mythbust', 'levels'];
+export const BREATHER_FORMATS = ['wow', 'whatif', 'realworld', 'story', 'pov', 'onething', 'eli5', 'mythbust', 'levels', 'detective', 'interview', 'zoom', 'numbers'];
 
 /** Retrieval practice: the formats a review session uses once a unit is due again (spaced repetition). */
-export const RETRIEVAL_FORMATS = ['flashcards', 'truefalse', 'challenge', 'examdrill', 'spotmistake', 'guess', 'cheatsheet', 'mnemonic', 'thisorthat', 'mistakes'];
+export const RETRIEVAL_FORMATS = ['flashcards', 'truefalse', 'challenge', 'examdrill', 'spotmistake', 'guess', 'cheatsheet', 'mnemonic', 'thisorthat', 'mistakes', 'teachback'];
 
 /** Formats that can run without Claude (the offline bank only has explainers). */
 export const OFFLINE_FORMATS = ['explain'];

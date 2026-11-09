@@ -28,7 +28,7 @@ const server = createServer(async (req, res) => {
   const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
   // Lesson pages, their share images and the sitemap are API routes too; on Vercel the rewrites
   // in vercel.json do this.
-  if (url.pathname.startsWith('/api/') || /^\/v\/[0-9a-f-]{36}$/.test(url.pathname) || /^\/og\/[vc]\//.test(url.pathname) || /^\/@[a-z0-9._-]{3,40}$/.test(url.pathname) || url.pathname === '/sitemap.xml') return handleApi(req, res);
+  if (url.pathname.startsWith('/api/') || /^\/v\/[0-9a-f-]{36}$/.test(url.pathname) || /^\/og\/[vc]\//.test(url.pathname) || /^\/a\/[0-9a-f]{32}$/.test(url.pathname) || /^\/@[a-z0-9._-]{3,40}$/.test(url.pathname) || url.pathname === '/sitemap.xml') return handleApi(req, res);
   if (req.method !== 'GET' && req.method !== 'HEAD') return send(res, 405, 'Method not allowed');
   return serveStatic(req, res, url);
 });

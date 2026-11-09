@@ -286,6 +286,40 @@ making a duplicate, and both share its lessons.
   `channel_follow` / `channel_unfollow` update `signals.channels[handle]` and the profile's
   counters (`channel:<handle>:stats`); follow state and follower counts change through the API.
 
+## Learning from what students do
+
+Every action feeds something:
+
+* **Searches** (`search_submit`): the last 30 are kept in the student's signals. A search with a
+  clear subject leans their Explore grid (`signals.explore`, +2) and, for 24 hours, their feed:
+  units on that subject get the `intent` term (up to 0.35, fading over the day).
+* **Searches that find nothing** are demand (`search:gaps`, ranked by how many different
+  students searched). Each night the top ones (at least 3 students, at most 2 a day, each
+  decided once, never anything on the blocked list) are checked by a model as a real,
+  school-appropriate subject (failing closed) and become a course: a custom topic, its profile,
+  and a first lesson written for no country (`feed/gaps.js`).
+* **Popular searches** come back as suggestions and trending searches (Explore).
+* **Profile visits, follows, Explore taps, up-next taps, goals, pictures**: counted per day, in
+  the Google Sheet's Daily tab and in `GET /api/admin/insights` (searches, missing topics and
+  the engagement funnel for the week).
+
+## Engagement that serves learning
+
+What keeps students going is designed to keep them learning, not just watching:
+
+* **Daily goal** (3 lessons) on the feed's header, with a short celebration when it is reached
+  ("anything more is a bonus"), not a demand to continue.
+* **Up next**: near the end of a lesson (after its quiz), a line from the next lesson's hook.
+  An open loop the student can choose to follow; nothing autoplays into it.
+* **Progress after a right answer**: the unit's mastery bar moves (competence feedback).
+* **Real numbers only**: "N students learned this" shows from 25 real views; counts are whole
+  all-time numbers, never inflated.
+* **Care** (`feed/moments.js careMoment`): after 40 minutes in one sitting an under-18 is told
+  to take a break, and anyone studying late is told that sleep is when memory consolidates. Once
+  a session, ahead of any other moment; the streak is safe either way.
+* No dark patterns: no fake scarcity, no guilt messages, no streak threats, no infinite
+  autoplay at night.
+
 ## Calibration (`feed/calibration.js`)
 
 Every multiplier in stage 2 started as a judgement call. The calibration loop checks each one

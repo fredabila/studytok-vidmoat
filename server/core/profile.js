@@ -30,7 +30,7 @@ export function profilePage(ch, lessons, { url, site = SITE_URL, image }) {
   const body = `${brand('/')}
 <main class="watch profile" data-handle="${e(ch.handle)}">
   <header class="p-head">
-    <div class="p-avatar" aria-hidden="true">${e(ch.topic?.emoji || '📚')}</div>
+    <div class="p-avatar" aria-hidden="true">${ch.avatar ? `<img src="${e(ch.avatar)}" alt="" width="92" height="92">` : e(ch.topic?.emoji || '📚')}</div>
     <h1 class="title">${e(ch.name)}</h1>
     <p class="p-handle mono">@${e(ch.handle)}</p>
     <p class="p-kicker">${e(kicker)}</p>

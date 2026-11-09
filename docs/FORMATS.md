@@ -38,6 +38,14 @@ A format is a kind of video: what scenes it has, how it looks and sounds. All th
 | `wow` | Wait, what? | one astonishing true fact stamped WAIT, WHAT?, two beats why · easy quiz | Bungee, Comic Pop, Vivid, quirky music, voice *nova* |
 | `beforeafter` | Before / after | BEFORE (compare card) → AFTER (what changed) · quiz | Archivo Black, Dark Pill, Teal, whip-pans, voice *echo* |
 | `truefalse` | True / false | four statements held, then TRUE or FALSE with the reason · score yourself | Anton, Boxed Red, punch LUT, glitch, voice *ash* |
+| `detective` | Case file | the mystery · CLUE 1-3 (each teaches a fact) · SOLVED stamp · a new case as the quiz | Oswald uppercase, Dark Pill, Moody grade, zoom cuts, suspense, voice *onyx* |
+| `teachback` | Say it back | two beats · YOUR TURN: say it in one sentence (5 s silent hold) · SAY IT LIKE THIS · quiz | Montserrat, Clean captions, cool-clean LUT, paper cards, calm piano, voice *cedar* |
+| `numbers` | By the numbers | NUMBER 1-4 on big stat and bar cards (real figures only) · quiz | Bebas Neue, Hormozi captions, Blockbuster grade, zoom-blur, epic music, voice *onyx* |
+| `zoom` | Zoom in | START HERE → ZOOM 1-3, the idea at each scale · quiz | Montserrat uppercase, Karaoke, Teal grade, zoom cuts, ambient music, voice *echo* |
+| `interview` | Interview | the student interviews a thing (never a real person), which answers in the first person, bubble by bubble · quiz | Inter, Minimal captions, Warm grade, push cuts, lo-fi, voice *fable* |
+| `debate` | Debate | the question · FOR / AGAINST / FOR / AGAINST · VERDICT stamp from the evidence · quiz | DM Serif Display / Archivo Black, Clean Subtitle, Matte, push cuts, dramatic music, voice *sage* |
+| `connect` | Connections | HERE → ALSO HERE (another subject) → THE LINK · quiz | Archivo Black, Dark Pill, Teal, whip-pans, upbeat, voice *echo* |
+| `howto` | How to | numbered steps over footage · silent recap · quiz | Oswald, Clean captions, cool-clean LUT, paper cards, slide cuts, voice *marin* |
 
 The fourth wave (`eli5`, `mnemonic`, `realworld`, `whatif`, `wow`, `beforeafter`, `truefalse`)
 is for tired brains and curious ones. Several of them (`wow`, `whatif`, `realworld`, `eli5`,

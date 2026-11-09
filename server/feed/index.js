@@ -260,6 +260,19 @@ async function reusable(userId, readyKeys, taken, { signals, session, review = f
 }
 
 /**
+ * Topics the student searched in the last 24 hours → intent weight (0.35, fading over the day).
+ * Searches that named no clear subject count for nothing.
+ */
+export function searchIntent(signals, now = Date.now()) {
+  const out = {};
+  for (const s of signals.searches || []) {
+    if (!s.topic || now - s.at > 86400000) continue;
+    out[s.topic] = Math.max(out[s.topic] || 0, +(0.35 * (1 - (now - s.at) / 86400000)).toFixed(3));
+  }
+  return out;
+}
+
+/**
  * The course profile the student opened in the last 20 minutes, as { handle, at, units, w }
  * (w fades from 1 to 0), or null. Written by GET /api/channels/:handle (noteProfileVisit).
  */
@@ -333,6 +346,9 @@ export async function nextItems(userId, count = 3) {
   const exp = settingsFor(userId); // experiments: this student's arm for each judgement-call threshold
   const profile = learningProfile(signals, user.styles);
   const fit = profile.confidence ? (format) => styleFit(format, profile) : null;
+  // Searched in the last day: units on that subject lean in (the same `intent` term as a profile visit).
+  const searched = searchIntent(signals);
+  if (Object.keys(searched).length) for (const c of candidates) if (searched[c.unit.topic]) c.intent = Math.max(c.intent || 0, searched[c.unit.topic]);
   const picks = pickUnits(candidates, states, recent, Math.min(candidates.length, count + 4), { hasCourse, explore: exploreRate(servedSoFar, exp.explore), urgency });
   const pending = [];
   const taken = new Set();
@@ -434,7 +450,7 @@ export async function nextItems(userId, count = 3) {
     stats.unitsTotal = candidates.filter((c) => c.kind === 'course').length || candidates.length;
     const exam = user.profile?.examDate ? { name: user.profile.exam || 'your exam', days: Math.ceil((Date.parse(user.profile.examDate) - Date.now()) / 86400000) } : null;
     const moment = miss || game ? null : await pickMoment(userId, { session, ctx, stats, exam, gap: exp.moments.gap, hasBreather: page.some((x) => x.why?.kind === 'breather') });
-    if (moment) { page.splice(moment.opener ? 0 : 1, 0, { moment: momentItem(moment, ctx) }); await noteMoment(userId, moment, session.viewed || 0); }
+    if (moment) { page.splice(moment.opener ? 0 : 1, 0, { moment: momentItem(moment, ctx) }); await noteMoment(userId, moment, session.viewed || 0, Date.now(), { sid: session.sid }); }
   }
 
   await kv.ltrim(`user:${userId}:generating`, 0, 19);
@@ -489,11 +505,12 @@ function quizWithStepText(quiz, lesson) {
   return { ...quiz, options: quiz.options.map((o, i) => (steps[i] ? `${o} · ${short(steps[i])}` : o)) };
 }
 
-export async function publicVideo(v, userId, { withDocument = true, why, pos, queuedFor } = {}) {
+export async function publicVideo(v, userId, { withDocument = true, why, pos, queuedFor, unitMastery = null } = {}) {
   const look = TOPIC_BY_ID[v.topic] || TOPIC_BY_ID.biology;
   const ready = v.status === 'ready';
+  // Counts shown to students are whole, all-time numbers (db.getStats blends months with decay for ranking).
   const [stats, liked, saved, document, channel] = await Promise.all([
-    db.getStats(v.id),
+    kv.hgetall(`video:${v.id}:stats`).then((h) => h || {}),
     userId ? db.inSet(userId, 'liked', v.id) : false,
     userId ? db.inSet(userId, 'saved', v.id) : false,
     ready && withDocument ? db.getDocument(v.id) : undefined,
@@ -508,7 +525,7 @@ export async function publicVideo(v, userId, { withDocument = true, why, pos, qu
     format: { id: v.format || 'explain', tag: formatOf(v.format).tag, name: formatOf(v.format).name },
     unit: v.unitId ? { id: v.unitId, title: v.unitTitle || null } : null,
     // The course profile this lesson belongs to (feed/channels.js), for the @handle on the slide.
-    channel: channel ? { handle: channel.handle, name: channel.name, following: await isFollowing(userId, channel.handle) } : undefined,
+    channel: channel ? { handle: channel.handle, name: channel.name, avatar: channel.avatar?.id ? `/a/${channel.avatar.id}` : null, following: await isFollowing(userId, channel.handle) } : undefined,
     pack: packOfUnit(v.unitId) ? (({ slug, title, by, link, cta, kind }) => ({ slug, title, by, link, cta, kind }))(packOfUnit(v.unitId)) : undefined,
     title: v.lesson?.title || null,
     hook: v.lesson?.hook || null,
@@ -522,7 +539,11 @@ export async function publicVideo(v, userId, { withDocument = true, why, pos, qu
     terms: ready ? keyTerms(v) : [],
     credits: v.credits || [],
     liked, saved,
-    likes: stats.likes,
+    likes: Math.max(0, Math.round(Number(stats.likes) || 0)),
+    // Real counts only (social proof is never invented): how many students watched it.
+    views: Math.max(0, Math.round(Number(stats.views) || 0)),
+    // The viewer's mastery of this lesson's unit before watching (0..1), for the progress shown after the quiz.
+    mastery: unitMastery == null ? undefined : +unitMastery.toFixed(2),
     why: why || undefined,
     breather: why?.kind === 'breather' ? { reason: why.reason, text: BREATHER_REASONS[why.reason] || BREATHER_REASONS.default } : undefined,
     position: pos || undefined,

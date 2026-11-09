@@ -36,6 +36,8 @@ import { sitemapXml, SITEMAP_LIMIT } from './core/sitemap.js';
 import { profilePage } from './core/profile.js';
 import * as channels from './feed/channels.js';
 import { migrateRegions } from './feed/regions.js';
+import { getAvatar } from './core/avatars.js';
+import { fillSearchGaps } from './feed/gaps.js';
 import * as discover from './feed/discover.js';
 import { noteProfileVisit } from './feed/index.js';
 
@@ -240,7 +242,9 @@ async function route(req, res, url) {
     if (!ch) return redirect(res, '/og.png');
     try {
       const { channelCard } = await import('./core/og.js');
-      const png = await channelCard(await channels.publicChannel(ch), { site: new URL(siteOrigin(req)).host });
+      const pic = ch.avatar?.id ? await getAvatar(ch.avatar.id) : null;
+      const picture = pic && /^image\/(jpeg|png)$/.test(pic.type) ? `data:${pic.type};base64,${pic.buf.toString('base64')}` : null;
+      const png = await channelCard(await channels.publicChannel(ch), { site: new URL(siteOrigin(req)).host, picture });
       return send(res, 200, png, { 'Content-Type': 'image/png', 'Cache-Control': 'public, max-age=3600, s-maxage=86400, stale-while-revalidate=86400' });
     } catch (err) {
       console.warn('[og]', err.message);
@@ -287,6 +291,14 @@ async function route(req, res, url) {
     return send(res, 200, { channel: await channels.publicChannel(ch, { userId: viewer, withUnits: true }), lessons, more: ids.length === 30 });
   }
 
+  // Course pictures (core/avatars.js): immutable, a new picture gets a new id.
+  const avatarMatch = /^\/(?:api\/)?a\/([0-9a-f]{32})$/.exec(path);
+  if (req.method === 'GET' && avatarMatch) {
+    const img = await getAvatar(avatarMatch[1]);
+    if (!img) return send(res, 404, { error: 'Not found' });
+    return send(res, 200, img.buf, { 'Content-Type': img.type, 'Cache-Control': 'public, max-age=31536000, immutable', 'Content-Security-Policy': "default-src 'none'; sandbox" });
+  }
+
   // Sitemap: the home page plus every ready lesson page, newest first.
   if (req.method === 'GET' && /^\/(?:api\/)?sitemap\.xml$/.test(path)) {
     const flat = await kv.zrange('ready:any', 0, SITEMAP_LIMIT - 1, { rev: true, withScores: true });
@@ -321,6 +333,9 @@ async function route(req, res, url) {
     await migrateRegions().catch((err) => console.warn('[regions]', err.message)); // before topping up, so new lessons land in the right pools
     const pending = await topUpLibrary();
     if (pending.length) waitUntil(Promise.allSettled(pending));
+    // Topics students searched for and did not find (feed/gaps.js): the most wanted become courses.
+    const gaps = await fillSearchGaps().catch((err) => { console.warn('[gaps]', err.message); return { made: [], pending: [] }; });
+    if (gaps.pending.length) waitUntil(Promise.allSettled(gaps.pending));
     waitUntil(syncDaily());
     waitUntil(syncCalibration().catch((err) => console.warn('[calibration]', err.message)));
     waitUntil(push.remindDue().catch((err) => console.warn('[push]', err.message)));
@@ -341,6 +356,29 @@ async function route(req, res, url) {
   if (key === 'GET /api/admin/calibration') {
     if (!config.sheet.secret || req.headers.authorization !== `Bearer ${config.sheet.secret}`) return send(res, 401, { error: 'Unauthorized' });
     return send(res, 200, await calibrationReport());
+  }
+  // Admin: what students' actions say this week: searches, missing topics, and the engagement funnel.
+  if (key === 'GET /api/admin/insights') {
+    if (!config.sheet.secret || req.headers.authorization !== `Bearer ${config.sheet.secret}`) return send(res, 401, { error: 'Unauthorized' });
+    const days = [];
+    for (let i = 6; i >= 0; i--) days.push(new Date(Date.now() - i * 86400000).toISOString().slice(0, 10));
+    const hashes = await Promise.all(days.map((d) => kv.hgetall(`events:day:${d}`)));
+    const sum = (k) => hashes.reduce((t, h) => t + (Number(h?.[k]) || 0), 0);
+    const rate = (a, b) => (sum(b) ? +(sum(a) / sum(b)).toFixed(3) : null);
+    const gaps = await discover.searchGaps(30);
+    return send(res, 200, {
+      week: { from: days[0], to: days[6] },
+      searches: await discover.searchCounts(30),
+      missing: await Promise.all(gaps.map(async (g) => ({ ...g, decided: Boolean(await kv.get(`gap:done:${g.q}`)) }))),
+      funnel: {
+        searches: sum('search_submit'), searchesWithNoResult: sum('search_zero'), suggestionPicks: sum('search_pick'),
+        exploreOpens: sum('explore_open'), exploreLessonOpens: sum('explore_tile_open'), exploreCourseOpens: sum('explore_course_open'),
+        upNextShown: sum('upnext_shown'), upNextTapRate: rate('upnext_tap', 'upnext_shown'),
+        goalsReached: sum('goal_reached'), lessonsWatched: sum('view'), completionRate: rate('complete', 'view'),
+        follows: sum('channel_follow_state'), unfollows: sum('channel_unfollow_state'), profileViews: sum('channel_view'),
+        picturesSet: sum('avatar_set'), picturesRejected: sum('avatar_rejected'), coursesMadeFromSearches: sum('gap_course'),
+      },
+    });
   }
   if (key === 'GET /api/admin/moments' || key === 'POST /api/admin/moments') {
     if (!config.sheet.secret || req.headers.authorization !== `Bearer ${config.sheet.secret}`) return send(res, 401, { error: 'Unauthorized' });
@@ -566,6 +604,20 @@ async function route(req, res, url) {
     return send(res, 200, r);
   }
 
+  // The student who brought a course sets its picture: { image: data URL } (POST) or removes it (DELETE).
+  const avatarSetMatch = /^\/api\/channels\/([a-z0-9._-]{3,40})\/avatar$/.exec(path);
+  if (avatarSetMatch && (req.method === 'POST' || req.method === 'DELETE')) {
+    try {
+      const ch = req.method === 'POST'
+        ? await channels.setChannelAvatar(userId, avatarSetMatch[1], (await readJson(req, 400 * 1024)).image)
+        : await channels.clearChannelAvatar(userId, avatarSetMatch[1]);
+      return send(res, 200, { channel: await channels.publicChannel(ch, { userId, withUnits: true }) });
+    } catch (err) {
+      if (err.status) return send(res, err.status, { error: err.message });
+      throw err;
+    }
+  }
+
   // The student who brought a course renames its handle: { handle }. The old handle keeps redirecting.
   const renameMatch = /^\/api\/channels\/([a-z0-9._-]{3,40})\/rename$/.exec(path);
   if (req.method === 'POST' && renameMatch) {
@@ -603,7 +655,8 @@ async function route(req, res, url) {
     const { items, pending, credits } = await nextItems(userId, count);
     // Keep generating after the response (serverless) / let it run (long-lived server).
     if (pending.length) waitUntil(Promise.allSettled(pending));
-    return send(res, 200, { items: await Promise.all(items.map((x) => (x.moment ? x.moment : publicVideo(x.video, userId, { why: x.why, pos: x.pos, queuedFor: x.queuedFor })))), credits: credits || undefined });
+    const states = await getProgress(userId);
+    return send(res, 200, { items: await Promise.all(items.map((x) => (x.moment ? x.moment : publicVideo(x.video, userId, { why: x.why, pos: x.pos, queuedFor: x.queuedFor, unitMastery: x.video.unitId && states[x.video.unitId] ? mastery(states[x.video.unitId]) : 0 })))), credits: credits || undefined });
   }
 
   const videoMatch = /^\/api\/videos\/([0-9a-f-]{36})$/.exec(path);
