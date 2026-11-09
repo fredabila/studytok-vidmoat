@@ -2775,6 +2775,11 @@ async function boot() {
   const notice = authNotice();
   const hash = location.hash;
   const linked = /#v=([0-9a-f-]{36})/.exec(hash)?.[1];
+  // Opened from a notification: ?n=<kind> (added by sw.js) and ?talk=1 (open the comments).
+  const qs = new URLSearchParams(location.search);
+  const fromPush = qs.get('n');
+  const openTalk = qs.get('talk') === '1';
+  if (fromPush || openTalk) { qs.delete('n'); qs.delete('talk'); history.replaceState(history.state, '', `${location.pathname}${qs.size ? `?${qs}` : ''}${location.hash}`); }
 
   let onboarded = false;
   try {
@@ -2812,10 +2817,13 @@ async function boot() {
   // The icon badge (lessons due for review) is kept fresh in the background.
   if (standalone) setTimeout(() => api('GET', '/api/library').then((lib) => setBadge(lib.units.filter((u) => u.active && u.dueForReview).length + (lib.misses?.length || 0))).catch(() => {}), 4000);
   $('#sound-go')?.addEventListener('click', startSensors, { once: true });
+  if (fromPush) track('push_open', { kind: fromPush.slice(0, 12) });
   if (linked) await openVideo(linked);
+  if (linked && openTalk && me?.can?.comments) { const it = feed.items.find((x) => x.data.id === linked); if (it) openComments(it); }
   await loadMore(3);
   applyPendingChannel();
   if (feed.active < 0 && feed.items.length) goTo(0, { animate: false });
+  setTimeout(() => maybeAskNotifications(), 2500); // asked at open / sign-in, not hidden in Profile
   if (!store.get('st_swiped') && !feed.items[feed.active]?.moment) { // a moment card says how to continue itself
     $('#swipe-hint').hidden = false;
     setTimeout(() => { $('#swipe-hint').hidden = true; }, 6000);
@@ -3525,4 +3533,64 @@ async function openMockExam() {
   };
   openSheet('Mock exam', body);
   show();
+}
+
+// ============================================================================ notifications
+// Asked when the app opens (and right after signing in), not left in Profile. Browsers only show
+// their permission dialog after a tap, so we show our own card first: one tap on "Turn on" opens
+// the real dialog. Already allowed: the device is (re)subscribed silently. "Not now" waits 3, then
+// 7, then 30 days. iPhone in Safari: notifications need the app on the Home Screen, so we say how.
+async function maybeAskNotifications() {
+  if (!me?.setupDone || view !== 'feed' || !$('#sheet').hidden || talkOpen || !$('#app') || $('#app').hidden) return;
+  let push, state, key;
+  try {
+    push = await import('/push.js');
+    state = await push.pushState();
+    key = await api('GET', '/api/push/key');
+  } catch { return; }
+  if (!key?.enabled) return;
+  // Allowed before: keep this device subscribed without asking again (once a day).
+  if (state === 'subscribed' || (state === 'off' && window.Notification?.permission === 'granted')) {
+    if (Date.now() - (Number(store.get('st_np_sync')) || 0) > 86400000) { store.set('st_np_sync', String(Date.now())); push.enablePush().catch(() => {}); }
+    return;
+  }
+  if (state !== 'off' && state !== 'install-first') return; // denied or unsupported: never nag
+  const snooze = JSON.parse(store.get('st_np_snooze') || '{"until":0,"n":0}');
+  if (Date.now() < snooze.until) return;
+  const later = () => {
+    const n = snooze.n + 1;
+    store.set('st_np_snooze', JSON.stringify({ n, until: Date.now() + [3, 7, 30][Math.min(n - 1, 2)] * 86400000 }));
+    track('push_prompt', { action: 'later', state });
+    closeSheet();
+  };
+  track('push_prompt', { action: 'shown', state });
+  const minor = me?.can?.minor;
+  const bullets = [
+    ['📚', 'Reviews due', 'at the time you usually study'],
+    ['🎯', 'Exam countdown', 'and what needs the most work'],
+    minor ? ['🔥', 'Streak about to end', 'one lesson keeps it'] : ['💬', 'Answers to your questions', 'from the AI tutor and other students'],
+    ['✨', 'New lessons', 'in courses you follow'],
+  ];
+  const body = el('div', { class: 'np' },
+    el('div', { class: 'np-bell', 'aria-hidden': 'true' }, '🔔'),
+    el('h3', { class: 'np-title' }, 'Never miss your next lesson'),
+    el('ul', { class: 'np-list' }, ...bullets.map(([ic, b, t]) => el('li', {}, el('span', { 'aria-hidden': 'true' }, ic), el('div', {}, el('b', {}, b), el('small', {}, t))))),
+    el('p', { class: 'np-note' }, `At most one study reminder a day, never ${minor ? 'after 9 pm' : 'late at night'}. Turn them off any time in Profile.`));
+  if (state === 'install-first') {
+    body.append(el('div', { class: 'np-ios' }, el('b', {}, 'On iPhone, add StudyGraph to your Home Screen first:'), el('span', {}, 'tap Share ', el('span', { class: 'np-share', 'aria-hidden': 'true' }, '⬆︎'), ' then “Add to Home Screen”, open it from there, and you can turn notifications on.')),
+      el('button', { type: 'button', class: 'btn primary', onclick: later }, 'Got it'));
+  } else {
+    body.append(
+      el('button', { type: 'button', class: 'btn primary np-go', onclick: async (e) => {
+        e.currentTarget.disabled = true;
+        const result = await push.enablePush().catch(() => 'off');
+        track('push_prompt', { action: result, state });
+        haptic(result === 'subscribed' ? 'success' : 'tap');
+        closeSheet();
+        if (result === 'subscribed') toast("Notifications on. We'll only nudge you when it matters.");
+        else if (result === 'denied') toast('Notifications are blocked. You can allow them in your browser or phone settings.');
+      } }, 'Turn on notifications'),
+      el('button', { type: 'button', class: 'btn ghost', onclick: later }, 'Not now'));
+  }
+  openSheet('', body, () => { if (!store.get('st_np_snooze')) store.set('st_np_snooze', JSON.stringify({ n: 1, until: Date.now() + 3 * 86400000 })); });
 }

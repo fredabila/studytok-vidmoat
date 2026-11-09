@@ -44,6 +44,7 @@ import { capabilitiesOf, requireCap } from './core/safety.js';
 import { askAboutLesson } from './feed/ask.js';
 import * as comments from './feed/comments.js';
 import { examPlan, mockExam } from './feed/exam.js';
+import { remindAll } from './feed/notify.js';
 
 
 export const SECURITY_HEADERS = {
@@ -348,7 +349,7 @@ async function route(req, res, url) {
   // Cron reminders (same secret): one Web Push per student at most, see core/push.js remindDue.
   if (key === 'GET /api/cron/remind') {
     if (!process.env.CRON_SECRET || req.headers.authorization !== `Bearer ${process.env.CRON_SECRET}`) return send(res, 401, { error: 'Unauthorized' });
-    return send(res, 200, await push.remindDue());
+    return send(res, 200, await remindAll());
   }
   // Community packs (content/): public, so a pack page can be linked before sign-in.
   if (key === 'GET /api/packs') return send(res, 200, { packs: PACKS.map(publicPack) }, { 'Cache-Control': 'public, max-age=300' });
@@ -555,7 +556,7 @@ async function route(req, res, url) {
   }
   if (key === 'POST /api/push/test') {
     if (!push.enabled()) return send(res, 200, { enabled: false, sent: 0 });
-    const sent = await push.sendTo(userId, { title: 'StudyGraph', body: 'Reminders are on. We will nudge you when a streak or a review is at stake.', url: '/#feed', tag: 'studygraph-reminder' });
+    const sent = await push.sendTo(userId, { title: 'StudyGraph', body: 'Notifications are on. At most one study nudge a day, at the time you usually study, and never at night.', url: '/#feed', tag: 'studygraph-reminder', kind: 'test' });
     return send(res, 200, { enabled: true, sent });
   }
 

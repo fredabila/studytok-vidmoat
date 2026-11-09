@@ -1209,3 +1209,21 @@ img, svg { -webkit-user-drag: none; -webkit-touch-callout: none; }
 .sheet-grip { height: 5px; margin-top: -2px; padding: 0; cursor: grab; }
 .sheet-panel { will-change: translate; }
 @media (prefers-reduced-motion: reduce) { .view-page:not([hidden]) { animation: none; } .btn:active, .set-row:active { transform: none; } }
+
+/* ---- Notification prompt (shown at open / sign-in) ---- */
+#sheet-title:empty { display: none; }
+.np { display: grid; gap: 12px; text-align: center; }
+.np-bell { font-size: 44px; line-height: 1; width: 84px; height: 84px; margin: 4px auto 0; display: grid; place-items: center; border-radius: 26px; background: var(--hl); box-shadow: 3px 3px 0 var(--ink); animation: np-ring 1.8s var(--ease) 1; }
+@keyframes np-ring { 0%, 100% { transform: rotate(0); } 10% { transform: rotate(14deg); } 20% { transform: rotate(-12deg); } 30% { transform: rotate(8deg); } 40% { transform: rotate(-4deg); } 50% { transform: rotate(0); } }
+.np-title { margin: 4px 0 0; font-size: 22px; }
+.np-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; text-align: left; }
+.np-list li { display: grid; grid-template-columns: 34px 1fr; gap: 10px; align-items: center; background: #fff; border: 1.5px solid var(--line-2); border-radius: 14px; padding: 10px 12px; }
+.np-list li > span { font-size: 22px; text-align: center; }
+.np-list b { display: block; font-size: 15px; }
+.np-list small { color: var(--ink-2, #666); font-size: 13px; }
+.np-note { margin: 0; font-size: 12px; color: var(--ink-2, #666); }
+.np-ios { display: grid; gap: 4px; text-align: left; background: #fff8d6; border: 1.5px solid var(--line-2); border-radius: 14px; padding: 10px 12px; font-size: 14px; }
+.np-share { display: inline-grid; place-items: center; width: 20px; height: 20px; border: 1.5px solid currentColor; border-radius: 5px; font-size: 11px; }
+.np .btn { width: 100%; }
+@media (prefers-reduced-motion: reduce) { .np-bell { animation: none; } }
+#sheet:has(.np) .sheet-panel > .btn[data-close] { display: none; }

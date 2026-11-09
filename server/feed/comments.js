@@ -16,6 +16,7 @@ import { kv } from '../core/kv.js';
 import { claude } from '../core/claude.js';
 import { config } from '../core/config.js';
 import { tutorAnswer } from './ask.js';
+import { notifyTutorAnswer, notifyReply } from './notify.js';
 
 export const MAX_LEN = 300;
 export const COMMENTS_PER_DAY = 20;
@@ -129,6 +130,7 @@ export async function postComment({ user, videoId, text, parentId = null, modera
   if (parent) await kv.rpush(`comment:${parent.id}:replies`, c.id);
   else { await kv.lpush(`comments:${videoId}`, c.id); await kv.ltrim(`comments:${videoId}`, 0, KEEP - 1); }
   await kv.hincrby(`events:day:${day}`, parent ? 'comment_reply' : 'comment', 1);
+  if (parent) await notifyReply({ parent, reply: c }).catch(() => {}); // a push to the author of the comment
   return { comment: { ...(await view(c, user.id)), replies: [] }, tutor };
 }
 
@@ -149,6 +151,7 @@ export async function tutorReply({ commentId, video, answer = tutorAnswer, now =
       await kv.set(`comment:${reply.id}`, reply);
       await kv.rpush(`comment:${c.id}:replies`, reply.id);
       await kv.hincrby(`events:day:${day}`, 'comment_tutor', 1);
+      await notifyTutorAnswer({ comment: c, reply }).catch(() => {}); // a push to the asker
     }
   } catch (err) {
     console.warn('[comments] tutor reply skipped:', err.message);

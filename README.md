@@ -200,6 +200,25 @@ is a worked example.
   then a model that fails closed), rate-limited, hidden after three reports, deletable by its
   author (`server/feed/comments.js`).
 
+## Notifications
+
+Asked when the app opens and right after signing in (our own card first, because browsers only
+show their dialog after a tap; already allowed means the device is re-subscribed silently; "Not
+now" waits 3, then 7, then 30 days; on an iPhone in Safari it explains Add to Home Screen).
+What is sent (`server/core/push.js`, `server/feed/notify.js`):
+
+* **Replies** (at once): the AI tutor answered your question, someone replied to your comment.
+  Held during quiet hours and delivered in the morning; at most 4 a day.
+* **One study nudge a day at most**, at the hour the student usually studies, picked in this
+  order: streak about to end · exam countdown on milestone days, naming the weakest unit · units
+  due for review · quick-check questions to fix · new lessons in a course they follow · a
+  comeback after 3-13 quiet days, naming their next lesson.
+* **Quiet hours** in the student's time zone: 22:00-07:00, under-18s 21:00-07:00, under-13s
+  20:00-08:00.
+* **Back-off**: nudges ignored (no visit after them) space out to every 2 days after 3, weekly
+  after 6, and stop after 10 until the student comes back. Opens are counted per kind
+  (`push_open_<kind>`), so the mix can be tuned.
+
 ## Age rules
 
 `server/core/safety.js` decides, the API enforces it and the app hides what does not apply

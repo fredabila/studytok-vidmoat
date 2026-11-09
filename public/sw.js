@@ -3,7 +3,7 @@
 //   every open gets the HTML, JS and CSS of the same deploy (stale-while-revalidate served the
 //   previous deploy's CSS under the new HTML for one open, which broke layouts after releases).
 // - /api/*, the Vidmoat player and media: never cached (always live).
-const VERSION = 'studygraph-v44';
+const VERSION = 'studygraph-v45';
 const SHELL = ['/', '/index.html', '/app.js', '/player.js', '/retime.js', '/native.js', '/telemetry.js', '/sensors.js', '/share.js', '/push.js', '/styles.css', '/manifest.webmanifest', '/icon.svg',
   '/icons/icon-192.png', '/icons/icon-512.png', '/icons/apple-touch-icon.png', '/icons/favicon-32.png'];
 
@@ -53,14 +53,17 @@ self.addEventListener('push', (event) => {
     badge: '/icons/icon-192.png',
     tag: data.tag || 'studygraph-reminder',
     renotify: false,
-    data: { url: data.url || '/' },
+    data: { url: data.url || '/', kind: data.kind || '' },
   };
   event.waitUntil(self.registration.showNotification(title, options));
 });
 
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
-  const url = new URL((event.notification.data && event.notification.data.url) || '/', self.location.origin).href;
+  // ?n=<kind> tells the app which kind of notification was opened (events: push_open).
+  const target = new URL((event.notification.data && event.notification.data.url) || '/', self.location.origin);
+  if (event.notification.data && event.notification.data.kind) target.searchParams.set('n', event.notification.data.kind);
+  const url = target.href;
   event.waitUntil(
     self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((list) => {
       // Reuse an open StudyGraph window (the installed app) rather than stacking a second one.

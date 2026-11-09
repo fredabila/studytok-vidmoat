@@ -120,6 +120,8 @@ export const EVENT_SPECS = {
   less: { video: true, fields: { t: 'n' } },
   why_open: { video: true, fields: {} },
   // asking, discussing, exam practice
+  push_open: { fields: { kind: 's' } },
+  push_prompt: { fields: { action: 's', state: 's' } },
   ask_open: { video: true, fields: {} },
   ask: { video: true, fields: { len: 'i', onTopic: 'b' } },
   ask_follow: { video: true, fields: {} },
@@ -286,6 +288,7 @@ export async function ingest(userId, batch) {
     }
     writes.push(kv.hincrby(`events:day:${day(e.at)}`, e.type, 1));
     if (e.type === 'quiz_answer') writes.push(kv.hincrby(`events:day:${day(e.at)}`, e.correct ? 'quiz_answer_right' : 'quiz_answer_wrong', 1));
+    if (e.type === 'push_open' && e.kind) writes.push(kv.hincrby(`events:day:${day(e.at)}`, `push_open_${String(e.kind).replace(/[^a-z]/g, '').slice(0, 12)}`, 1));
     if (e.type.endsWith('_share')) signals.shares = (signals.shares || 0) + 1;
     log.push(JSON.stringify({ u: userId.slice(0, 8), ...e, f: v ? format : undefined, tp: v ? topic : undefined }));
 

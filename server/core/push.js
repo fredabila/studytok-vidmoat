@@ -94,7 +94,6 @@ export async function sendTo(userId, payload) {
   return sent;
 }
 
-/** The one reminder a student should get right now, or null. Pure: easy to test, no storage. */
 /**
  * The local hour a student usually studies at: the mode of their hour-of-day counts once there
  * are ten views, else 18:00. Reminders go out at that hour, not at a fixed time for everyone.
@@ -108,28 +107,80 @@ export function preferredHour(signals) {
   return best;
 }
 
-export function pickReminder({ signals, progress, now = Date.now() }) {
+/**
+ * Quiet hours in the student's own time: no study nudge and no social notification then.
+ * Adults 22:00-07:00, under-18s 21:00-07:00, under-13s 20:00-07:30 (rounded to 08:00 here).
+ */
+export function isQuiet(hour, age) {
+  const a = Number(age);
+  const [from, to] = Number.isFinite(a) && a > 0 && a < 13 ? [20, 8] : Number.isFinite(a) && a > 0 && a < 18 ? [21, 7] : [22, 7];
+  return hour >= from || hour < to;
+}
+
+const EXAM_MILESTONES = new Set([30, 14, 7, 3, 2, 1]);
+
+/**
+ * The one study nudge a student should get right now, or null. Pure (no storage), so it is easy to
+ * test. In priority order, each at the student's usual hour unless said otherwise:
+ *   streak about to end (also any evening hour) · exam countdown on milestone days (naming the
+ *   weakest unit) · units due for review · quick-check questions to fix · new lessons in a course
+ *   they follow · a comeback after 3-13 quiet days (naming the next lesson when there is one).
+ * Nothing in quiet hours, nothing when they already studied today (except a countdown on its day).
+ * Extras: { age, exam: { name, days, weak }, misses, fresh: { handle, count }, nextTitle }.
+ */
+export function pickReminder({ signals, progress, now = Date.now(), age = null, exam = null, misses = 0, fresh = null, nextTitle = null }) {
+  const hour = hourOf(now, signals?.device?.tz);
+  if (isQuiet(hour, age)) return null;
   const streak = streakOf(signals, now);
   const activeToday = Boolean(signals?.days?.[day(now)]);
-  const hour = hourOf(now, signals?.device?.tz);
   const mine = preferredHour(signals);
+  const atMine = hour === mine;
   // The cron runs hourly: a student is reminded in their own usual hour (or the evening for a streak at risk).
-  if (streak >= 2 && !activeToday && (hour === mine || (hour >= 17 && hour <= 21))) {
-    return { title: 'StudyGraph', body: `Your ${streak}-day streak ends tonight. One lesson keeps it.`, url: '/#feed', tag: 'studygraph-reminder' };
+  if (streak >= 2 && !activeToday && (atMine || (hour >= 17 && hour <= 21))) {
+    return { kind: 'streak', title: 'StudyGraph', body: `Your ${streak}-day streak ends tonight. One lesson keeps it.`, url: '/#feed', tag: 'studygraph-reminder' };
   }
+  if (exam && exam.days > 0 && atMine && (EXAM_MILESTONES.has(exam.days) || (exam.days <= 7 && !activeToday))) {
+    const when = exam.days === 1 ? 'is tomorrow' : `is in ${exam.days} days`;
+    return { kind: 'exam', title: `${exam.name || 'Your exam'} ${when}`, body: exam.weak ? `${exam.weak} needs the most work. A mock exam or two lessons now?` : 'A quick mock exam shows what still needs work.', url: '/#library', tag: 'studygraph-exam' };
+  }
+  if (activeToday || !atMine) return null;
   const due = Object.values(progress || {}).filter((s) => s && s.box >= 0 && s.due && s.due <= now).length;
   // Due reviews: at the student's usual hour (18:00 until there is a pattern); the hourly cron finds it.
-  if (due >= 2 && !activeToday && hour === mine) {
-    return { title: 'StudyGraph', body: `${due} units are due for review. 5 minutes brings them back.`, url: '/#feed', tag: 'studygraph-reminder' };
+  if (due >= 2) {
+    return { kind: 'review', title: 'StudyGraph', body: `${due} units are due for review. 5 minutes brings them back.`, url: '/#feed', tag: 'studygraph-reminder' };
+  }
+  if (misses >= 3) {
+    return { kind: 'fix', title: `${misses} questions to fix`, body: 'Quick checks you got wrong. Get each one right twice and it is yours for good.', url: '/#library', tag: 'studygraph-fix' };
+  }
+  if (fresh?.count >= 2 && fresh.handle) {
+    return { kind: 'fresh', title: `New in @${fresh.handle}`, body: `${fresh.count} new lessons since you last looked.`, url: `/?c=${encodeURIComponent(fresh.handle)}`, tag: 'studygraph-fresh' };
+  }
+  const away = signals?.lastSeenAt ? Math.floor((now - signals.lastSeenAt) / 86400000) : 0;
+  if (away >= 3 && away <= 13) {
+    return { kind: 'comeback', title: nextTitle ? 'Your next lesson is ready' : 'StudyGraph', body: nextTitle ? `“${nextTitle.slice(0, 80)}”. It takes under a minute.` : `It has been ${away} days. One short lesson gets you back in.`, url: '/#feed', tag: 'studygraph-comeback' };
   }
   return null;
 }
 
 /**
- * Walks every student with a subscription and sends at most one reminder each (cron). Returns
- * { users: students with a subscription, sent: notifications delivered }.
+ * How often a student who does not respond may still be nudged. Every nudge sent without the
+ * student opening the app afterwards counts as ignored; any visit resets it.
+ *   0-2 ignored: once a day · 3-5: every 2 days · 6-9: weekly · 10+: no more until they come back.
  */
-export async function remindDue({ now = Date.now() } = {}) {
+export function backoffGap(ignored) {
+  if (ignored >= 10) return Infinity;
+  if (ignored >= 6) return 7 * 86400000;
+  if (ignored >= 3) return 2 * 86400000;
+  return THROTTLE_MS;
+}
+
+/**
+ * Walks every student with a subscription and sends at most one study nudge each (hourly cron),
+ * after delivering any social notification that waited for quiet hours to end. Returns
+ * { users: students with a subscription, sent: notifications delivered }.
+ * `context(userId, user)` loads the extras pickReminder can use (feed/notify.js).
+ */
+export async function remindDue({ now = Date.now(), context = null } = {}) {
   if (!enabled()) return { users: 0, sent: 0 };
   const ids = await kv.zrange('users', 0, -1);
   let users = 0, sent = 0;
@@ -137,15 +188,58 @@ export async function remindDue({ now = Date.now() } = {}) {
     const list = await subscriptions(userId);
     if (!list.length) continue;
     users++;
-    const last = Number(await kv.get(lastKey(userId))) || 0;
-    if (now - last < THROTTLE_MS) continue;
-    const [signals, progress] = await Promise.all([getSignals(userId), getProgress(userId)]);
-    const payload = pickReminder({ signals, progress, now });
+    const [signals, user] = await Promise.all([getSignals(userId), kv.get(`user:${userId}`)]);
+    const age = user?.profile?.age ?? null;
+    if (isQuiet(hourOf(now, signals?.device?.tz), age)) continue;
+    sent += await flushQueued(userId, now);
+    const state = (await kv.get(stateKey(userId))) || { ignored: 0, lastSent: Number(await kv.get(lastKey(userId))) || 0 };
+    // Came back since the last nudge: it worked (or was not needed); start counting again.
+    if (state.lastSent && (signals?.lastSeenAt || 0) > state.lastSent) state.ignored = 0;
+    if (now - (state.lastSent || 0) < backoffGap(state.ignored)) continue;
+    const progress = await getProgress(userId);
+    const extras = context ? await context(userId, user, signals, now).catch(() => ({})) : {};
+    const payload = pickReminder({ signals, progress, now, age, ...extras });
     if (!payload) continue;
     // Mark before sending so two overlapping cron runs cannot both remind the same student.
+    const ignoredBefore = state.lastSent && (signals?.lastSeenAt || 0) <= state.lastSent;
+    await kv.set(stateKey(userId), { ignored: (ignoredBefore ? state.ignored + 1 : 0), lastSent: now, lastKind: payload.kind });
     await kv.set(lastKey(userId), now);
     const n = await sendTo(userId, payload);
-    if (n) { sent += n; await kv.hincrby(`events:day:${day(now)}`, 'push_sent', n); }
+    if (n) { sent += n; await kv.hincrby(`events:day:${day(now)}`, 'push_sent', n); await kv.hincrby(`events:day:${day(now)}`, `push_sent_${payload.kind}`, 1); }
   }
   return { users, sent };
+}
+
+// ---- Social notifications (replies, tutor answers): sent at once, held during quiet hours ------
+const SOCIAL_PER_DAY = 4;
+const stateKey = (userId) => `push:state:${userId}`;
+const queueKey = (userId) => `push:queue:${userId}`;
+
+/**
+ * Sends a notification that something happened for this student (a reply, a tutor answer) right
+ * away, or holds it until their quiet hours end. At most SOCIAL_PER_DAY a day.
+ * Returns 'sent' | 'queued' | 'capped' | 'off'.
+ */
+export async function notifyNow(userId, payload, { now = Date.now() } = {}) {
+  if (!enabled() || !userId || !(await subscriptions(userId)).length) return 'off';
+  const [signals, user] = await Promise.all([getSignals(userId), kv.get(`user:${userId}`)]);
+  if ((await kv.hincrby('push:social', `${userId}:${day(now)}`, 1)) > SOCIAL_PER_DAY) return 'capped';
+  if (isQuiet(hourOf(now, signals?.device?.tz), user?.profile?.age)) {
+    await kv.lpush(queueKey(userId), { ...payload, at: now });
+    await kv.ltrim(queueKey(userId), 0, 9);
+    return 'queued';
+  }
+  const n = await sendTo(userId, payload);
+  if (n) { await kv.hincrby(`events:day:${day(now)}`, 'push_sent', n); await kv.hincrby(`events:day:${day(now)}`, `push_sent_${payload.kind || 'social'}`, 1); }
+  return n ? 'sent' : 'off';
+}
+
+/** Delivers what waited for the morning: one notification (the newest, with a count). */
+async function flushQueued(userId, now) {
+  const queued = (await kv.lrange(queueKey(userId), 0, 9)).filter((q) => q && now - (q.at || 0) < 36 * 3600000);
+  if (!queued.length) return 0;
+  await kv.del(queueKey(userId));
+  const [latest] = queued;
+  const payload = queued.length > 1 ? { ...latest, title: `${queued.length} new replies`, body: latest.body } : latest;
+  return sendTo(userId, payload);
 }
