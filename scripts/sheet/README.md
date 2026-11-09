@@ -61,7 +61,7 @@ lessons and mastery.
    - `STUDYTOK_SHEET_SECRET` = the same secret
 5. Fill the sheet with the students who already exist:
    ```bash
-   curl -X POST https://studytok.vidmoat.com/api/admin/sheet/resync -H "Authorization: Bearer $STUDYTOK_SHEET_SECRET"
+   curl -X POST https://study-graph.com/api/admin/sheet/resync -H "Authorization: Bearer $STUDYTOK_SHEET_SECRET"
    ```
    It answers `{ ok, users, sent }`. Students who joined before the `users` index existed are
    added the next time they open the app.

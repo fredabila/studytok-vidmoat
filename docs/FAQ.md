@@ -165,7 +165,7 @@ puts the pack's units in your course. The Library only shows what you have added
 Yes. StudyGraph is open source: add a *pack*, one Markdown file in the repo with the ideas of a
 book, your course notes or what your project does, written in your own words, plus optional
 labelled images or clips. Once merged, anyone can add it from the Explore tab or your
-link `studytok.vidmoat.com/?pack=<slug>`, lessons are made from it, and every lesson shows your
+link `study-graph.com/?pack=<slug>`, lessons are made from it, and every lesson shows your
 name, link and call to action. The format and the rules are in
 [content/README.md](https://github.com/fredabila/studytok-vidmoat/blob/main/content/README.md).
 
@@ -175,7 +175,7 @@ three times a day. Tap anywhere on one (or swipe) to carry on. Each appears once
 for weeks.
 
 **Can I share a video with someone who doesn't have StudyGraph?**
-Yes. *Share lesson* on any video copies a public link (`studytok.vidmoat.com/v/…`) that opens
+Yes. *Share lesson* on any video copies a public link (`study-graph.com/v/…`) that opens
 without an account: the lesson plays in the browser, with the quick check, and the page says it
 was shared by your member number (never your name). Whoever taps "Get lessons for your own
 syllabus" from it counts as your invite.

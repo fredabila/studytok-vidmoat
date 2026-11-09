@@ -316,6 +316,8 @@ async function runOnboarding(prefill) {
 
 // ============================================================================ feed: state
 const feed = {
+  animUntil: 0,     // a slide transition is in flight until then (ms, performance.now())
+  dragDy: null,     // the finger's offset while dragging, so a re-layout never snaps it back
   items: [],        // { data, el, player, polling, viewSent, completed, watched, lastTime, answered }
   active: -1,       // index into items; items.length = the "finding your next lesson" slide
   loading: false,
@@ -337,7 +339,13 @@ function layout(animate = false) {
 }
 function setOffset(px, animate) {
   const t = trackEl();
-  t.classList.toggle('animating', Boolean(animate));
+  // While the finger is down the track follows it exactly; a re-layout keeps that offset.
+  if (feed.dragDy != null && !animate) px = feed.dragDy;
+  // A re-layout during a slide transition (a lesson swapped in, more lessons arrived) keeps
+  // animating towards the new target instead of snapping to it.
+  const anim = Boolean(animate) || (feed.dragDy == null && performance.now() < feed.animUntil);
+  if (animate) feed.animUntil = performance.now() + 460;
+  t.classList.toggle('animating', anim);
   t.style.transform = `translate3d(0, ${-Math.max(0, feed.active) * slideHeight() + px}px, 0)`;
 }
 
@@ -428,7 +436,9 @@ function go(delta) { goTo(feed.active + delta); }
 function goTo(index, { animate = true } = {}) {
   const max = feed.items.length; // the end slide
   const target = Math.max(0, Math.min(max, index));
+  feed.dragDy = null;
   if (target === feed.active) { setOffset(0, animate); return; }
+  if (animate) feed.animUntil = performance.now() + 460; // so anything activate() re-lays out also glides
   activate(target);
   layout(animate);
   if (target >= feed.items.length - 2) loadMore();
@@ -459,12 +469,16 @@ function wireGestures() {
     const atEnd = feed.active >= feed.items.length && dy < 0;
     if (atTop || atEnd) dy *= 0.3; // rubber band
     start.dy = dy;
-    setOffset(dy, false);
+    feed.dragDy = dy;
+    // One write per frame: pointer events can arrive faster than the screen refreshes.
+    if (!feed.dragFrame) feed.dragFrame = requestAnimationFrame(() => { feed.dragFrame = 0; if (feed.dragDy != null) setOffset(feed.dragDy, false); });
   });
   const end = (e) => {
     if (!start || e.pointerId !== start.id) return;
     const s = start;
     start = null;
+    feed.dragDy = null;
+    if (feed.dragFrame) { cancelAnimationFrame(feed.dragFrame); feed.dragFrame = 0; }
     if (!s.moved) {
       // Tap: single = pause/play, double = like (with a heart where you tapped).
       const now = performance.now();
@@ -492,7 +506,7 @@ function wireGestures() {
   };
   f.addEventListener('pointerdown', () => startSensors(), { passive: true });
   f.addEventListener('pointerup', (e) => { startSensors(); end(e); });
-  f.addEventListener('pointercancel', (e) => { if (start && e.pointerId === start.id) { start = null; setOffset(0, true); } });
+  f.addEventListener('pointercancel', (e) => { if (start && e.pointerId === start.id) { start = null; feed.dragDy = null; setOffset(0, true); } });
 
   // Wheel / trackpad: exactly one slide per gesture; the gesture's trailing momentum is swallowed.
   let acc = 0, lockUntil = 0, lastWheel = 0;
@@ -1098,7 +1112,21 @@ function stampAnswer(item, choice, correct) {
 // browser, so only the active lesson has a live player. The next one is mounted (paused, loading
 // its document) once the viewer is halfway through the current lesson, or at once when the
 // current slide has nothing to play; the previous one is unmounted immediately.
-function syncPlayers() {
+/**
+ * Players for the active lesson (and the next, preloading). `light` only plays and pauses the
+ * players that exist (cheap postMessages) and schedules the heavy part, creating and removing
+ * player frames and posting documents, for when the slide transition has landed, so a swipe
+ * never waits on it.
+ */
+function syncPlayers({ light = false } = {}) {
+  if (light) {
+    feed.items.forEach((item, i) => { if (item.player) { if (i === feed.active && !feed.paused && view === 'feed' && !item.held) item.player.play(); else item.player.pause(); } });
+    clearTimeout(feed.syncTimer);
+    feed.syncTimer = setTimeout(() => syncPlayers(), Math.max(0, feed.animUntil - performance.now()) + 40);
+    return;
+  }
+  clearTimeout(feed.syncTimer);
+  if (feed.dragDy != null || performance.now() < feed.animUntil) { feed.syncTimer = setTimeout(() => syncPlayers(), 120); return; }
   const active = feed.items[feed.active];
   // Phones (iOS in particular) load media slowly and the player gives up after 15 s, so the next
   // lesson is only preloaded once the active one has actually loaded; on desktop it starts at once.
@@ -1351,7 +1379,7 @@ function activate(index) {
     if (index > 0) { $('#swipe-hint').hidden = true; store.set('st_swiped', '1'); }
   }
   preferReady();
-  syncPlayers();
+  syncPlayers({ light: true });
 }
 
 /** Counts a view once the active slide has been ready for a second (also when it finishes generating while active). */

@@ -2,4 +2,4 @@ User-agent: *
 Allow: /
 Disallow: /api/
 
-Sitemap: https://studytok.vidmoat.com/sitemap.xml
+Sitemap: https://study-graph.com/sitemap.xml

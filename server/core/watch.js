@@ -7,7 +7,7 @@ import { format as formatOf } from '../video/formats.js';
 import { TOPIC_BY_ID } from '../curriculum/topics.js';
 
 export const SITE_NAME = 'StudyGraph';
-export const FALLBACK_IMAGE = 'https://studytok.vidmoat.com/icons/icon-512.png';
+export const FALLBACK_IMAGE = 'https://study-graph.com/og.png';
 
 const FONTS = 'https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,500;0,9..144,600;0,9..144,700;1,9..144,500&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600&display=swap';
 
