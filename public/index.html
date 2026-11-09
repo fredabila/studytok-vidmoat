@@ -167,22 +167,30 @@
     <!-- Library -->
     <section class="view view-page" data-view="library" hidden aria-label="Library">
       <div class="page">
-        <div class="page-head"><h1 class="page-title">Library</h1><button type="button" class="refresh-btn" data-refresh="library" aria-label="Refresh"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/></svg></button></div>
-        <div class="segmented" role="tablist" aria-label="Library sections">
-          <button role="tab" aria-selected="true" data-seg="course">Course</button>
-          <button role="tab" aria-selected="false" data-seg="saved">Saved</button>
-          <button role="tab" aria-selected="false" data-seg="history">History</button>
+        <div class="page-top">
+          <div class="page-head"><h1 class="page-title">Library</h1><button type="button" class="refresh-btn" data-refresh="library" aria-label="Refresh"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/></svg></button></div>
+          <div class="segmented" role="tablist" aria-label="Library sections">
+            <button role="tab" aria-selected="true" data-seg="course" aria-controls="lib-course" id="tab-course">Course<span class="seg-n" hidden></span></button>
+            <button role="tab" aria-selected="false" data-seg="saved" aria-controls="lib-saved" id="tab-saved">Saved<span class="seg-n" hidden></span></button>
+            <button role="tab" aria-selected="false" data-seg="history" aria-controls="lib-history" id="tab-history">History<span class="seg-n" hidden></span></button>
+          </div>
+          <label class="lib-search">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+            <input id="lib-search" type="search" placeholder="Search units, saved lessons, history, packs" autocomplete="off" aria-label="Search your library">
+            <button type="button" class="lib-clear" aria-label="Clear search" hidden>×</button>
+          </label>
+          <p id="lib-results" class="lib-results" hidden></p>
         </div>
-        <div id="lib-course" class="seg-panel" data-panel="course"></div>
-        <div id="lib-saved" class="seg-panel grid" data-panel="saved" hidden></div>
-        <div id="lib-history" class="seg-panel grid" data-panel="history" hidden></div>
+        <div id="lib-course" class="seg-panel" data-panel="course" role="tabpanel" aria-labelledby="tab-course"></div>
+        <div id="lib-saved" class="seg-panel grid" data-panel="saved" role="tabpanel" aria-labelledby="tab-saved" hidden></div>
+        <div id="lib-history" class="seg-panel grid" data-panel="history" role="tabpanel" aria-labelledby="tab-history" hidden></div>
       </div>
     </section>
 
     <!-- Profile -->
     <section class="view view-page" data-view="profile" hidden aria-label="Profile">
       <div class="page">
-        <div class="page-head"><h1 class="page-title">Profile</h1><button type="button" class="refresh-btn" data-refresh="profile" aria-label="Refresh"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/></svg></button></div>
+        <div class="page-top"><div class="page-head"><h1 class="page-title">Profile</h1><button type="button" class="refresh-btn" data-refresh="profile" aria-label="Refresh"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/></svg></button></div></div>
         <div id="profile-card" class="card profile-card"></div>
         <div id="profile-tiles"></div>
         <div id="credits-card" class="card"></div>
