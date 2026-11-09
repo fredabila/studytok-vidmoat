@@ -100,6 +100,7 @@ Every `leave` and `quiz_answer` is also joined to the decision that served the v
 | `explore_course_open` | `handle`, `where` | opened a suggested course |
 | `search_submit` / `search_pick` | `q`, `results`, `where` / `type`, `value` | ran a search / picked a typeahead suggestion |
 | `settings_open` | `card` | opened a settings row on the Profile tab |
+| `more_open` | | opened the ⋯ menu on a lesson (why, notes, show less, tune, the course) |
 | `channel_search` | `q`, `results` | searched course profiles (Explore, or adding a topic that already exists) |
 | `unit_toggle` | `unitId`, `on` | ticked / unticked a unit in the Library |
 | `library_open` | `tab` course/saved/history | Library tab |

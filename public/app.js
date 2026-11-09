@@ -577,13 +577,7 @@ function addSlide(data, { at } = {}) {
   $('.save', node).onclick = () => toggleFlag(item, 'saved', 'save', 'unsave');
   $('.share', node).onclick = () => shareLesson(item);
   wireChannelChip(item);
-  $('.why', node).onclick = () => { sendEvent(item.data.id, 'why_open'); openWhy(item); };
-  $('.tune', node).onclick = () => { track('tune_open'); openTune(); };
-  $('.less', node).onclick = () => {
-    sendEvent(item.data.id, 'less', { t: +(item.watch?.lastT || 0).toFixed(1) });
-    toast(`Got it: less of ${item.data.unit?.title || item.data.topic.label}`);
-    if (feed.items[feed.active] === item) go(1);
-  };
+  $('.more', node).onclick = () => openMore(item);
   if (data.status === 'generating') poll(item);
   return item;
 }
@@ -2727,32 +2721,53 @@ async function setFollow(handle, on, { source = 'app' } = {}) {
   return res;
 }
 
-/** The @handle chip on a lesson: tap the name for the profile, "+ Follow" to follow. */
+/** The course avatar on a lesson's rail (like a creator's picture): its topic, a + until followed. */
 function renderChannelChip(item) {
-  const chip = $('.ch-chip', item.el);
+  const av = $('.rail-av', item.el);
   const ch = item.data?.channel;
-  if (!chip) return;
-  chip.hidden = !ch;
+  if (!av) return;
+  av.hidden = !ch;
   if (!ch) return;
-  $('.ch-at', chip).textContent = `@${ch.handle}`;
-  const f = $('.ch-follow', chip);
-  const on = ch.following || isFollowingHandle(ch.handle);
-  f.hidden = on;
-  f.textContent = '+ Follow';
+  const topic = item.data.topic || {};
+  $('.av-face', av).textContent = topic.emoji || '📚';
+  av.style.setProperty('--av', topic.accent || '#ffd93d');
+  $('.av-open', av).setAttribute('aria-label', `${ch.name || 'Course'} (@${ch.handle}): open its profile`);
+  $('.av-plus', av).hidden = Boolean(ch.following || isFollowingHandle(ch.handle));
 }
 
 function wireChannelChip(item) {
-  const chip = $('.ch-chip', item.el);
-  if (!chip) return;
-  $('.ch-at', chip).onclick = () => item.data?.channel && openChannel(item.data.channel.handle, { source: 'slide' });
-  $('.ch-follow', chip).onclick = async (e) => {
+  const av = $('.rail-av', item.el);
+  if (!av) return;
+  $('.av-open', av).onclick = () => item.data?.channel && openChannel(item.data.channel.handle, { source: 'slide' });
+  $('.av-plus', av).onclick = async (e) => {
     e.stopPropagation();
     const h = item.data?.channel?.handle;
+    const btn = e.currentTarget; // null once the handler has awaited
     if (!h) return;
-    e.currentTarget.disabled = true;
+    btn.disabled = true;
     try { await setFollow(h, true, { source: 'slide' }); } catch { toast("Couldn't follow that course."); }
-    e.currentTarget.disabled = false;
+    btn.disabled = false;
   };
+}
+
+/** The ⋯ menu on a lesson: everything that is not like, save or share. */
+function openMore(item) {
+  const d = item.data;
+  track('more_open', { videoId: d.id });
+  const row = (icon, title, sub, act) => el('button', { type: 'button', class: 'set-row', onclick: async () => { await closeSheet(); act(); } },
+    el('span', { class: 'set-ic', 'aria-hidden': 'true' }, icon), el('span', { class: 'set-text' }, el('strong', {}, title), sub ? el('small', {}, sub) : null));
+  const rows = [
+    d.channel ? row(d.topic?.emoji || '📚', d.channel.name || 'Course', `@${d.channel.handle}`, () => openChannel(d.channel.handle, { source: 'more' })) : null,
+    row('💡', "Why you're seeing this", 'What the algorithm used', () => { sendEvent(d.id, 'why_open'); openWhy(item); }),
+    d.notes ? row('📝', 'Lesson notes', 'Points, definitions and the quick check', () => openNotes(item)) : null,
+    row('🙈', 'Show me less of this', d.unit?.title || d.topic?.label || '', () => {
+      sendEvent(d.id, 'less', { t: +(item.watch?.lastT || 0).toFixed(1) });
+      toast(`Got it: less of ${d.unit?.title || d.topic.label}`);
+      if (feed.items[feed.active] === item) go(1);
+    }),
+    row('🎚️', 'Tune your feed', 'Topics, narration, length, difficulty', () => { track('tune_open'); openTune(); }),
+  ].filter(Boolean);
+  openSheet('More', el('div', { class: 'settings-list more-list' }, ...rows));
 }
 
 function channelRoot() {
