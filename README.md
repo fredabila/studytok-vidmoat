@@ -281,7 +281,7 @@ npm test
 
 ## Deploy to Vercel
 
-Only `main` builds (see `ignoreCommand` in `vercel.json`); open a pull request and merge it to ship.
+Only `main` builds (see `ignoreCommand` in `vercel.json`): open a pull request and merge it to ship.
 
 `public/` is served as static files, and `api/index.js` is one Vercel Function for every `/api/*`
 route (`vercel.json`). Generation and research keep running after the response via `waitUntil()`.
