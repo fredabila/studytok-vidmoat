@@ -95,6 +95,11 @@ Every `leave` and `quiz_answer` is also joined to the decision that served the v
 | `channel_play` / `channel_lesson_open` | `handle`, `from` / `id` | played a profile's lessons as a feed, from the start / from one tile |
 | `channel_share` | `handle`, `by` | shared a profile link |
 | `channel_rename` | `handle`, `from` | the student who brought a course changed its handle |
+| `explore_tile_open` | `id`, `pos`, `topic`, `why` | opened a lesson from the Explore grid (leans the grid towards its topic) |
+| `explore_topic` | `topic` | picked a topic chip in Explore |
+| `explore_course_open` | `handle`, `where` | opened a suggested course |
+| `search_submit` / `search_pick` | `q`, `results`, `where` / `type`, `value` | ran a search / picked a typeahead suggestion |
+| `settings_open` | `card` | opened a settings row on the Profile tab |
 | `channel_search` | `q`, `results` | searched course profiles (Explore, or adding a topic that already exists) |
 | `unit_toggle` | `unitId`, `on` | ticked / unticked a unit in the Library |
 | `library_open` | `tab` course/saved/history | Library tab |

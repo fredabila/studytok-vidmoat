@@ -83,6 +83,12 @@ everyone studying it shares the same lessons.
 handle* (up to three times a month). Followers and lessons stay, and links to the old handle
 keep working: they open the new one. Official courses keep their handle.
 
+**I follow a course from another country. Will I get their examples?** No. Lessons use
+everyday examples from the student's country, so StudyGraph keeps them apart: following a
+course gives you its lessons written for students like you (your level, country and exam), and
+makes new ones when there are none yet. On a course profile, lessons made for another country
+are labelled "Made for …".
+
 **What does following do?** You follow your own courses automatically. Following another
 course mixes its lessons into your feed. Unfollowing a course you study removes it from your
 course too. Looking at a profile also leans your feed towards it for about 20 minutes.

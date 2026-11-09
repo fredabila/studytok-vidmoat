@@ -10,7 +10,7 @@ import { format as formatOf } from '../video/formats.js';
 import { level as levelOf, LEVEL_BY_ID } from '../curriculum/levels.js';
 import { getUnit, getProgram, interestUnit, customUnit } from '../curriculum/index.js';
 import { PACK_BY_SLUG, PACKS, packOfUnit, publicPack, SLUG as PACK_SLUG } from '../curriculum/packs.js';
-import { lessonKey } from '../lessons/index.js';
+import { lessonKey, regionOf, neutralAudience } from '../lessons/index.js';
 import { startVideo, readyKeyFor } from '../video/generator.js';
 import { pickUnits, mastery, scoreVideo, exploreRate, applyEvent, emptyState, examUrgency } from './ranking.js';
 import { pickRecall, noteRecall, recallItem, getMisses } from './recall.js';
@@ -229,8 +229,22 @@ async function candidatesFor(user, { intent = null } = {}) {
 /** A due unit's lessons are retrieval practice, written and filed separately from its first explanations. */
 export const reviewAudience = (audience) => ({ ...audience, lessonStyle: `${audience.lessonStyle || ''}|review`, review: true });
 
-async function reusable(userId, readyKey, taken, { signals, session, review = false, gentle = false, weights = null, fit = null } = {}) {
-  const ids = (await db.readyIds(readyKey, 60)).filter((id) => !taken.has(id));
+/**
+ * The ready pools a student may be served for a unit: lessons written for their country, then
+ * lessons written with no country (examples familiar anywhere). Never another country's.
+ */
+export function poolKeys(unitId, audience) {
+  const own = readyKeyFor(unitId, audience);
+  return regionOf(audience.country) ? [own, readyKeyFor(unitId, neutralAudience(audience))] : [own];
+}
+
+/** Does a lesson suit this student's country? (Theirs, or one made with no country.) */
+export const fitsRegion = (v, audience) => !v?.loc || v.loc === regionOf(audience?.country);
+
+async function reusable(userId, readyKeys, taken, { signals, session, review = false, gentle = false, weights = null, fit = null } = {}) {
+  const keys = Array.isArray(readyKeys) ? readyKeys : [readyKeys];
+  const lists = await Promise.all(keys.map((k) => db.readyIds(k, 60)));
+  const ids = [...new Set(lists.flat())].filter((id) => !taken.has(id));
   if (!ids.length) return null;
   const blocked = await db.inAnySet(userId, ['seen', 'served'], ids);
   const candidates = ids.filter((_, i) => !blocked[i]).slice(0, 12);
@@ -277,13 +291,19 @@ async function startFor(userId, unit, audience, pending, { onTheHouse = false } 
   return { video: started.video };
 }
 
-/** Any ready, unseen video for this level (then any level): an instant starter while the student's own units generate. */
-async function starter(userId, level, taken) {
-  const ids = (await db.anyReadyIds(level, 40)).filter((id) => !taken.has(id));
+/**
+ * Any ready, unseen video for this level (then any level) that suits the student's country: an
+ * instant starter while the student's own units generate.
+ */
+async function starter(userId, audience, taken) {
+  const ids = (await db.anyReadyIds(audience.level, 40)).filter((id) => !taken.has(id));
   if (!ids.length) return null;
   const blocked = await db.inAnySet(userId, ['seen', 'served'], ids);
-  const id = ids.find((_, i) => !blocked[i]);
-  return id ? db.getVideo(id) : null;
+  for (const id of ids.filter((_, i) => !blocked[i]).slice(0, 12)) {
+    const v = await db.getVideo(id);
+    if (v?.status === 'ready' && fitsRegion(v, audience)) return v;
+  }
+  return null;
 }
 
 /**
@@ -326,8 +346,8 @@ export async function nextItems(userId, count = 3) {
   for (const pick of picks) {
     // A unit due for review: its retrieval-practice pool first, else its ordinary pool scored for review.
     const review = (pick.parts?.review || 0) > 0 || (urgency >= 0.5 && Boolean(states[pick.unit.id]?.lastSeen));
-    const best = (review && await reusable(userId, readyKeyFor(pick.unit.id, reviewAudience(audience)), taken, { signals, session: pageSession, review, gentle, weights, fit }))
-      || await reusable(userId, readyKeyFor(pick.unit.id, audience), taken, { signals, session: pageSession, review, gentle, weights, fit });
+    const best = (review && await reusable(userId, poolKeys(pick.unit.id, reviewAudience(audience)), taken, { signals, session: pageSession, review, gentle, weights, fit }))
+      || await reusable(userId, poolKeys(pick.unit.id, audience), taken, { signals, session: pageSession, review, gentle, weights, fit });
     if (best) {
       taken.add(best.video.id);
       ready.push({ pick, video: best.video, videoParts: best.parts });
@@ -346,7 +366,7 @@ export async function nextItems(userId, count = 3) {
   if (breatherReason) {
     const topics = [...new Set(candidates.map((c) => c.unit.topic))];
     const unit = pickBreather({ topics, lastTopic: session.lastTopics?.[0] || null, recentUnits: recent });
-    const best = await reusable(userId, readyKeyFor(unit.id, audience), taken, { signals, session: pageSession });
+    const best = await reusable(userId, poolKeys(unit.id, audience), taken, { signals, session: pageSession });
     let video = best?.video || null;
     if (!video) {
       const existing = inFlight.find((v) => v.readyKey === readyKeyFor(unit.id, audience) && !taken.has(v.id));
@@ -379,7 +399,7 @@ export async function nextItems(userId, count = 3) {
     if (result.blocked) {
       credits ||= { needed: true, reason: result.blocked, unit: pick.unit.title };
       if (needed) {
-        const fill = await starter(userId, audience.level, taken);
+        const fill = await starter(userId, audience, taken);
         if (fill) { taken.add(fill.id); items.push({ video: fill, unit: null, why: { starter: true, credits: result.blocked }, pos: null }); }
       }
       continue;
@@ -388,7 +408,7 @@ export async function nextItems(userId, count = 3) {
     taken.add(result.video.id);
     if (needed) {
       // While it generates, show a starter from the library instead of a waiting slide.
-      const fill = await starter(userId, audience.level, taken);
+      const fill = await starter(userId, audience, taken);
       if (fill) { taken.add(fill.id); items.push({ video: fill, unit: null, why: { starter: true }, pos: null, queuedFor: pick.unit.title }); }
       items.push({ video: result.video, unit: pick.unit, why: { ...pick.parts, kind: pick.kind }, pos: pick.pos || null });
     }
@@ -441,7 +461,7 @@ export async function prefetch(userId) {
   let generating = (await generatingFor(userId)).length;
   for (const pick of picks) {
     if (generating >= config.generation.readyAhead) break;
-    const have = (await db.readyIds(readyKeyFor(pick.unit.id, audience), 1)).length;
+    const have = (await Promise.all(poolKeys(pick.unit.id, audience).map((k) => db.readyIds(k, 1)))).flat().length;
     if (have) continue;
     const result = await startFor(userId, pick.unit, audience, pending);
     if (result.blocked) break;

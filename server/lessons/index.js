@@ -23,7 +23,23 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
  * Lessons are shared by everyone studying the same unit at the same level (and exam), with the
  * same lesson preferences. Default preferences add nothing, so the common case stays shared.
  */
-export const lessonKey = (unitId, audience) => `${unitId}|${audience.level}|${normalize(audience.exam || '')}${audience.lessonStyle || ''}`;
+// Lessons use everyday examples from the student's country (trotro fares in Accra, the Tube in
+// London), so they are written and shared per country: a lesson made for a student in Ghana is
+// never served to one in the UK. Students with no country get lessons with examples familiar
+// everywhere, and those "neutral" lessons can be served to anyone (feed/index.js poolKeys).
+const REGION_ALIASES = {
+  uk: 'united kingdom', 'u k': 'united kingdom', gb: 'united kingdom', britain: 'united kingdom', 'great britain': 'united kingdom', england: 'united kingdom', scotland: 'united kingdom', wales: 'united kingdom', 'northern ireland': 'united kingdom',
+  us: 'united states', usa: 'united states', 'u s': 'united states', 'u s a': 'united states', america: 'united states', 'united states of america': 'united states',
+  'cote divoire': 'cote d ivoire', 'ivory coast': 'cote d ivoire', 'drc': 'democratic republic of the congo', uae: 'united arab emirates',
+};
+/** A country as a key: "Ghana" → "ghana", "UK" → "united-kingdom"; '' when none. */
+export function regionOf(country) {
+  const c = String(country || '').toLowerCase().normalize('NFKD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z]+/g, ' ').trim();
+  return c ? (REGION_ALIASES[c] || c).replace(/ /g, '-').slice(0, 40) : '';
+}
+export const lessonKey = (unitId, audience) => `${unitId}|${audience.level}|${normalize(audience.exam || '')}${audience.lessonStyle || ''}${regionOf(audience.country) ? `|loc:${regionOf(audience.country)}` : ''}`;
+/** The same audience without a country: whose lessons anyone can watch. */
+export const neutralAudience = (audience) => ({ ...audience, country: '' });
 
 function fromBank(unit, covered) {
   const list = BANK[unit.topic] || [];

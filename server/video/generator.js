@@ -14,7 +14,7 @@ import { randomUUID } from 'node:crypto';
 import { packOfUnit } from '../curriculum/packs.js';
 import { config } from '../core/config.js';
 import { topic as topicOf } from '../curriculum/topics.js';
-import { nextLesson, lessonKey } from '../lessons/index.js';
+import { nextLesson, lessonKey, regionOf } from '../lessons/index.js';
 import { interestUnit } from '../curriculum/index.js';
 import { resolveLessonMedia, resolveMusic } from './media.js';
 import { soundKit } from './sfx.js';
@@ -60,7 +60,7 @@ export const readyKeyFor = (unitId, audience) => `${lessonKey(unitId, audience)}
  */
 export async function startVideo(unit, audience, { requestedBy, credential = { mode: 'house' } } = {}) {
   const video = {
-    id: randomUUID(), unitId: unit.id, unitTitle: unit.title, topic: unit.topic, level: audience.level,
+    id: randomUUID(), unitId: unit.id, unitTitle: unit.title, topic: unit.topic, level: audience.level, loc: regionOf(audience.country) || null,
     readyKey: readyKeyFor(unit.id, audience), status: 'generating',
     createdAt: new Date().toISOString(), requestedBy: requestedBy || null, paidBy: credential.mode,
   };

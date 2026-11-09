@@ -997,3 +997,76 @@ body.channel-open .sheet { z-index: 70; }
 .ch-rename { display: inline-block; margin-top: 12px; border: 0; background: none; padding: 4px 0; font-size: 13.5px; color: var(--ink-2); text-decoration: underline; cursor: pointer; }
 .handle-note[data-ok=""] { color: var(--ink-3); }
 .similar-note { margin-top: 12px !important; font-weight: 600; }
+
+/* ---- Profile: counts in the header, settings as one list (app.js renderSettingsList) ---- */
+.p-counts { display: flex; gap: 18px; margin: 8px 0 4px; }
+.p-count { border: 0; background: none; padding: 0; font: inherit; font-size: 13px; color: var(--ink-3); cursor: pointer; display: inline-flex; align-items: baseline; gap: 5px; }
+.p-count strong { font-family: var(--serif); font-size: 18px; color: var(--ink); }
+.p-count:hover strong, .p-count:focus-visible strong { text-decoration: underline; text-decoration-color: var(--hl); text-decoration-thickness: 3px; }
+.settings-list { display: grid; background: #fff; border: 1.5px solid var(--line-2); border-radius: var(--r); overflow: hidden; margin-bottom: 14px; }
+.set-row { display: flex; align-items: center; gap: 12px; width: 100%; padding: 13px 14px; border: 0; border-top: 1px solid var(--line); background: none; text-align: left; cursor: pointer; color: var(--ink); font: inherit; }
+.set-row:first-child { border-top: 0; }
+.set-row:active { background: var(--paper-2); }
+.set-ic { flex: none; width: 34px; height: 34px; border-radius: 10px; display: grid; place-items: center; font-size: 17px; background: var(--paper-2); }
+.set-text { flex: 1; min-width: 0; display: grid; gap: 1px; }
+.set-text strong { font-size: 15px; }
+.set-text small { font-size: 12.5px; color: var(--ink-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.set-go { flex: none; font-size: 22px; color: var(--ink-3); }
+.card.in-sheet { border: 0; padding: 0; margin: 0; background: none; box-shadow: none; }
+.card.in-sheet > h3:first-child { display: none; } /* the sheet title says it */
+
+/* ---- Explore (app.js renderExplore; server/feed/discover.js) ---- */
+.x-chips { display: flex; gap: 6px; overflow-x: auto; margin: 10px -16px 0; padding: 0 16px 2px; scrollbar-width: none; }
+.x-chips::-webkit-scrollbar { display: none; }
+.x-chip { flex: none; border: 1.5px solid var(--line-2); background: #fff; color: var(--ink); border-radius: 999px; padding: 6px 12px; font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; white-space: nowrap; }
+.x-chip[aria-pressed="true"] { background: var(--ink); color: var(--paper); border-color: var(--ink); }
+.x-suggest { position: absolute; left: 16px; right: 16px; z-index: 20; margin-top: 6px; background: #fff; border: 1.5px solid var(--ink); border-radius: 14px; box-shadow: 4px 4px 0 var(--hl); padding: 6px; max-height: min(60vh, 440px); overflow-y: auto; }
+.x-sg-h { margin: 8px 8px 4px; font-family: var(--mono); font-size: 11px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; color: var(--ink-3); }
+.x-sg-row { display: flex; align-items: center; gap: 4px; }
+.x-sg-main { flex: 1; display: flex; align-items: center; gap: 10px; min-width: 0; border: 0; background: none; padding: 9px 8px; border-radius: 10px; text-align: left; font: inherit; font-size: 14.5px; color: var(--ink); cursor: pointer; }
+.x-sg-main:hover, .x-sg-main:focus-visible { background: var(--paper-2); }
+.x-sg-ic { flex: none; width: 30px; height: 30px; border-radius: 8px; display: grid; place-items: center; background: var(--paper-2); font-size: 15px; }
+.x-sg-text { display: grid; min-width: 0; }
+.x-sg-text span, .x-sg-text small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.x-sg-text small { font-size: 12px; color: var(--ink-3); }
+.x-sg-x { flex: none; border: 0; background: none; font-size: 20px; color: var(--ink-3); width: 34px; height: 34px; cursor: pointer; }
+.x-sg-chips { display: flex; flex-wrap: wrap; gap: 6px; padding: 0 8px 8px; }
+.x-sg-all { font-weight: 600; }
+.explore-list > * { min-width: 0; } /* a carousel's content must not widen the page */
+.x-sec { margin: 4px 0 18px; min-width: 0; }
+.x-h { font-family: var(--serif); font-size: 19px; margin: 6px 0 10px; }
+.x-row { display: flex; gap: 10px; overflow-x: auto; margin: 0 -16px; padding: 2px 16px 6px; scroll-snap-type: x proximity; scrollbar-width: none; }
+.x-row::-webkit-scrollbar { display: none; }
+.x-row.wrap { flex-wrap: wrap; overflow: visible; margin: 0; padding: 0; }
+.x-course { flex: none; width: 150px; scroll-snap-align: start; display: grid; justify-items: center; gap: 3px; text-align: center; padding: 14px 10px 12px; background: #fff; border: 1.5px solid var(--line-2); border-radius: 16px; cursor: pointer; }
+.x-course-av { width: 54px; height: 54px; border-radius: 50%; display: grid; place-items: center; font-size: 26px; background: var(--accent); border: 1.5px solid var(--ink); margin-bottom: 4px; }
+.x-course strong { font-size: 14px; line-height: 1.2; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.x-course small { font-size: 11.5px; color: var(--ink-3); max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.x-course .x-course-n { font-family: var(--mono); font-size: 10.5px; }
+.x-course .x-course-why { color: var(--ink-2); font-weight: 600; }
+.x-course .btn { margin-top: 6px; width: 100%; }
+.x-pack { flex: none; width: 170px; scroll-snap-align: start; display: grid; gap: 4px; text-align: left; padding: 12px; background: #fff; border: 1.5px solid var(--line-2); border-radius: 14px; cursor: pointer; font: inherit; color: var(--ink); }
+.x-pack.added { border-color: #5fb0ff; }
+.x-pack-emoji { width: 36px; height: 36px; border-radius: 10px; display: grid; place-items: center; font-size: 19px; background: var(--accent); border: 1.5px solid var(--ink); }
+.x-pack strong { font-size: 14px; line-height: 1.25; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.x-pack small { font-size: 11.5px; color: var(--ink-3); }
+.x-grid { display: grid; grid-template-columns: repeat(3, 1fr); grid-auto-flow: dense; gap: 3px; margin: 0 -16px; }
+.x-tile { position: relative; aspect-ratio: 9 / 16; border: 0; padding: 0; overflow: hidden; background: var(--dark); color: #fff; cursor: pointer; text-align: left; }
+.x-tile.big { grid-column: span 2; grid-row: span 2; }
+.x-tile img, .x-tile-blank { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.x-tile-blank { display: grid; place-items: center; font-size: 34px; background: radial-gradient(circle at 30% 20%, color-mix(in srgb, var(--accent) 55%, #000), #0d0d0e 75%); }
+.x-tile.big .x-tile-blank { font-size: 64px; }
+.x-why { position: absolute; top: 6px; left: 6px; right: 6px; font-size: 10px; font-weight: 600; line-height: 1.2; padding: 3px 6px; border-radius: 6px; background: rgba(13, 13, 14, .62); justify-self: start; max-width: max-content; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.x-tile-meta { position: absolute; left: 0; right: 0; bottom: 0; padding: 22px 7px 7px; display: grid; gap: 2px; background: linear-gradient(transparent, rgba(0, 0, 0, .82)); }
+.x-tile-title { font-size: 12px; font-weight: 600; line-height: 1.25; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.x-tile.big .x-tile-title { font-size: 16px; }
+.x-tile-sub { font-family: var(--mono); font-size: 9.5px; opacity: .85; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.x-more { display: block; margin: 14px auto 0; }
+.explore-empty b { display: block; color: var(--ink); font-family: var(--serif); font-size: 20px; margin: 6px 0; }
+.explore-empty span { display: block; margin-bottom: 10px; }
+.xpack-sheet { display: grid; gap: 8px; }
+.xpack-sheet p, .xpack-sheet ol { margin: 0; color: var(--ink-2); }
+.xpack-sheet h4 { margin: 6px 0 0; }
+.xpack-sheet .xpack-foot { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+.ch-tile-loc { position: absolute; top: 5px; left: 5px; font-size: 9.5px; font-weight: 600; padding: 2px 6px; border-radius: 6px; background: rgba(13, 13, 14, .65); }
+@media (min-width: 720px) { .x-grid { grid-template-columns: repeat(4, 1fr); margin: 0; gap: 6px; } .x-tile { border-radius: 8px; } }
