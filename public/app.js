@@ -8,6 +8,7 @@
 
 import { VidmoatPlayer } from './player.js';
 import { retimeClips, SPEEDS } from './retime.js';
+import { haptic, pushLayer, dragToDismiss, setStatusBar, setBadge, standalone } from './native.js';
 import { track, flush, WatchTracker } from './telemetry.js';
 import * as sensors from './sensors.js';
 import { renderCard, shareCard } from './share.js';
@@ -433,7 +434,7 @@ function wirePullToRefresh() {
       if (!pulling) { ptr.classList.remove('pull'); return; }
       const dy = e.changedTouches[0].clientY - startY;
       pulling = false; startY = null;
-      if (dy > 110) { ptr.classList.replace('pull', 'go'); await refreshView(page.dataset.view); }
+      if (dy > 110) { haptic('pull'); ptr.classList.replace('pull', 'go'); await refreshView(page.dataset.view); }
       ptr.classList.remove('pull', 'go');
     }, { passive: true });
   }
@@ -869,6 +870,7 @@ function addRecallSlide(data, { at } = {}) {
     if (item.answered) return;
     item.answered = true;
     const correct = i === r.answerIndex;
+    haptic(correct ? 'success' : 'error');
     $$('.r-opt', opts).forEach((x, k) => { x.disabled = true; x.classList.toggle('right', k === r.answerIndex); x.classList.toggle('wrong', k === i && !correct); });
     feedback.textContent = correct ? (r.box >= 1 ? "Right again. That one's yours now. 🎉" : 'Correct! 🎉 One more time in a couple of days and it sticks.') : `Not quite: it's ${'ABC'[r.answerIndex]}. ${r.explanation || ''}`.trim();
     feedback.dataset.state = correct ? 'right' : 'wrong';
@@ -1264,6 +1266,7 @@ function togglePause() {
 function doubleTapLike(e) {
   const item = feed.items[feed.active];
   if (!item || item.data.status !== 'ready') return;
+  haptic('success');
   const stage = $('.stage', item.el).getBoundingClientRect();
   const burst = $('.heart-burst', item.el);
   burst.style.left = `${e.clientX - stage.left}px`;
@@ -1276,6 +1279,7 @@ function toggleFlag(item, field, onType, offType, by = 'button') {
   if (!item || item.moment) return;
   const on = !item.data[field];
   item.data[field] = on;
+  haptic(on ? 'select' : 'tap');
   if (field === 'liked') item.data.likes = Math.max(0, (item.data.likes || 0) + (on ? 1 : -1));
   renderSlide(item);
   sendEvent(item.data.id, on ? onType : offType, on ? { t: +(item.watch?.lastT || 0).toFixed(1), by } : {});
@@ -1314,6 +1318,7 @@ function answer(item, i) {
   item.answered = true;
   const q = item.data.quiz;
   const correct = i === q.answerIndex;
+  haptic(correct ? 'success' : 'error');
   const box = $('.quiz', item.el);
   $$('.quiz-opt', box).forEach((b, k) => {
     b.disabled = true;
@@ -1409,11 +1414,20 @@ function openSheet(title, body, onClose = null) {
   if (!$('#sheet').hidden && sheetOnClose) { const cb = sheetOnClose; sheetOnClose = null; cb(); }
   $('#sheet-title').textContent = title;
   $('#sheet-body').replaceChildren(body);
+  if ($('#sheet').hidden) {
+    sheetLayerDone = pushLayer(() => closeSheet({ fromBack: true })); // the phone's Back closes it
+    if (!openSheet.wired) {
+      openSheet.wired = true;
+      for (const h of [$('#sheet .sheet-grip'), $('#sheet-title')]) dragToDismiss($('#sheet .sheet-panel'), h, () => closeSheet());
+    }
+  }
   $('#sheet').hidden = false;
   sheetOnClose = onClose;
   feed.items[feed.active]?.player?.pause();
 }
+let sheetLayerDone = null;
 async function closeSheet() {
+  sheetLayerDone?.(); sheetLayerDone = null;
   $('#sheet').hidden = true;
   const cb = sheetOnClose;
   sheetOnClose = null;
@@ -1849,6 +1863,7 @@ async function showLibrary() {
   course.replaceChildren();
   const stats = me?.stats;
   const due = lib.units.filter((u) => u.active && u.dueForReview).length;
+  setBadge(due + (lib.misses?.length || 0)); // the number on the app icon
   course.append(el('div', { class: 'hero search-hide' }, svgEl(mascot(due ? 'think' : stats?.streak >= 3 ? 'cheer' : 'happy')), goalRing(stats),
     el('div', {}, el('h3', {}, due ? `${due} unit${due > 1 ? 's' : ''} due for review` : 'Your syllabus'),
       el('p', {}, due ? 'Spaced repetition says now is the moment. They are first in your feed.' : 'Untick what you have mastered; your feed follows what stays ticked.'),
@@ -2448,6 +2463,7 @@ async function doInstall() {
 function showView(next) {
   view = next;
   document.body.dataset.view = next;
+  setStatusBar(next === 'feed' ? '#141414' : '#f6f1e7'); // the status bar follows the screen
   $$('.view').forEach((v) => { v.hidden = v.dataset.view !== next; });
   $$('.tabbtn').forEach((t, i) => { t.setAttribute('aria-current', t.dataset.tab === next ? 'page' : 'false'); if (t.dataset.tab === next) $('.tab-blob').style.setProperty('--tab', String(i)); });
   if (next === 'feed') {
@@ -2455,10 +2471,10 @@ function showView(next) {
     layout(false);
     syncPlayers();
     const item = feed.items[feed.active];
-    history.replaceState(null, '', item ? `#v=${item.data.id}` : location.pathname);
+    history.replaceState(history.state, '', item ? `#v=${item.data.id}` : location.pathname);
   } else {
     feed.items[feed.active]?.player?.pause();
-    history.replaceState(null, '', `#${next}`);
+    history.replaceState(history.state, '', `#${next}`);
     // Fresh numbers for the stickers and tiles: send pending events, then re-read the profile.
     flush();
     const refresh = api('GET', '/api/me').then((r) => { me = { ...r.user, billing: r.user.billing || me?.billing }; renderGoalPill(); }).catch(() => {});
@@ -2505,7 +2521,7 @@ async function editStudies() {
 }
 
 function wireChrome() {
-  $$('.tabbtn').forEach((t) => { t.onclick = () => showView(t.dataset.tab); });
+  $$('.tabbtn').forEach((t) => { t.onclick = () => { if (view !== t.dataset.tab) haptic('tap'); showView(t.dataset.tab); }; });
   const tabs = $$('.segmented [data-seg]');
   tabs.forEach((b, i) => {
     b.onclick = () => {
@@ -2790,6 +2806,11 @@ async function boot() {
   ensureEndSlide();
   track('session_start', { source: matchMedia('(display-mode: standalone)').matches || navigator.standalone ? 'app' : 'browser', entry: linked ? 'link' : hash ? hash.slice(1, 12) : 'feed', ageBand: ageBand(me?.profile?.age) });
   if (hash === '#library' || hash === '#profile' || hash === '#explore') showView(hash.slice(1)); else showView('feed');
+  // Installed app: a shortcut or a link opened while it is running focuses it and goes there.
+  document.body.classList.toggle('standalone', standalone);
+  if ('launchQueue' in window) window.launchQueue.setConsumer((p) => { const h = p.targetURL ? new URL(p.targetURL).hash : ''; if (['#library', '#profile', '#explore'].includes(h)) showView(h.slice(1)); });
+  // The icon badge (lessons due for review) is kept fresh in the background.
+  if (standalone) setTimeout(() => api('GET', '/api/library').then((lib) => setBadge(lib.units.filter((u) => u.active && u.dueForReview).length + (lib.misses?.length || 0))).catch(() => {}), 4000);
   $('#sound-go')?.addEventListener('click', startSensors, { once: true });
   if (linked) await openVideo(linked);
   await loadMore(3);
@@ -3346,6 +3367,7 @@ async function openComments(item) {
       svgEl(heartSvg), el('span', {}, c.likes ? fmtCount(c.likes) : ''));
     b.onclick = async () => {
       const on = !c.liked;
+      haptic(on ? 'select' : 'tap');
       c.liked = on; c.likes = Math.max(0, c.likes + (on ? 1 : -1));
       b.classList.toggle('on', on); b.setAttribute('aria-pressed', String(on)); $('span', b).textContent = c.likes ? fmtCount(c.likes) : '';
       try { await api(on ? 'POST' : 'DELETE', `/api/comments/${c.id}/like`); } catch { /* the next load shows the truth */ }
@@ -3422,11 +3444,18 @@ async function openComments(item) {
       el('p', { class: 'tk-rules' }, 'Be kind, keep it about the lesson. No links or contact details.')));
   const shade = el('div', { class: 'tk-shade', onclick: () => close() });
   const root = el('div', { class: 'tk-root' }, shade, panel);
-  // Swipe the header down to close, like any bottom sheet.
-  let y0 = null;
-  $('.tk-head', panel).addEventListener('pointerdown', (e) => { y0 = e.clientY; });
-  window.addEventListener('pointerup', function up(e) { if (y0 != null && e.clientY - y0 > 60) close(); y0 = null; if (!talkOpen) window.removeEventListener('pointerup', up); });
+  // Pull the header down to close, like any bottom sheet; Back closes it too.
+  dragToDismiss(panel, $('.tk-head', panel), () => close());
+  const layerDone = pushLayer(() => close());
+  // iOS keeps the layout height when the keyboard opens: lift the panel above the keyboard.
+  const vv = window.visualViewport;
+  const fit = () => { if (vv) panel.style.bottom = `${Math.max(0, window.innerHeight - vv.height - vv.offsetTop)}px`; };
+  vv?.addEventListener('resize', fit);
+  vv?.addEventListener('scroll', fit);
   function close() {
+    layerDone();
+    vv?.removeEventListener('resize', fit);
+    vv?.removeEventListener('scroll', fit);
     refreshTimers.forEach(clearTimeout);
     root.classList.remove('open');
     setTimeout(() => root.remove(), 220);
@@ -3484,6 +3513,7 @@ async function openMockExam() {
     const started = performance.now();
     const opts = q.options.map((o, k) => el('button', { type: 'button', class: 'mock-opt', onclick: () => {
       const correct = k === q.answerIndex;
+      haptic(correct ? 'success' : 'error');
       if (correct) right++; else missed.push(q);
       // The same evidence as a quick check in the video: it moves mastery and the feed.
       sendEvent(q.videoId, 'quiz_answer', { choice: k, correct, ms: Math.round(performance.now() - started) });

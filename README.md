@@ -149,6 +149,11 @@ is a worked example.
   that caches the app shell (never the API), so StudyGraph installs to the home screen and opens
   full screen. Profile → *Install StudyGraph* (Android/desktop), or Share → *Add to Home Screen*
   on iPhone.
+* **Native feel** (`public/native.js`): the phone's Back closes the sheet or comments panel on
+  top instead of leaving the app; sheets pull down to dismiss; short haptics on likes, answers
+  and pull-to-refresh (Android); the status bar follows the screen; the app icon shows how many
+  lessons are due for review; press feedback and no text selection or long-press menus on
+  controls; home-screen shortcuts (Feed, Library, Explore) that focus the running app.
 * **Feed controls**: a paging controller, not native scroll-snap. Drag or flick one lesson at
   a time; on desktop one wheel/trackpad gesture moves exactly one lesson (momentum is ignored),
   plus ↑/↓ keys and on-screen buttons. Tap to pause, double-tap to like, tap answers during the
