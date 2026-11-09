@@ -61,10 +61,23 @@ box-shadow:${t.shadow}}
 ${extra}`;
 };
 
+/**
+ * A card's entrance as keyframes on its own clip. The editor's motion presets (slide-up, zoom-in,
+ * elastic-pop) animate around the vertical centre, so a card placed above or below it jumped there;
+ * these keep the card where it was placed. Times are relative to the clip.
+ */
+export function entrance(id, y, motion) {
+  const kf = (prop, time, value, easing = 'easeOut') => ({ op: 'addKeyframe', clipId: id, prop, time, value, easing });
+  const fade = [kf('opacity', 0, 0, 'linear'), kf('opacity', 0.22, 1, 'linear')];
+  if (motion === 'elastic-pop') return [kf('scale', 0, 0.6), kf('scale', 0.18, 1.08), kf('scale', 0.32, 1), ...fade];
+  if (motion === 'zoom-in') return [kf('scale', 0, 0.86), kf('scale', 0.4, 1), ...fade];
+  return [kf('y', 0, y + 90), kf('y', 0.38, y), ...fade]; // slide-up
+}
+
 function html(id, start, duration, track, html, css, { y = CARD.y, w = CARD.w, h = CARD.h, motion, x } = {}) {
   const patch = { y, ...(x != null ? { x } : {}) };
   const cmds = [{ op: 'addHtmlElement', clipId: id, start: round(start), duration: round6(duration), trackIndex: track, width: w, height: h, html, css, patch }];
-  if (motion) cmds.push({ op: 'applyMotionPreset', clipId: id, preset: motion });
+  if (motion) cmds.push(...entrance(id, y, motion));
   return cmds;
 }
 
