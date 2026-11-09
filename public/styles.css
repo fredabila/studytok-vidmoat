@@ -927,12 +927,6 @@ body.landing-on { background: var(--paper); }
 .style-chip[aria-pressed="true"] { background: var(--hl); border-color: var(--ink); }
 
 /* ---- Course profiles (app.js "course profiles"; server/feed/channels.js) ---- */
-.ch-chip { pointer-events: auto; display: inline-flex; align-items: center; gap: 8px; margin: 8px 0 2px; }
-.ch-chip[hidden] { display: none; }
-.ch-at { border: 0; background: none; padding: 0; color: #fff; font-family: var(--mono); font-size: 13.5px; font-weight: 600; text-shadow: 0 1px 4px #000; cursor: pointer; }
-.ch-follow { border: 1.5px solid #fff; background: rgba(13, 13, 14, .45); color: #fff; border-radius: 999px; padding: 3px 10px; font-size: 12px; font-weight: 600; cursor: pointer; }
-.ch-follow[hidden] { display: none; }
-.ch-follow:active { transform: scale(.95); }
 
 body.channel-open { overflow: hidden; }
 .channel-view { position: fixed; inset: 0; z-index: 60; background: var(--paper); color: var(--ink); display: flex; flex-direction: column; }
@@ -1070,3 +1064,14 @@ body.channel-open .sheet { z-index: 70; }
 .xpack-sheet .xpack-foot { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
 .ch-tile-loc { position: absolute; top: 5px; left: 5px; font-size: 9.5px; font-weight: 600; padding: 2px 6px; border-radius: 6px; background: rgba(13, 13, 14, .65); }
 @media (min-width: 720px) { .x-grid { grid-template-columns: repeat(4, 1fr); margin: 0; gap: 6px; } .x-tile { border-radius: 8px; } }
+
+/* The course avatar at the top of a lesson's rail (app.js renderChannelChip). */
+.rail-av { position: relative; display: grid; justify-items: center; margin-bottom: 6px; }
+.rail-av[hidden] { display: none; }
+.av-open { width: 48px; height: 48px; border-radius: 50%; padding: 0; border: 2px solid #fff; background: var(--av, var(--hl)); display: grid; place-items: center; cursor: pointer; box-shadow: 0 2px 8px rgba(0, 0, 0, .35); }
+.av-open:active { transform: scale(.92); }
+.av-face { font-size: 24px; line-height: 1; }
+.av-plus { position: absolute; bottom: -9px; width: 22px; height: 22px; border-radius: 50%; border: 2px solid #fff; padding: 0; background: #ff3b5c; color: #fff; font-size: 15px; font-weight: 700; line-height: 1; display: grid; place-items: center; cursor: pointer; }
+.av-plus[hidden] { display: none; }
+.more-list { margin: 0; }
+@media (max-width: 899px) and (max-height: 700px) { .av-open { width: 42px; height: 42px; } .av-face { font-size: 20px; } }

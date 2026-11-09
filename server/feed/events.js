@@ -94,6 +94,7 @@ export const EVENT_SPECS = {
   search_submit: { fields: { q: 's', results: 'i', where: 's' } },
   search_pick: { fields: { type: 's', value: 's' } },
   settings_open: { fields: { card: 's' } },
+  more_open: { video: true, fields: {} },
   pack_remove: { fields: { slug: 's' } },
   pack_link: { fields: { slug: 's' } },
   library_search: { fields: { q: 's' } },
