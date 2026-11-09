@@ -241,3 +241,16 @@ test('the backfill files lessons made before the unit index existed', async () =
   assert.ok(r.filed >= 1);
   assert.equal(await kv.zcard(`ready:unit:${v.unitId}`), 1);
 });
+
+test('official profiles exist from the start: on first visit, and seeded for Explore', async () => {
+  const phys = CATALOG.find((p) => p.id !== bio.id && p.id !== chem.id);
+  await kv.del(`channel:${phys.id}`); await kv.del(`channel:ref:cat:${phys.id}`); // as if never made
+  const c = await ch.getChannel(phys.id);
+  assert.equal(c.handle, phys.id);
+  assert.equal(c.official, true);
+  assert.equal(await ch.getChannel('not-a-course-at-all'), null);
+  await ch.seedOfficial({ force: true });
+  const top = await ch.topChannels(500);
+  assert.ok(top.length >= CATALOG.length + PACKS.length - 1);
+  assert.ok((await ch.searchChannels(PACKS[0].title.split(' ')[0])).length >= 1);
+});

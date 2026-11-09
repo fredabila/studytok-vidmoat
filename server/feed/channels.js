@@ -27,7 +27,7 @@ import { createHash } from 'node:crypto';
 import { kv } from '../core/kv.js';
 import * as db from '../core/db.js';
 import { CATALOG } from '../curriculum/catalog.js';
-import { PACK_BY_SLUG } from '../curriculum/packs.js';
+import { PACK_BY_SLUG, PACKS } from '../curriculum/packs.js';
 import { getProgram, getUnit } from '../curriculum/index.js';
 import { TOPIC_BY_ID } from '../curriculum/topics.js';
 import { level as levelOf, LEVEL_BY_ID } from '../curriculum/levels.js';
@@ -102,8 +102,15 @@ export async function sourceOf(ref) {
 export async function getChannel(handle) {
   const h = cleanHandle(handle);
   if (!HANDLE.test(h)) return null;
-  const ch = await kv.get(`channel:${h}`);
-  if (!ch) return null;
+  let ch = await kv.get(`channel:${h}`);
+  // Official courses have a profile from the start: made on first visit under their official handle.
+  if (!ch) {
+    const officialRef = CATALOG.some((p) => p.id === h) ? `cat:${h}` : PACK_BY_SLUG[h] ? `pack:${h}` : null;
+    if (!officialRef) return null;
+    const made = await ensureChannel(officialRef);
+    if (!made || made.channel.handle !== h) return null;
+    ch = made.channel;
+  }
   if (ch.ref.startsWith('cat:') || ch.ref.startsWith('pack:')) {
     const src = await sourceOf(ch.ref);
     if (src) return { ...ch, units: src.units, name: src.name, bio: ch.bio || src.bio };
@@ -309,8 +316,24 @@ export async function lessonCount(channel) {
 }
 
 // ------------------------------------------------------------------------------ discovery
+/** Once: profiles for every catalog course and community pack, so Explore and search have them from day one. */
+export async function seedOfficial({ force = false } = {}) {
+  const FLAG = `migr:officialchannels:${CATALOG.length}:${PACKS.length}`;
+  if (!force && await kv.get(FLAG)) return { skipped: true };
+  if (!(await kv.set(`${FLAG}:lock`, 1, { nx: true, ex: 60 }))) return { busy: true };
+  try {
+    const refs = [...CATALOG.map((p) => `cat:${p.id}`), ...PACKS.map((p) => `pack:${p.slug}`)];
+    for (let i = 0; i < refs.length; i += 10) await Promise.all(refs.slice(i, i + 10).map((r) => ensureChannel(r).catch(() => null)));
+    await kv.set(FLAG, { at: new Date().toISOString(), n: refs.length });
+    return { seeded: refs.length };
+  } finally {
+    await kv.del(`${FLAG}:lock`);
+  }
+}
+
 /** Top channels by followers: [{ handle, followers }]. */
 export async function topChannels(limit = 20) {
+  await seedOfficial();
   const flat = await kv.zrange('channels', 0, limit - 1, { rev: true, withScores: true });
   const out = [];
   for (let i = 0; i + 1 < flat.length; i += 2) out.push({ handle: flat[i], followers: Number(flat[i + 1]) || 0 });
@@ -319,6 +342,7 @@ export async function topChannels(limit = 20) {
 
 /** Channels whose handle or name matches every word of `q`, most followed first. */
 export async function searchChannels(q, limit = 12) {
+  await seedOfficial();
   const words = String(q || '').toLowerCase().normalize('NFKD').replace(/[̀-ͯ]/g, '').split(/[^a-z0-9]+/).filter((w) => w.length > 1).slice(0, 6);
   if (!words.length) return [];
   const names = (await kv.hgetall('channels:names')) || {};
