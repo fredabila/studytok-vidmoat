@@ -70,6 +70,12 @@ export const config = {
     researchEffort: process.env.STUDYTOK_RESEARCH_EFFORT || 'medium',
     // Episodes written per Claude call for a unit (more = fewer calls, longer first wait).
     episodesPerCall: num(process.env.STUDYTOK_EPISODES_PER_CALL, 3),
+    // A study plan per unit and level (lessons/plan.js), written once and cached: concepts in
+    // teaching order with objectives, misconceptions and a glossary. Episodes follow it.
+    plan: bool(process.env.STUDYTOK_LESSON_PLAN, true),
+    // A reviewer pass over every batch (lessons/review.js): facts, quiz validity, level fit.
+    review: bool(process.env.STUDYTOK_LESSON_REVIEW, true),
+    reviewModel: process.env.STUDYTOK_REVIEW_MODEL || 'claude-haiku-5-5',
   },
 
   voice: {

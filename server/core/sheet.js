@@ -158,6 +158,8 @@ export async function dailyRow(date, { now = Date.now() } = {}) {
     'Installs': n('funnel_installed'),
     'Videos made': n('gen_ready'),
     'Videos failed': n('gen_failed'),
+    'Lesson fixes': n('lesson_fixes'),
+    'Lessons dropped': n('lesson_dropped'),
     'Reminders sent': n('push_sent'),
     'Resets': n('reset_feed') + n('reset_everything'),
     'Library size': await db.readyCount(),

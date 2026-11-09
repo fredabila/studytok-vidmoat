@@ -140,6 +140,39 @@ export function teachingVisual(v, { id, start, duration, track, accent, theme = 
 .hd div{background:${accent};color:${t.onAccent};font-size:44px;font-weight:900;text-align:center}`),
         { motion: 'slide-up' });
     }
+    case 'cycle': {
+      const stages = items.slice(0, 6);
+      const n = stages.length, cx = 400, cy = 400, R = n >= 5 ? 300 : 250, big = n <= 4; // five or six stages: a wider ring, smaller pills
+      const pos = stages.map((_, i) => { const a = -Math.PI / 2 + (i / n) * 2 * Math.PI; return { x: cx + R * Math.cos(a), y: cy + R * Math.sin(a), a }; });
+      // Arrows run pill to pill (a gentle outward curve), leaving each pill's edge, so they stay visible however wide the labels are.
+      const widths = stages.map((sName) => Math.min(big ? 300 : 250, (big ? 40 : 34) + esc(sName).length * (big ? 19 : 15)));
+      const exitDist = (w, dx, dy, padX, padY) => Math.min(dx ? (w / 2 + padX) / Math.abs(dx) : 1e9, dy ? (40 + padY) / Math.abs(dy) : 1e9);
+      const arcs = pos.map((p, i) => {
+        const j = (i + 1) % n, q = pos[j];
+        const len = Math.hypot(q.x - p.x, q.y - p.y) || 1, dx = (q.x - p.x) / len, dy = (q.y - p.y) / len;
+        const from = exitDist(widths[i], dx, dy, 10, 10), to = exitDist(widths[j], dx, dy, 22, 22);
+        if (len - from - to < 24) return '';
+        const x1 = p.x + dx * from, y1 = p.y + dy * from, x2 = q.x - dx * to, y2 = q.y - dy * to;
+        const mx = (x1 + x2) / 2, my = (y1 + y2) / 2, ox = mx - cx, oy = my - cy, ol = Math.hypot(ox, oy) || 1;
+        const bend = 0.22 * (len - from - to);
+        return `<path d="M${x1.toFixed(0)} ${y1.toFixed(0)} Q${(mx + (ox / ol) * bend).toFixed(0)} ${(my + (oy / ol) * bend).toFixed(0)} ${x2.toFixed(0)} ${y2.toFixed(0)}" fill="none" stroke="${accent}" stroke-width="10" stroke-linecap="round" marker-end="url(#ah)"/>`;
+      }).join('');
+      const nodes = pos.map((p, i) => { const label = esc(stages[i]); const w = widths[i]; return `<g><rect x="${(p.x - w / 2).toFixed(0)}" y="${(p.y - (big ? 40 : 34)).toFixed(0)}" width="${w}" height="${big ? 80 : 68}" rx="40" fill="${i === 0 ? accent : t.cell}" stroke="${t.border}" stroke-width="3"/><text x="${p.x.toFixed(0)}" y="${(p.y + (big ? 13 : 11)).toFixed(0)}" text-anchor="middle" font-size="${big ? (label.length > 14 ? 30 : 36) : (label.length > 14 ? 25 : 29)}" font-weight="800" fill="${i === 0 ? t.onAccent : t.ink}">${label}</text></g>`; }).join('');
+      return html(id, start, duration, track,
+        `<div class="c y">${v.title ? `<div class="h">${esc(v.title)}</div>` : ''}<svg viewBox="0 0 800 800"><defs><marker id="ah" markerWidth="4" markerHeight="4" refX="2.2" refY="2" orient="auto"><path d="M0 0L4 2L0 4z" fill="${accent}"/></marker></defs>${arcs}${nodes}</svg></div>`,
+        cardCss(accent, theme, `.y{align-items:center;gap:10px}.y svg{width:${v.title ? 540 : 600}px;height:${v.title ? 540 : 600}px;font-family:${FONT}}`),
+        { motion: 'zoom-in' });
+    }
+    case 'bars': {
+      const rows = items.slice(0, 5).map((x) => { const [label, num] = x.split('|'); return { label: label.trim(), value: Number(String(num || '').replace(/[^\d.-]/g, '')) || 0 }; });
+      const max = Math.max(...rows.map((r) => Math.abs(r.value)), 1);
+      return staged(id, start, duration, track, rows.length, (k) =>
+        `<div class="c b">${v.title ? `<div class="h">${esc(v.title)}</div>` : ''}${rows.map((r, i) =>
+          `<div class="r${i <= k ? ' on' : ''}"><span class="l">${esc(r.label)}</span><span class="bar"><i style="width:${Math.max(4, Math.round((Math.abs(r.value) / max) * 100))}%"></i></span><b>${esc(r.value.toLocaleString('en-US'))}</b></div>`).join('')}</div>`,
+      cardCss(accent, theme, `.b{gap:22px}.r{display:grid;grid-template-columns:230px 1fr 150px;align-items:center;gap:18px;opacity:.28}.r.on{opacity:1}
+.r .l{font-size:34px;font-weight:700;line-height:1.1}.r .bar{height:44px;border-radius:22px;background:${t.cell};overflow:hidden}.r .bar i{display:block;height:100%;border-radius:22px;background:${accent}}
+.r b{font-size:40px;font-weight:900;color:${accent};text-align:right}`));
+    }
     case 'definition':
       return html(id, start, duration, track,
         `<div class="c f"><div class="h">Definition</div><div class="w">${esc(v.title)}</div><div class="x">${esc(items[0])}</div></div>`,

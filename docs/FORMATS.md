@@ -52,6 +52,15 @@ immersion, hot takes. `lessons/claude.js` also rotates hook styles (curiosity ga
 surprising number, a question answered in the viewer's head, relatable pain, bold claim) and
 asks for one open loop per episode, closed late.
 
+## Teaching visuals
+
+A beat's `visual.kind` is one of `diagram` (free-hand inline SVG from the writer), `stat`,
+`steps`, `compare`, `timeline`, `definition`, `equation`, `cycle` (3-6 stages drawn as a ring
+with arrows) or `bars` (2-5 "label|number" rows as a bar chart), or `photo` / `footage` (stock).
+`cycle` and `bars` are rendered by `video/visuals.js` from the data alone, so they never come
+out malformed; the writer is told to prefer them, with `steps`, `compare` and `timeline`, over
+a `diagram` whenever the idea fits one.
+
 ## The scene model
 
 `FORMATS[id].scenes(lesson)` returns an ordered list of scenes:

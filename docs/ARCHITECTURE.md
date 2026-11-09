@@ -74,6 +74,36 @@ the frames) and runs in CI on pull requests.
    second slot (`{ kind: 'moment', moment: {...} }` in the same `items` array); the app renders
    it (`addMomentSlide`), no video is involved. Extras come from `POST /api/admin/moments`.
 
+## 3b. Lesson materials (`lessons/plan.js`, `lessons/review.js`, `feed/index.js notesOf`)
+
+Three stages sit around the writer so that what a student watches is planned, checked and
+reusable:
+
+1. **A study plan per unit and level** (`plan.js`, cached as `plan:<lessonKey>`): the unit's
+   concepts in teaching order, each with an objective, key terms, the misconception to address,
+   an example idea and the exam angle, plus a glossary the whole unit shares. Written once by
+   the lesson model; a pack's facts are passed in. Every batch is assigned the next concepts
+   (`plan:<key>:next`), so a unit's videos go core idea → mechanism → worked example → exam
+   trap instead of each batch re-deciding, and terminology stays consistent. Shown to students
+   as "What's in this unit" (`GET /api/units/:id/plan`, tap a unit title in the Library).
+2. **A reviewer pass on every batch** (`review.js`, `STUDYTOK_REVIEW_MODEL`, a smaller model
+   at low effort): facts, numbers and dates; the quick check (exactly one right answer,
+   answerable without the options, no leaked answer, matching explanation); level and
+   language; internal consistency. It returns bounded text fixes by path (`beats[i].text`,
+   `quiz.options[i]`, `quiz.answerIndex`…) or `drop` for an episode that rests on a wrong idea.
+   Applied before sanitising; counted as "Lesson fixes" / "Lessons dropped" in the Daily sheet.
+   A review outage passes the batch through unreviewed.
+3. **Lesson notes** (`notesOf`, `notes` on the public video): the lesson as a revision sheet,
+   with the plan's objective and key terms, the points as spoken, the definitions and equations
+   shown, flashcards, the quick check with its answer and the takeaway. In the app under *Why ›
+   Lesson notes*, with *Copy notes* (plain text plus the public link).
+
+Two structured visuals joined the writer's kit so fewer beats depend on free-hand SVG:
+`cycle` (3-6 stages drawn as a ring with arrows: water cycle, cell cycle, feedback loops) and
+`bars` (2-5 "label|number" rows as a bar chart). The writer is told to prefer them, with
+`steps`, `compare` and `timeline`, over a `diagram` whenever the idea fits. Media ranking sinks
+clip art, logos and text graphics.
+
 ## 4. Making a video (`video/generator.js`)
 
 * `lessons/index.js` returns the next lesson for the unit + audience: a queued episode, else a

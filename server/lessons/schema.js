@@ -5,15 +5,15 @@ import { FORMAT_IDS } from '../video/formats.js';
 // and only the fields that format uses are filled (the rest are empty strings/arrays).
 // Kept short on purpose: every field becomes on-screen text or narration on a phone.
 
-export const VISUAL_KINDS = ['diagram', 'stat', 'steps', 'compare', 'timeline', 'definition', 'equation', 'photo', 'footage'];
-const TEACHING = new Set(['diagram', 'stat', 'steps', 'compare', 'timeline', 'definition', 'equation']);
+export const VISUAL_KINDS = ['diagram', 'stat', 'steps', 'compare', 'timeline', 'definition', 'equation', 'cycle', 'bars', 'photo', 'footage'];
+const TEACHING = new Set(['diagram', 'stat', 'steps', 'compare', 'timeline', 'definition', 'equation', 'cycle', 'bars']);
 export const isTeachingVisual = (kind) => TEACHING.has(kind);
 
 const Visual = z.object({
   kind: z.enum(VISUAL_KINDS).describe('How this beat is shown. Prefer teaching visuals; photo/footage only when seeing the real thing teaches.'),
   query: z.string().describe('photo/footage: stock search query (photo: a specific named thing, e.g. "Pantheon Rome"); else ""'),
   title: z.string().describe('Label/heading for the visual (stat label, steps heading, compare "Left|Right", definition term, equation meaning); else ""'),
-  items: z.array(z.string()).describe('steps: 3-5 short steps; timeline: "1450|Event"; compare: rows "left|right"; definition: [definition, max 130 chars]; equation: 1-3 lines; else []'),
+  items: z.array(z.string()).describe('steps: 3-5 short steps; timeline: "1450|Event"; compare: rows "left|right"; definition: [definition, max 130 chars]; equation: 1-3 lines; cycle: 3-6 stages in order (max 24 chars each); bars: 2-5 "label|number" rows; else []'),
   value: z.number().describe('stat: the number (no separators); else 0'),
   unit: z.string().describe('stat: suffix such as "%", " km/s", "x"; else ""'),
   svg: z.string().describe('diagram only: complete inline <svg viewBox="0 0 800 800">…</svg>; else ""'),
@@ -78,12 +78,13 @@ function sanitizeVisual(v, beat) {
     kind,
     query: clip(v?.query || (kind === 'footage' || kind === 'photo' ? beat.visual || beat.keyTerm : ''), 50),
     title: clip(v?.title, 60),
-    items: list(v?.items, 5, (x) => clip(x, kind === 'definition' ? 150 : 90)),
+    items: list(v?.items, kind === 'cycle' ? 6 : 5, (x) => clip(x, kind === 'definition' ? 150 : kind === 'cycle' ? 24 : 90)),
     value: Number.isFinite(Number(v?.value)) ? Number(v.value) : 0,
     unit: clip(v?.unit, 10),
     svg: kind === 'diagram' ? String(v?.svg || '').slice(0, 14000) : '',
   };
-  const needsItems = { steps: 2, timeline: 2, compare: 2, definition: 1, equation: 1 };
+  if (kind === 'bars') out.items = out.items.filter((x) => /\|\s*-?\d/.test(x)); // "label|number" only
+  const needsItems = { steps: 2, timeline: 2, compare: 2, definition: 1, equation: 1, cycle: 3, bars: 2 };
   if ((needsItems[kind] && out.items.length < needsItems[kind]) || (kind === 'diagram' && !/<svg[\s>]/i.test(out.svg)) || (kind === 'stat' && !out.value)) {
     return { ...out, kind: 'footage', query: clip(beat.visual || beat.keyTerm || out.title, 50), svg: '' };
   }

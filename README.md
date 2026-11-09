@@ -23,6 +23,18 @@ feed request ─► algorithm picks units ─► best unseen ready video for tha
    -> commands -> POST /v1/projects (1 call) -> GET ?view=document -> Redis -> /embed/player
 ```
 
+## How a lesson is made well
+
+Each unit gets a **study plan** (its concepts in teaching order, with objectives, key terms,
+misconceptions, example ideas and the exam angle, plus a glossary), written once per level and
+followed by every episode, so videos progress deliberately and use the same words. Every batch
+then passes a **reviewer model** that checks facts, the quick check and the level, applies
+small fixes and drops anything unsound. Every ready lesson carries **notes**: objective, points,
+definitions, the quick check and the takeaway, one tap from *Why*. Visuals lean on structured
+cards (`cycle`, `bars`, `steps`, `compare`, `timeline`) that always render cleanly, with free-hand
+diagrams kept for what needs drawing. See
+[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md#3b-lesson-materials-lessonsplanjs-lessonsreviewjs-feedindexjs-notesof).
+
 ## Thirty-two video formats (15 to 50 seconds each)
 
 Every lesson is written in one of thirty-two **formats** (`server/video/formats.js`), each with its own

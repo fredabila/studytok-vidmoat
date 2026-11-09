@@ -81,10 +81,12 @@ export function rank(results, avoid, query = '', { preferCommons = false, maxSca
       const text = `${r.sourceUrl || ''} ${r.name || ''} ${(r.tags || []).join(' ')}`.toLowerCase();
       const hits = terms.filter((t) => text.includes(t.replace(/s$/, ''))).length;
       const commons = preferCommons && r.provider === 'commons' ? 2.5 : 0;
+      // Clip art, logos and text graphics are never what a lesson wants behind a beat.
+      const junk = /\b(logo|icon|vector|clipart|clip art|cartoon|illustration|infographic|typography|lettering)\b/.test(text) ? 2 : 0;
       const { width, height } = effectiveDims(r);
       const scale = upscaleFactor(width, height);
       const sharp = Math.max(0, Math.min(1.8, 2.8 - scale));
-      const score = hits * 2 + commons + sharp + (r.duration && r.duration <= 20 ? 0.3 : 0) + Math.random() * 0.8;
+      const score = hits * 2 + commons + sharp - junk + (r.duration && r.duration <= 20 ? 0.3 : 0) + Math.random() * 0.8;
       return { r, score, scale };
     })
     .filter((x) => x.scale <= maxScale)

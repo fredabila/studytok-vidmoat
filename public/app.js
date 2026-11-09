@@ -1027,9 +1027,54 @@ function openWhy(item) {
   const lvl = cfg.levels.find((l) => l.id === p.level);
   if (lvl) reasons.push(['🎓', `Pitched at ${lvl.label}${p.exam ? `, in ${p.exam} terms` : ''}.`]);
   if (!reasons.length) reasons.push(['🎯', 'Picked for you from your course and interests.']);
-  openSheet("Why you're seeing this", el('ul', { class: 'why-list' }, ...reasons.map(([icon, text]) => el('li', {}, el('span', {}, icon), el('span', {}, text)))));
+  const body = el('div', {}, el('ul', { class: 'why-list' }, ...reasons.map(([icon, text]) => el('li', {}, el('span', {}, icon), el('span', {}, text)))));
+  if (d.notes) body.append(el('button', { type: 'button', class: 'btn primary notes-btn', onclick: () => openNotes(item) }, '📝 Lesson notes'));
+  openSheet("Why you're seeing this", body);
 }
 let sheetOnClose = null;
+/** The lesson as a revision sheet: what it set out to teach, the points, definitions, the quick check and the takeaway. */
+function openNotes(item) {
+  const d = item.data, n = d.notes;
+  if (!n) return;
+  sendEvent(d.id, 'notes_open');
+  const sec = (title, ...kids) => (kids.filter(Boolean).length ? el('section', { class: 'notes-sec' }, el('h4', {}, title), ...kids.filter(Boolean)) : null);
+  const body = el('div', { class: 'notes' },
+    el('p', { class: 'notes-kicker' }, `${d.unit?.title || d.topic.label}${d.format?.name ? ` · ${d.format.name}` : ''}${n.reviewed ? ' · reviewed' : ''}`),
+    n.objective ? el('p', { class: 'notes-objective' }, el('b', {}, 'Goal: '), n.objective) : null,
+    n.keyTerms?.length ? el('div', { class: 'chips notes-terms' }, ...n.keyTerms.map((t) => el('span', { class: 'chip-btn on' }, t))) : null,
+    sec('Points', n.points?.length ? el('ol', {}, ...n.points.map((p) => el('li', {}, p))) : null),
+    sec('Definitions', ...(n.definitions || []).map((x) => el('p', {}, el('b', {}, x.term), ': ', x.meaning))),
+    sec('Equations', ...(n.equations || []).map((x) => el('p', { class: 'notes-eq' }, el('code', {}, x.lines.join('   ')), x.meaning ? el('small', {}, x.meaning) : null))),
+    n.myth || n.fact ? sec('Myth and fact', n.myth ? el('p', {}, el('b', {}, 'Myth: '), n.myth) : null, n.fact ? el('p', {}, el('b', {}, 'Fact: '), n.fact) : null) : null,
+    sec('Flashcards', ...(n.cards || []).map((c) => el('p', {}, el('b', {}, c.q), el('br'), c.a))),
+    n.quiz ? sec('Quick check', el('p', {}, n.quiz.question), el('ol', { class: 'notes-opts', type: 'A' }, ...n.quiz.options.map((o, i) => el('li', { class: i === n.quiz.answerIndex ? 'right' : '' }, o))), n.quiz.explanation ? el('p', { class: 'muted' }, n.quiz.explanation) : null) : null,
+    n.takeaway ? el('p', { class: 'notes-takeaway' }, n.takeaway) : null,
+    el('div', { class: 'notes-actions' },
+      el('button', { type: 'button', class: 'btn small', onclick: async () => {
+        const text = [n.title || d.title, n.objective && `Goal: ${n.objective}`, ...(n.points || []).map((p, i) => `${i + 1}. ${p}`), ...(n.definitions || []).map((x) => `${x.term}: ${x.meaning}`), n.quiz && `Q: ${n.quiz.question} → ${n.quiz.options[n.quiz.answerIndex]}`, n.takeaway && `Remember: ${n.takeaway}`, `${location.origin}/v/${d.id}`].filter(Boolean).join('\n');
+        try { await navigator.clipboard.writeText(text); toast('Notes copied.'); } catch { toast("Couldn't copy."); }
+        sendEvent(d.id, 'notes_copy');
+      } }, 'Copy notes'),
+      d.pack?.link ? el('a', { class: 'btn small ghost', href: d.pack.link, target: '_blank', rel: 'noopener noreferrer' }, d.pack.cta || 'Source') : null));
+  openSheet(n.title || d.title || 'Lesson notes', body);
+}
+/** What StudyTok plans to teach in a unit, and what it has covered so far. */
+async function openUnitPlan(u) {
+  track('plan_open', { unitId: u.id });
+  const r = await api('GET', `/api/units/${encodeURIComponent(u.id)}/plan`).catch(() => null);
+  const body = el('div', { class: 'plan' });
+  if (!r) { body.append(el('p', { class: 'muted' }, "Couldn't load this unit's plan.")); }
+  else if (!r.plan) {
+    body.append(el('p', { class: 'muted' }, r.unit.summary || ''), el('p', {}, 'The study plan is written with the first lessons of this unit. Watch one and come back.'));
+  } else {
+    const done = r.plan.concepts.filter((c) => c.covered).length;
+    body.append(el('p', { class: 'muted' }, `${done} of ${r.plan.concepts.length} concepts covered so far. Each lesson teaches one, in this order.`));
+    body.append(el('ol', { class: 'plan-list' }, ...r.plan.concepts.map((c) => el('li', { class: c.covered ? 'done' : '' },
+      el('b', {}, c.title), el('span', {}, c.objective), c.misconception ? el('small', {}, `Watch out: ${c.misconception}`) : null))));
+    if (r.plan.glossary?.length) body.append(el('h4', {}, 'Glossary'), el('dl', { class: 'plan-gloss' }, ...r.plan.glossary.flatMap((g) => [el('dt', {}, g.term), el('dd', {}, g.meaning)])));
+  }
+  openSheet(u.title, body);
+}
 function openSheet(title, body, onClose = null) {
   $('#sheet-title').textContent = title;
   $('#sheet-body').replaceChildren(body);
@@ -1441,7 +1486,7 @@ async function showLibrary() {
       box.checked = u.active;
       box.onchange = async () => { box.checked ? activeIds.add(u.id) : activeIds.delete(u.id); u.active = box.checked; row.classList.toggle('off', !u.active); await saveUnits(); };
       const row = el('div', { class: `unit-row${u.active ? '' : ' off'}`, 'data-search': u.title.toLowerCase() },
-        el('label', { class: 'unit-name' }, box, el('span', {}, u.title), u.custom ? el('span', { class: 'tag' }, 'yours') : null, u.dueForReview && u.active ? el('span', { class: 'due' }, 'Review due') : null),
+        el('label', { class: 'unit-name' }, box, el('button', { type: 'button', class: 'unit-title', title: 'What is in this unit', onclick: (e) => { e.preventDefault(); openUnitPlan(u); } }, u.title), u.custom ? el('span', { class: 'tag' }, 'yours') : null, u.dueForReview && u.active ? el('span', { class: 'due' }, 'Review due') : null),
         el('div', { class: 'meter', role: 'meter', 'aria-valuemin': '0', 'aria-valuemax': '100', 'aria-valuenow': String(Math.round(u.mastery * 100)), 'aria-label': `${u.title} mastery` },
           el('i', { style: `width:${Math.round(u.mastery * 100)}%` })),
         u.custom

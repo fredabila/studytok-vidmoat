@@ -6,6 +6,8 @@
 
 import { config } from '../core/config.js';
 import { packOfUnit } from '../curriculum/packs.js';
+import { unitPlan, nextConcepts, planContext } from './plan.js';
+import { reviewEpisodes } from './review.js';
 import { kv } from '../core/kv.js';
 import { normalize } from '../curriculum/catalog.js';
 import { topic as topicOf } from '../curriculum/topics.js';
@@ -45,13 +47,29 @@ async function writeBatch(unit, audience, key, covered) {
   const formats = pickFormats(unit.topic, config.anthropic.episodesPerCall, { recent, performance, allowed });
   const hooks = await hookGuidance(unit.topic).catch(() => null);
   const quizNote = await quizGuidance(unit.topic).catch(() => null);
-  const raws = await writeEpisodes({ extra: packContext(unit),
+  // The unit's study plan (cached per unit and level): each episode in the batch is assigned
+  // the next concept, so a unit's videos progress deliberately and share one glossary.
+  const facts = packFacts(unit);
+  const plan = await unitPlan(unit, audience, key, { facts });
+  const picks = await nextConcepts(plan, key, formats.length);
+  const written = await writeEpisodes({ extra: [...packContext(unit), ...planContext(plan, picks)],
     unit, audience, covered, formats, count: formats.length, accent: topicOf(unit.topic).accent, hooks, quizNote,
   });
-  const lessons = [];
-  for (const raw of raws) {
-    try { lessons.push(sanitizeLesson(raw, unit.topic)); } catch (err) { console.warn('[lessons] dropped an episode:', err.message); }
+  // A reviewer pass: facts, the quick check, level fit; small fixes applied, unsound episodes dropped.
+  const review = await reviewEpisodes(written, { unit, audience, facts });
+  if (review.reviewed) {
+    const day = new Date().toISOString().slice(0, 10);
+    if (review.fixes) await kv.hincrby(`events:day:${day}`, 'lesson_fixes', review.fixes);
+    if (review.dropped) await kv.hincrby(`events:day:${day}`, 'lesson_dropped', review.dropped);
+    if (review.notes.length) console.log(`[review] ${unit.id}: ${review.notes.join(' | ')}`);
   }
+  const lessons = [];
+  review.episodes.forEach((raw, i) => {
+    try {
+      const concept = picks[i] ? { title: picks[i].title, objective: picks[i].objective, keyTerms: picks[i].keyTerms } : null;
+      lessons.push({ ...sanitizeLesson(raw, unit.topic), concept, reviewed: review.reviewed });
+    } catch (err) { console.warn('[lessons] dropped an episode:', err.message); }
+  });
   if (!lessons.length) throw new Error('No usable episodes');
   await kv.lpush(`covered:${key}`, ...lessons.flatMap((l) => [l.title, l.subtopic]));
   await kv.ltrim(`covered:${key}`, 0, 199);
@@ -66,6 +84,14 @@ async function writeBatch(unit, audience, key, covered) {
  * @param audience  { level, levelLabel, audience, country, institution, exam }
  * @returns {Promise<{ lesson, source: 'queue'|'claude'|'bank' }>}
  */
+/** The facts a unit must respect: its pack's, when it comes from one. */
+export function packFacts(unit) {
+  const pack = packOfUnit(unit.id);
+  if (!pack) return [];
+  const u = pack.units.find((x) => x.id === unit.id);
+  return [...(u?.facts || []), ...pack.facts];
+}
+
 /** What the writer is told about a pack unit: the pack, its facts, assets and quiz bank. */
 export function packContext(unit) {
   const pack = packOfUnit(unit.id);
