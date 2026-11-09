@@ -186,6 +186,37 @@ so it costs nothing, and it is paced so the feed stays a feed. `feed/moments.js`
   never counts as a view, a served video or syllabus progress. `moment_view` and `moment_cta`
   events say which ones get read and tapped (the Daily sheet counts them under "Moments shown").
 
+## Calibration (`feed/calibration.js`)
+
+Every multiplier in stage 2 started as a judgement call. The calibration loop checks each one
+against what students then did:
+
+* **Decisions.** When a video is served, its score parts are kept for a day
+  (`decision:{user}:{video}`).
+* **Outcomes.** When the student leaves the video (watch fraction, early leave) or answers its
+  quick check, the outcome is folded into counters per rule and bucket: did that rule push the
+  video *up* (multiplier above 1.02), *down* (below 0.98) or leave it *flat*. Watch fraction is
+  also counted by posture (moving, in hand, lying flat; dense versus light formats) and by the
+  student's local hour.
+* **Lift.** Nightly (with the Daily sheet rows), each rule's *up* bucket is compared with its
+  *flat* bucket: if the videos a rule promoted were watched longer, the rule has lift. The
+  *down* bucket (videos served despite the rule, when nothing else was ready) is used the other
+  way round when it has enough data.
+* **Weights.** For the judgement-call rules (diversity, fatigue, difficulty, freshness, context,
+  retrieval, easing) a shrink weight in 0..1 is fitted from the lift: no lift → 0.3, +14 % → 1,
+  −6 % → 0; below 150 outcomes per bucket the weight stays 1 (the rule as designed). The
+  ranking applies `1 + w × (multiplier − 1)`, so a rule that does not earn its keep fades
+  towards 1.0 on its own. Quality and taste are evidence-based already and are not shrunk.
+* **Where to read it.** The sheet's *Calibration* tab (one row per rule bucket, posture class
+  and hour, with lift and weight) and `GET /api/admin/calibration`.
+
+Reminders now go out at each student's own usual hour (the mode of their hour-of-day counts,
+18:00 until there are ten views), on an hourly cron, instead of 18:00 UTC for everyone.
+
+Not calibrated yet: the stage-1 unit weights, the breather and moment thresholds, and the
+exploration rate. Video quality and format performance have no decay, so old evidence keeps
+its weight.
+
 ## What the algorithm does not do (yet)
 
 * No collaborative filtering across students (the library is small and per unit); format and

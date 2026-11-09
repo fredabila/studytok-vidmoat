@@ -100,12 +100,15 @@ test('remindDue sends one message per student, skips students without devices, t
   assert.equal(Number(await kv.get(`push:last:${streaky}`)), NOW);
   assert.equal(Number((await kv.hgetall(`events:day:${day(NOW)}`)).push_sent), 3);
 
-  // Twelve hours later nothing goes out; twenty-one hours later the reviews are due again.
+  // Twelve hours later nothing goes out (throttled); twenty-one hours later it is 15:00, nobody's
+  // usual hour and outside the evening window, so still nothing; at 18:00 the next day the
+  // reviews are due again.
   sent.length = 0;
   assert.equal((await push.remindDue({ now: NOW + 12 * HOUR })).sent, 0);
-  const later = await push.remindDue({ now: NOW + 21 * HOUR });
+  assert.equal((await push.remindDue({ now: NOW + 21 * HOUR })).sent, 0, 'reminders wait for the student\'s usual hour');
+  const later = await push.remindDue({ now: NOW + 24 * HOUR });
   assert.ok(later.sent >= 1);
-  assert.ok(sent.every((s) => s.payload.body.includes('due for review')), 'at 15:00 the streak message is out of its window');
+  assert.ok(sent.some((s) => s.payload.body.includes('due for review')));
 });
 
 test('a 410 from the push service removes that subscription and keeps the others', async () => {

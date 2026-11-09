@@ -182,7 +182,7 @@ function styleTab_(sheet, header) {
 }
 
 /** Timestamps and ids stay plain text, so Sheets never turns "2026-11-08 17:44:33" into a date serial. */
-var TEXT_COLUMNS = ['Joined', 'Last seen', 'Updated', 'When', 'Date', 'User ID', 'Vidmoat ID', 'Own account', 'Quiz accuracy'];
+var TEXT_COLUMNS = ['Joined', 'Last seen', 'Updated', 'When', 'Date', 'User ID', 'Vidmoat ID', 'Own account', 'Quiz accuracy', 'Row', 'Mean watch', 'Early leaves', 'Completion', 'Lift vs flat', 'Weight'];
 function textColumns_(sheet, header) {
   header.forEach(function (k, i) { if (TEXT_COLUMNS.indexOf(k) !== -1) sheet.getRange(1, i + 1, sheet.getMaxRows(), 1).setNumberFormat('@'); });
 }

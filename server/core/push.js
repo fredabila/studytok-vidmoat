@@ -95,15 +95,31 @@ export async function sendTo(userId, payload) {
 }
 
 /** The one reminder a student should get right now, or null. Pure: easy to test, no storage. */
+/**
+ * The local hour a student usually studies at: the mode of their hour-of-day counts once there
+ * are ten views, else 18:00. Reminders go out at that hour, not at a fixed time for everyone.
+ */
+export function preferredHour(signals) {
+  const hours = signals?.hours || [];
+  const total = hours.reduce((a, b) => a + (b || 0), 0);
+  if (total < 10) return 18;
+  let best = 18, max = -1;
+  hours.forEach((n, h) => { if ((n || 0) > max) { max = n || 0; best = h; } });
+  return best;
+}
+
 export function pickReminder({ signals, progress, now = Date.now() }) {
   const streak = streakOf(signals, now);
   const activeToday = Boolean(signals?.days?.[day(now)]);
   const hour = hourOf(now, signals?.device?.tz);
-  if (streak >= 2 && !activeToday && hour >= 17 && hour <= 21) {
+  const mine = preferredHour(signals);
+  // The cron runs hourly: a student is reminded in their own usual hour (or the evening for a streak at risk).
+  if (streak >= 2 && !activeToday && (hour === mine || (hour >= 17 && hour <= 21))) {
     return { title: 'StudyTok', body: `Your ${streak}-day streak ends tonight. One lesson keeps it.`, url: '/#feed', tag: 'studytok-reminder' };
   }
   const due = Object.values(progress || {}).filter((s) => s && s.box >= 0 && s.due && s.due <= now).length;
-  if (due >= 2) {
+  // Due reviews: at the student's usual hour (18:00 until there is a pattern); the hourly cron finds it.
+  if (due >= 2 && !activeToday && hour === mine) {
     return { title: 'StudyTok', body: `${due} units are due for review. 5 minutes brings them back.`, url: '/#feed', tag: 'studytok-reminder' };
   }
   return null;

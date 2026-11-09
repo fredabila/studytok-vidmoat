@@ -23,6 +23,7 @@ import * as db from '../core/db.js';
 import { applyEvent, emptyState, mastery } from './ranking.js';
 import { audienceFor } from './index.js';
 import { isBreatherUnit } from './breathers.js';
+import { recordOutcome, recordQuizOutcome } from './calibration.js';
 import { FORMAT_IDS } from '../video/formats.js';
 
 // ---- Taxonomy ------------------------------------------------------------------------------------
@@ -280,6 +281,7 @@ export async function ingest(userId, batch) {
         session.lastFormats = [format, ...session.lastFormats].slice(0, 6);
         session.lastTopics = [topic, ...session.lastTopics].slice(0, 6);
         if (e.dir) writes.push(stat(v.id, `dir_${e.dir.replace(/[^a-z]/g, '').slice(0, 8)}`));
+        writes.push(...await recordOutcome(userId, v, { pct, early, posture, hour })); // calibration
         // Where in the video people leave (by scene kind), per format: the drop-off curve.
         const leftIn = pct < 0.95 ? sceneKindAt(v, e.t ?? e.maxT ?? 0) : 'end';
         if (leftIn) writes.push(kv.hincrby(`stats:format:${format}:leaveAt`, leftIn, 1));
@@ -343,6 +345,7 @@ export async function ingest(userId, batch) {
         signals.quiz.n++; signals.quiz.msSum += Math.min(120000, e.ms || 0); if (e.correct) signals.quiz.right++;
         session.quizN = (session.quizN || 0) + 1; if (e.correct) session.quizRight = (session.quizRight || 0) + 1;
         if (!e.correct) writes.push(recordMiss(userId, v, e.at)); // comes back as a recall card
+        writes.push(...await recordQuizOutcome(userId, v.id, Boolean(e.correct))); // calibration
         if (e.correct) { session.rightStreak++; session.wrongStreak = 0; } else { session.wrongStreak++; session.rightStreak = 0; }
         unitEvent('quiz_answer', { correct: Boolean(e.correct) });
         break;

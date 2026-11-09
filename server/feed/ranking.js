@@ -212,7 +212,10 @@ export const FORMAT_GENTLENESS = { explain: 1, eli5: 1, wow: 0.95, realworld: 0.
  * @param session  { viewed, lastFormats, lastTopics, wrongStreak, rightStreak, earlyStreak }
  * @returns {{ score, parts }}
  */
-export function scoreVideo(video, stats, signals = {}, session = {}, { rand = Math.random, now = Date.now(), review = false, gentle: easeIn = false } = {}) {
+export function scoreVideo(video, stats, signals = {}, session = {}, { rand = Math.random, now = Date.now(), review = false, gentle: easeIn = false, weights = null } = {}) {
+  // Calibration (feed/calibration.js): a fitted weight w in 0..1 per rule shrinks its multiplier
+  // towards 1 (w = 1 keeps the rule as designed, w = 0 switches it off).
+  const shrink = (rule, m) => (weights && weights[rule] != null ? 1 + weights[rule] * (m - 1) : m);
   const format = video.format || 'explain';
   const quality = videoQuality(stats);
   const formatAffinity = affinity(signals.formats?.[format], rand);
@@ -247,6 +250,6 @@ export function scoreVideo(video, stats, signals = {}, session = {}, { rand = Ma
   // Back after days away: the first page eases in with the gentler formats.
   const easing = easeIn ? 0.75 + 0.5 * gentle : 1;
 
-  const score = quality * taste * diversity * fatigue * difficulty * freshness * context * retrieval * easing;
+  const score = quality * taste * shrink('diversity', diversity) * shrink('fatigue', fatigue) * shrink('difficulty', difficulty) * shrink('freshness', freshness) * shrink('context', context) * shrink('retrieval', retrieval) * shrink('easing', easing);
   return { score, parts: { quality: +quality.toFixed(3), formatAffinity: +formatAffinity.toFixed(3), topicAffinity: +topicAffinity.toFixed(3), diversity, fatigue: +fatigue.toFixed(3), difficulty: +difficulty.toFixed(3), freshness: +freshness.toFixed(3), context: +context.toFixed(3), ...(review ? { retrieval } : {}), ...(easeIn ? { easing: +easing.toFixed(3) } : {}) } };
 }

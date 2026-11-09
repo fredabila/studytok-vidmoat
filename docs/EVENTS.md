@@ -75,6 +75,8 @@ acceleration samples never leave the device, and nothing is recorded when permis
 | `library_search` | `q` | typed in the Library search box |
 | `explore_open` / `explore_search` | / `q` | opened the Explore tab / searched the packs |
 | `notes_open` / `notes_copy` | | opened / copied a lesson's notes |
+
+Every `leave` and `quiz_answer` is also joined to the decision that served the video (`feed/calibration.js`): per ranking rule and bucket, by posture and by local hour. See docs/ALGORITHM.md › Calibration.
 | `plan_open` | `unitId` | opened a unit's study plan from the Library |
 | `quiz_shown` / `quiz_hold` | `t` | options appeared / the video was held at the question |
 | `quiz_answer` | `choice`, `correct`, `ms` (time to answer) | tapped an option |

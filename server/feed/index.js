@@ -14,6 +14,7 @@ import { lessonKey } from '../lessons/index.js';
 import { startVideo, readyKeyFor } from '../video/generator.js';
 import { pickUnits, mastery, scoreVideo, exploreRate, applyEvent, emptyState, examUrgency } from './ranking.js';
 import { pickRecall, noteRecall, recallItem, getMisses } from './recall.js';
+import { noteDecision, getWeights } from './calibration.js';
 import { ingest, getSignals, getSession, noteServed, noteBreather, studentStats, emptySignals } from './events.js';
 import { needsBreather, pickBreather, isBreatherUnit, BREATHER_REASONS } from './breathers.js';
 import { pickMoment, noteMoment, momentContext, momentItem } from './moments.js';
@@ -204,7 +205,7 @@ async function candidatesFor(user) {
 /** A due unit's lessons are retrieval practice, written and filed separately from its first explanations. */
 export const reviewAudience = (audience) => ({ ...audience, lessonStyle: `${audience.lessonStyle || ''}|review`, review: true });
 
-async function reusable(userId, readyKey, taken, { signals, session, review = false, gentle = false } = {}) {
+async function reusable(userId, readyKey, taken, { signals, session, review = false, gentle = false, weights = null } = {}) {
   const ids = (await db.readyIds(readyKey, 60)).filter((id) => !taken.has(id));
   if (!ids.length) return null;
   const blocked = await db.inAnySet(userId, ['seen', 'served'], ids);
@@ -214,7 +215,7 @@ async function reusable(userId, readyKey, taken, { signals, session, review = fa
   const stats = await Promise.all(videos.map((v) => db.getStats(v.id)));
   let best = null;
   videos.forEach((v, i) => {
-    const r = scoreVideo(v, stats[i], signals, session, { review, gentle });
+    const r = scoreVideo(v, stats[i], signals, session, { review, gentle, weights });
     if (!best || r.score > best.score) best = { video: v, ...r };
   });
   return best;
@@ -272,6 +273,7 @@ export async function nextItems(userId, count = 3) {
   const urgency = examUrgency(user.profile?.examDate);
   const stale = !session.lastAt || Date.now() - session.lastAt > 12 * 3600000;
   const gentle = stale && signals.lastSeenAt > 0 && Date.now() - signals.lastSeenAt > 3 * 86400000;
+  const weights = await getWeights(); // calibration: fitted shrink per rule (empty until there is evidence)
   const picks = pickUnits(candidates, states, recent, Math.min(candidates.length, count + 4), { hasCourse, explore: exploreRate(servedSoFar), urgency });
   const pending = [];
   const taken = new Set();
@@ -285,8 +287,8 @@ export async function nextItems(userId, count = 3) {
   for (const pick of picks) {
     // A unit due for review: its retrieval-practice pool first, else its ordinary pool scored for review.
     const review = (pick.parts?.review || 0) > 0 || (urgency >= 0.5 && Boolean(states[pick.unit.id]?.lastSeen));
-    const best = (review && await reusable(userId, readyKeyFor(pick.unit.id, reviewAudience(audience)), taken, { signals, session: pageSession, review, gentle }))
-      || await reusable(userId, readyKeyFor(pick.unit.id, audience), taken, { signals, session: pageSession, review, gentle });
+    const best = (review && await reusable(userId, readyKeyFor(pick.unit.id, reviewAudience(audience)), taken, { signals, session: pageSession, review, gentle, weights }))
+      || await reusable(userId, readyKeyFor(pick.unit.id, audience), taken, { signals, session: pageSession, review, gentle, weights });
     if (best) {
       taken.add(best.video.id);
       ready.push({ pick, video: best.video, videoParts: best.parts });
@@ -382,6 +384,8 @@ export async function nextItems(userId, count = 3) {
   }
   await kv.ltrim(`user:${userId}:recentUnits`, 0, 19);
   await noteServed(userId, page.filter((x) => x.video).map((x) => x.video));
+  // Calibration: keep why each video was served, so its outcome can be joined to the rules that picked it.
+  for (const x of page) if (x.video && x.why?.video) await noteDecision(userId, x.video.id, x.why.video, { viewed: session.viewed || 0 });
   return { items: page, pending, credits };
 }
 

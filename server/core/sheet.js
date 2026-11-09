@@ -15,6 +15,7 @@ import { getProgress } from '../feed/index.js';
 import { mastery } from '../feed/ranking.js';
 import { LEVEL_BY_ID } from '../curriculum/levels.js';
 import { config } from './config.js';
+import { calibrationReport, calibrationRows, fitWeights } from '../feed/calibration.js';
 
 export const enabled = () => Boolean(config.sheet.url && config.sheet.secret);
 const MIN_GAP_MS = 10 * 60 * 1000; // a student's row is refreshed at most every ten minutes
@@ -173,6 +174,14 @@ export async function syncDaily() {
   const today = new Date().toISOString().slice(0, 10);
   const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
   return post([{ op: 'upsert', tab: 'Daily', key: 'Date', rows: [await dailyRow(yesterday), await dailyRow(today)] }]);
+}
+
+/** The Calibration tab: lift per ranking rule, watch by posture and by hour, and the fitted weights (nightly, with the Daily rows). */
+export async function syncCalibration() {
+  await fitWeights();
+  if (!enabled()) return;
+  const rows = calibrationRows(await calibrationReport());
+  return rows.length ? post([{ op: 'upsert', tab: 'Calibration', key: 'Row', rows }]) : null;
 }
 
 /** Rebuilds the Users tab from every student in storage (and fills the `users` index). Returns how many rows went. */
