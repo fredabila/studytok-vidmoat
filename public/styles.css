@@ -1195,3 +1195,17 @@ body.channel-open .sheet { z-index: 70; }
 .tk-send:disabled { background: #e3e3e6; color: #fff; cursor: default; }
 .tk-send svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; }
 .tk-rules { margin: 6px 4px 0; font-size: 11px; color: #a0a0a0; }
+
+/* ---- Native feel: press feedback, no selection or long-press menus on controls, page transitions ---- */
+button, .btn, .tabbtn, .set-row, .chip-btn, .rail-btn, .tile, a.btn { touch-action: manipulation; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+img, svg { -webkit-user-drag: none; -webkit-touch-callout: none; }
+.tabbar, .rail, .feed-head, .tk-head, .sheet-grip, #sheet-title { -webkit-user-select: none; user-select: none; }
+.btn, .set-row, .chip-btn, .game-btn, .mock-opt, .quiz-opt, .tk-send, .tile { transition: transform .12s var(--ease), filter .12s; }
+.btn:active:not(:disabled), .set-row:active, .chip-btn:active, .game-btn:active:not(:disabled), .mock-opt:active:not(:disabled), .tk-send:active:not(:disabled), .tile:active { transform: scale(.97); filter: brightness(.96); }
+.tabbtn:active svg { transform: scale(.9); }
+.tk-heart:active svg { transform: scale(.8); }
+.view-page:not([hidden]) { animation: view-in .22s var(--ease); }
+@keyframes view-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+.sheet-grip { height: 5px; margin-top: -2px; padding: 0; cursor: grab; }
+.sheet-panel { will-change: translate; }
+@media (prefers-reduced-motion: reduce) { .view-page:not([hidden]) { animation: none; } .btn:active, .set-row:active { transform: none; } }
