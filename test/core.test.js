@@ -135,6 +135,13 @@ test('every format composes cleanly, silent and narrated, with its own skin', ()
         const on = commands.filter((c) => c.trackIndex === track && typeof c.start === 'number' && c.op !== 'addKeyframe').sort((a, b) => a.start - b.start);
         on.slice(1).forEach((c, k) => assert.ok(on[k].start + on[k].duration <= c.start, `${id}: ${on[k].clipId} overlaps ${c.clipId} on track ${track}`));
       }
+      // Motion presets animate around the vertical centre and move placed cards there: keyframes only.
+      assert.ok(!commands.some((c) => c.op === 'applyMotionPreset'), `${id}: no motion presets`);
+      for (const c of commands.filter((k) => k.op === 'addKeyframe' && k.prop === 'y')) {
+        const clip = commands.find((k) => k.clipId === c.clipId && k.op.startsWith('add') && k.op !== 'addKeyframe');
+        const last = commands.filter((k) => k.op === 'addKeyframe' && k.clipId === c.clipId && k.prop === 'y').at(-1);
+        assert.equal(last.value, clip.patch?.y ?? 0, `${id}: ${c.clipId} settles where it was placed`);
+      }
       assert.ok(duration > 15 && duration < 90, `${id}: duration ${duration}`);
       if (l.quiz) assert.ok(quiz && quiz.from < quiz.hold && quiz.hold < quiz.reveal, `${id}: quiz timing`);
       else assert.equal(quiz, null);
