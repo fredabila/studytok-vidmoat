@@ -25,6 +25,7 @@ import { audienceFor } from './index.js';
 import { isBreatherUnit } from './breathers.js';
 import { recordOutcome, recordQuizOutcome } from './calibration.js';
 import { armOutcomeWrites, armCountWrites } from './experiments.js';
+import { gameOutcome } from './games.js';
 import { FORMAT_IDS } from '../video/formats.js';
 
 // ---- Taxonomy ------------------------------------------------------------------------------------
@@ -62,6 +63,10 @@ export const EVENT_SPECS = {
   recall_view: { fields: { id: 's' } },
   recall_answer: { fields: { id: 's', correct: 'b', ms: 'n' } },
   recall_skip: { fields: { id: 's' } },
+  game_view: { fields: { id: 's', game: 's' } },
+  game_open: { fields: { game: 's' } },
+  // wrong: the scored item indices the student missed, comma-separated ("0,3").
+  game_result: { fields: { id: 's', game: 's', score: 'i', total: 'i', wrong: 's', ms: 'n' } },
   reset: { fields: { scope: 's' } },
   play_pref: { fields: { key: 's', value: 's' } },
   gaps_on: { video: true, fields: { auto: 'b' } },
@@ -359,6 +364,23 @@ export async function ingest(userId, batch) {
         break;
       }
       case 'quiz_skip': writes.push(stat(v.id, 'quizSkips'), fstat(v, 'quizSkips')); signals.quiz.skips++; bump(signals.formats, format, 'quizSkips'); break;
+      case 'game_result': {
+        // A game is retrieval practice on lessons already watched: each unit behind it counts one
+        // quick-check answer (right if every item from it was right), and a missed lesson's own
+        // quick check comes back as a recall card.
+        const wrong = String(e.wrong || '').split(',').map((x) => parseInt(x, 10)).filter(Number.isInteger);
+        const out = await gameOutcome(userId, e.id, wrong);
+        if (!out) break;
+        signals.games ||= { n: 0, items: 0, right: 0 };
+        signals.games.n++; signals.games.items += out.total; signals.games.right += Math.max(0, out.total - wrong.length);
+        for (const [uid, ok] of Object.entries(out.units)) {
+          if (isBreatherUnit(uid)) continue;
+          progress[uid] = applyEvent(progress[uid] || emptyState(), 'quiz_answer', { correct: ok, now: e.at });
+        }
+        for (const id of out.missedVideos) { const mv = await videoOf(id); if (mv?.quiz) writes.push(recordMiss(userId, mv, e.at)); }
+        writes.push(kv.hincrby(`events:day:${day(e.at)}`, `game_${out.type}`, 1));
+        break;
+      }
       case 'recall_answer': {
         signals.recall ||= { n: 0, right: 0, retired: 0 };
         signals.recall.n++; if (e.correct) signals.recall.right++;

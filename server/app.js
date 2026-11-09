@@ -22,6 +22,7 @@ import { signInEnabled, signInRequired, startSignIn, finishSignIn } from './core
 import { FORMATS, FORMAT_IDS } from './video/formats.js';
 import { ingest, stats as eventStats, studentStats } from './feed/events.js';
 import { syncUser, syncDaily, syncCalibration, resyncAll, enabled as sheetEnabled } from './core/sheet.js';
+import { gameFor, noteGame, GAME_TYPES } from './feed/games.js';
 import { calibrationReport } from './feed/calibration.js';
 import { mastery } from './feed/ranking.js';
 import { getProgress, audienceFor } from './feed/index.js';
@@ -353,6 +354,14 @@ async function route(req, res, url) {
   }
 
   if (key === 'GET /api/library') return send(res, 200, await library(userId));
+  // A mini game on demand, from the student's recently watched lessons (?type=match|order|sort|truefalse|fillgap).
+  if (key === 'GET /api/games/next') {
+    const type = url.searchParams.get('type');
+    const item = await gameFor(userId, { type: GAME_TYPES.includes(type) ? type : null });
+    if (!item) return send(res, 404, { error: 'Watch a few more lessons first: games are made from what you have watched.' });
+    await noteGame(userId, item, {});
+    return send(res, 200, { item });
+  }
   // The study plan StudyTok follows for one of the student's units (what's in it, what is covered).
   const planMatch = /^\/api\/units\/([A-Za-z0-9:_.-]{1,80})\/plan$/.exec(path);
   if (req.method === 'GET' && planMatch) {

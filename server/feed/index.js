@@ -16,6 +16,7 @@ import { pickUnits, mastery, scoreVideo, exploreRate, applyEvent, emptyState, ex
 import { pickRecall, noteRecall, recallItem, getMisses } from './recall.js';
 import { noteDecision, getWeights } from './calibration.js';
 import { settingsFor } from './experiments.js';
+import { pickGame, noteGame, playable, materialOf, watchedVideos } from './games.js';
 import { ingest, getSignals, getSession, noteServed, noteBreather, studentStats, emptySignals } from './events.js';
 import { needsBreather, pickBreather, isBreatherUnit, BREATHER_REASONS } from './breathers.js';
 import { pickMoment, noteMoment, momentContext, momentItem } from './moments.js';
@@ -367,13 +368,16 @@ export async function nextItems(userId, count = 3) {
     // otherwise a moment may. Openers (welcome back, last time, exam countdown) go first.
     const miss = await pickRecall(userId, { session });
     if (miss) { page.splice(1, 0, { moment: recallItem(miss) }); await noteRecall(userId, session); }
+    // A mini game from lessons already watched, when no recall card took the slot.
+    const game = miss ? null : await pickGame(userId, { session });
+    if (game) { page.splice(1, 0, { moment: game }); await noteGame(userId, game, session); }
     const watched = await db.countSet(userId, 'seen');
     const ctx = momentContext({ user, signals, saved: await db.countSet(userId, 'saved'), watched,
       invites: user.memberNo ? await db.referralCount(user.memberNo) : 0, pushEnabled: push.enabled(), pushSubscribed: push.enabled() && (await push.subscriptions(userId)).length > 0 });
     const stats = await studentStats(userId, { watched, progress: states, masteryOf: mastery });
     stats.unitsTotal = candidates.filter((c) => c.kind === 'course').length || candidates.length;
     const exam = user.profile?.examDate ? { name: user.profile.exam || 'your exam', days: Math.ceil((Date.parse(user.profile.examDate) - Date.now()) / 86400000) } : null;
-    const moment = miss ? null : await pickMoment(userId, { session, ctx, stats, exam, gap: exp.moments.gap, hasBreather: page.some((x) => x.why?.kind === 'breather') });
+    const moment = miss || game ? null : await pickMoment(userId, { session, ctx, stats, exam, gap: exp.moments.gap, hasBreather: page.some((x) => x.why?.kind === 'breather') });
     if (moment) { page.splice(moment.opener ? 0 : 1, 0, { moment: momentItem(moment, ctx) }); await noteMoment(userId, moment, session.viewed || 0); }
   }
 
@@ -611,6 +615,7 @@ export async function library(userId) {
     packs: PACKS.map((p) => ({ ...publicPack(p), added: (user.packs || []).includes(p.slug) })),
     units, interests: user.interests, saved, history,
     misses: (await getMisses(userId)).map(recallItem),
+    games: playable(materialOf(await watchedVideos(userId))), // which mini games the student's history can make
   };
 }
 

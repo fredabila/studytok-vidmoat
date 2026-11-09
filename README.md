@@ -80,6 +80,11 @@ with match counts per tab and a one-tap "add as a topic" when nothing matches; l
 inside a bounded box rather than making the page endless; keyboard users get `/` for search and
 arrow keys on the tabs.
 
+**Mini games.** Between lessons, and on demand from the Library: match it, put it in order,
+sort it, a timed true-or-false round and fill the gap, all built from lessons the student has
+watched. Results move mastery and send missed lessons back as recall cards. See
+[docs/ALGORITHM.md](docs/ALGORITHM.md#mini-games-feedgamesjs).
+
 **An interactive player.** The app edits the lesson document before Vidmoat's player gets it,
 and re-sends it live: recall mode blanks the key terms out of the on-screen text and mutes the
 narration until you tap to reveal (retrieval practice from any explainer, no new video made),

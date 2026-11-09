@@ -121,6 +121,12 @@ saved lessons, settings and member number stay, and new lessons start from the b
 your syllabus. *Reset everything* also clears your course, saved lessons and settings, and you
 set up again. Your account, member number, invites and free-lesson count always stay.
 
+**What are the games between lessons?**
+Short games made from lessons you have already watched: match terms to their meanings, put
+steps or dates in order, sort things into two sides, a six-second true-or-false round, and fill
+the missing key term. They count like quick checks: what you get right builds mastery, and a
+lesson you miss comes back for review. Play one any time from Library › Practice games.
+
 **Where are the notes for a lesson?**
 Tap *Why* on the video, then *Lesson notes*: what the lesson set out to teach, its points,
 definitions, the quick check with the answer and the one-line takeaway. *Copy notes* puts it on
