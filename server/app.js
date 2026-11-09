@@ -21,7 +21,8 @@ import { connectOwnAccount, disconnectOwnAccount, setMode, billingStatus } from 
 import { signInEnabled, signInRequired, startSignIn, finishSignIn } from './core/auth.js';
 import { FORMATS, FORMAT_IDS } from './video/formats.js';
 import { ingest, stats as eventStats, studentStats } from './feed/events.js';
-import { syncUser, syncDaily, resyncAll, enabled as sheetEnabled } from './core/sheet.js';
+import { syncUser, syncDaily, syncCalibration, resyncAll, enabled as sheetEnabled } from './core/sheet.js';
+import { calibrationReport } from './feed/calibration.js';
 import { mastery } from './feed/ranking.js';
 import { getProgress, audienceFor } from './feed/index.js';
 import { kv } from './core/kv.js';
@@ -205,6 +206,7 @@ async function route(req, res, url) {
     const pending = await topUpLibrary();
     if (pending.length) waitUntil(Promise.allSettled(pending));
     waitUntil(syncDaily());
+    waitUntil(syncCalibration().catch((err) => console.warn('[calibration]', err.message)));
     waitUntil(push.remindDue().catch((err) => console.warn('[push]', err.message)));
     return send(res, 200, { started: pending.length });
   }
@@ -219,6 +221,11 @@ async function route(req, res, url) {
   if (key === 'GET /api/push/key') return send(res, 200, { enabled: push.enabled(), publicKey: push.publicKey() });
   // Admin: the extra moments (offers, news) shown between lessons; GET lists them, POST replaces
   // the list (Authorization: Bearer $STUDYTOK_SHEET_SECRET; see docs/ALGORITHM.md "Moments").
+  // Admin: the calibration report (the same numbers as the sheet's Calibration tab).
+  if (key === 'GET /api/admin/calibration') {
+    if (!config.sheet.secret || req.headers.authorization !== `Bearer ${config.sheet.secret}`) return send(res, 401, { error: 'Unauthorized' });
+    return send(res, 200, await calibrationReport());
+  }
   if (key === 'GET /api/admin/moments' || key === 'POST /api/admin/moments') {
     if (!config.sheet.secret || req.headers.authorization !== `Bearer ${config.sheet.secret}`) return send(res, 401, { error: 'Unauthorized' });
     if (req.method === 'POST') return send(res, 200, { moments: await setExtraMoments((await readJson(req)).moments) });
