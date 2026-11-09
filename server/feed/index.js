@@ -17,6 +17,7 @@ import { pickRecall, noteRecall, recallItem, getMisses } from './recall.js';
 import { noteDecision, getWeights } from './calibration.js';
 import { settingsFor } from './experiments.js';
 import { pickGame, noteGame, playable, materialOf, watchedVideos } from './games.js';
+import { learningProfile, styleFit, cleanStyles } from './learning.js';
 import { ingest, getSignals, getSession, noteServed, noteBreather, studentStats, emptySignals } from './events.js';
 import { needsBreather, pickBreather, isBreatherUnit, BREATHER_REASONS } from './breathers.js';
 import { pickMoment, noteMoment, momentContext, momentItem } from './moments.js';
@@ -100,6 +101,8 @@ export async function saveProfile(userId, body) {
     // Custom units a student added inside a course: unitId -> programKey.
     unitGroups: existing?.unitGroups || {},
     packs: existing?.packs || [],
+    // How the student says they like to learn (StudyGraph's questionnaire); only a starting point for the measured profile.
+    styles: Array.isArray(body.styles) ? cleanStyles(body.styles) : existing?.styles || [],
     vidmoat: existing?.vidmoat || null,
     // A draft is saved while the student is still reading their syllabus, so the first videos
     // can start generating before they press "Start learning".
@@ -164,6 +167,7 @@ export async function editProfile(userId, body) {
   }
   if (typeof body.addPack === 'string' && PACK_SLUG.test(body.addPack)) { if (addPack(user, body.addPack)) added = { pack: publicPack(PACK_BY_SLUG[body.addPack]) }; }
   if (typeof body.removePack === 'string') removePack(user, body.removePack);
+  if (Array.isArray(body.styles)) user.styles = cleanStyles(body.styles);
   if (!user.units.length && !user.interests.length) user.interests = INTEREST_TOPICS.map((t) => t.id);
   await db.saveUser(user);
   return { user, added };
@@ -207,7 +211,7 @@ async function candidatesFor(user) {
 /** A due unit's lessons are retrieval practice, written and filed separately from its first explanations. */
 export const reviewAudience = (audience) => ({ ...audience, lessonStyle: `${audience.lessonStyle || ''}|review`, review: true });
 
-async function reusable(userId, readyKey, taken, { signals, session, review = false, gentle = false, weights = null } = {}) {
+async function reusable(userId, readyKey, taken, { signals, session, review = false, gentle = false, weights = null, fit = null } = {}) {
   const ids = (await db.readyIds(readyKey, 60)).filter((id) => !taken.has(id));
   if (!ids.length) return null;
   const blocked = await db.inAnySet(userId, ['seen', 'served'], ids);
@@ -217,7 +221,7 @@ async function reusable(userId, readyKey, taken, { signals, session, review = fa
   const stats = await Promise.all(videos.map((v) => db.getStats(v.id)));
   let best = null;
   videos.forEach((v, i) => {
-    const r = scoreVideo(v, stats[i], signals, session, { review, gentle, weights });
+    const r = scoreVideo(v, stats[i], signals, session, { review, gentle, weights, styleFit: fit });
     if (!best || r.score > best.score) best = { video: v, ...r };
   });
   return best;
@@ -277,6 +281,8 @@ export async function nextItems(userId, count = 3) {
   const gentle = stale && signals.lastSeenAt > 0 && Date.now() - signals.lastSeenAt > 3 * 86400000;
   const weights = await getWeights(); // calibration: fitted shrink per rule (empty until there is evidence)
   const exp = settingsFor(userId); // experiments: this student's arm for each judgement-call threshold
+  const profile = learningProfile(signals, user.styles);
+  const fit = profile.confidence ? (format) => styleFit(format, profile) : null;
   const picks = pickUnits(candidates, states, recent, Math.min(candidates.length, count + 4), { hasCourse, explore: exploreRate(servedSoFar, exp.explore), urgency });
   const pending = [];
   const taken = new Set();
@@ -290,8 +296,8 @@ export async function nextItems(userId, count = 3) {
   for (const pick of picks) {
     // A unit due for review: its retrieval-practice pool first, else its ordinary pool scored for review.
     const review = (pick.parts?.review || 0) > 0 || (urgency >= 0.5 && Boolean(states[pick.unit.id]?.lastSeen));
-    const best = (review && await reusable(userId, readyKeyFor(pick.unit.id, reviewAudience(audience)), taken, { signals, session: pageSession, review, gentle, weights }))
-      || await reusable(userId, readyKeyFor(pick.unit.id, audience), taken, { signals, session: pageSession, review, gentle, weights });
+    const best = (review && await reusable(userId, readyKeyFor(pick.unit.id, reviewAudience(audience)), taken, { signals, session: pageSession, review, gentle, weights, fit }))
+      || await reusable(userId, readyKeyFor(pick.unit.id, audience), taken, { signals, session: pageSession, review, gentle, weights, fit });
     if (best) {
       taken.add(best.video.id);
       ready.push({ pick, video: best.video, videoParts: best.parts });

@@ -16,6 +16,7 @@ import { mastery } from '../feed/ranking.js';
 import { LEVEL_BY_ID } from '../curriculum/levels.js';
 import { config } from './config.js';
 import { calibrationReport, calibrationRows, fitWeights } from '../feed/calibration.js';
+import { learningProfile, STYLE_META } from '../feed/learning.js';
 
 export const enabled = () => Boolean(config.sheet.url && config.sheet.secret);
 const MIN_GAP_MS = 10 * 60 * 1000; // a student's row is refreshed at most every ten minutes
@@ -72,6 +73,8 @@ export async function userRow(user) {
     'Courses': (user.programKeys || []).length,
     'Units': (user.units || []).length,
     'Interests': (user.interests || []).join(', '),
+    'Learns best': (() => { const lp = learningProfile(signals, user.styles); return lp.confidence ? `${STYLE_META[lp.top].short}${lp.measured ? '' : ' (forming)'}` : ''; })(),
+    'Says they prefer': (user.styles || []).map((s) => STYLE_META[s]?.said || s).join(', '),
     'Packs': (user.packs || []).join(', '),
     'Lessons watched': seen,
     'Minutes watched': minutes,

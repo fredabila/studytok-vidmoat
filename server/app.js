@@ -22,6 +22,8 @@ import { signInEnabled, signInRequired, startSignIn, finishSignIn } from './core
 import { FORMATS, FORMAT_IDS } from './video/formats.js';
 import { ingest, stats as eventStats, studentStats } from './feed/events.js';
 import { syncUser, syncDaily, syncCalibration, resyncAll, enabled as sheetEnabled } from './core/sheet.js';
+import { getSignals } from './feed/events.js';
+import { learningProfile, insightOf } from './feed/learning.js';
 import { gameFor, noteGame, GAME_TYPES } from './feed/games.js';
 import { calibrationReport } from './feed/calibration.js';
 import { mastery } from './feed/ranking.js';
@@ -338,7 +340,8 @@ async function route(req, res, url) {
     const { vidmoatTokens, ...safe } = u; // sealed tokens never leave the server
     waitUntil(syncUser(userId)); // keeps the admin sheet's row fresh (throttled)
     const invites = u.memberNo ? await db.referralCount(u.memberNo) : 0;
-    return send(res, 200, { user: { ...safe, setupDone, seen, liked, billing, stats, invites } });
+    const learning = learningProfile(await getSignals(userId), u.styles);
+    return send(res, 200, { user: { ...safe, setupDone, seen, liked, billing, stats, invites, learning: { ...learning, insight: insightOf(learning) } } });
   }
 
   // Credits: switch between the free allowance and the student's own account, or disconnect it.

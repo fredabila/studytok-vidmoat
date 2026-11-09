@@ -65,6 +65,8 @@ export const EVENT_SPECS = {
   recall_skip: { fields: { id: 's' } },
   game_view: { fields: { id: 's', game: 's' } },
   game_open: { fields: { game: 's' } },
+  style_set: { fields: { styles: 's', where: 's' } },
+  style_action: { fields: { action: 's' } },
   // wrong: the scored item indices the student missed, comma-separated ("0,3").
   game_result: { fields: { id: 's', game: 's', score: 'i', total: 'i', wrong: 's', ms: 'n' } },
   reset: { fields: { scope: 's' } },
@@ -373,6 +375,9 @@ export async function ingest(userId, batch) {
         if (!out) break;
         signals.games ||= { n: 0, items: 0, right: 0 };
         signals.games.n++; signals.games.items += out.total; signals.games.right += Math.max(0, out.total - wrong.length);
+        signals.games.byType ||= {};
+        const gt = signals.games.byType[out.type] ||= { n: 0, items: 0, right: 0 };
+        gt.n++; gt.items += out.total; gt.right += Math.max(0, out.total - wrong.length);
         for (const [uid, ok] of Object.entries(out.units)) {
           if (isBreatherUnit(uid)) continue;
           progress[uid] = applyEvent(progress[uid] || emptyState(), 'quiz_answer', { correct: ok, now: e.at });

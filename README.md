@@ -80,6 +80,12 @@ with match counts per tab and a one-tap "add as a topic" when nothing matches; l
 inside a bounded box rather than making the page endless; keyboard users get `/` for search and
 arrow keys on the tabs.
 
+**A learning profile.** Ported from StudyGraph's learning-style questionnaire: students can
+say how they like to learn (seeing, hearing, reading, doing), and the profile then follows what
+they measurably finish and get right per way in, nudges the feed towards it (a calibrated
+rule) and shows them the result with a suggestion. See
+[docs/ALGORITHM.md](docs/ALGORITHM.md#learning-profile-feedlearningjs-from-studygraph).
+
 **Mini games.** Between lessons, and on demand from the Library: match it, put it in order,
 sort it, a timed true-or-false round and fill the gap, all built from lessons the student has
 watched. Results move mastery and send missed lessons back as recall cards. See

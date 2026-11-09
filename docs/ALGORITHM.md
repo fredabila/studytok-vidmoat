@@ -161,6 +161,31 @@ The first card of a visit can be an *opener* (`moments.js openerMoment`), at mos
 Openers bypass the moment pacing (they are the start of the visit) and do not count against
 the day's quota.
 
+## Learning profile (`feed/learning.js`, from StudyGraph)
+
+StudyGraph asked students to pick their learning style (Visual, Auditory, Reading/Writing,
+Kinesthetic) and passed the answer to its AI. StudyTok keeps the question, in plain words
+(seeing it, hearing it explained, reading it, doing it), and treats the answer as a starting
+point only: research has not found that teaching to a self-reported style helps, but matching
+to what a student measurably finishes and gets right is ordinary good personalisation.
+
+* **Ways in per format.** Each of the 32 formats is weighted by what it asks of the student
+  (`FORMAT_STYLE`: an explainer is 0.6 seeing, 0.4 hearing; a guess-first is 0.8 doing, 0.2
+  hearing…), and each game kind likewise.
+* **Profile.** For each way in: engagement (watch fraction, completions, likes, saves, loops
+  against early leaves, skips and "less") and accuracy (quick checks and game items right),
+  scored `0.6 × engagement + 0.4 × accuracy` with Beta-style smoothing. What the student said
+  adds a small prior (worth a few lessons). Confidence grows with evidence; "measured" after
+  about twelve weighted views.
+* **In the feed.** `styleFit` multiplies a video's score by up to ±12 %, scaled by confidence,
+  towards formats that use the student's stronger ways in. It is a calibrated rule (`style` in
+  the Calibration tab): if students' feeds tilted this way are not watched better, its weight
+  shrinks on its own.
+* **For the student.** Profile › How you learn best shows the four bars, how far through they
+  watch each kind, one line of insight, and an action that fits (diagram-first lessons, narration
+  on, a game, lesson notes). They can change what they said at any time. The sheet's user row
+  has "Learns best" and "Says they prefer".
+
 ## Mini games (`feed/games.js`)
 
 Five games built from lessons the student has already watched, so each is retrieval practice
