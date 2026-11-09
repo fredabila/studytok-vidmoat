@@ -15,10 +15,32 @@
       "has": [
         {
           "type": "host",
+          "value": "studytok.vidmoat.com"
+        }
+      ],
+      "destination": "https://study-graph.com/:path",
+      "permanent": true
+    },
+    {
+      "source": "/:path((?!api/).*)",
+      "has": [
+        {
+          "type": "host",
           "value": "studytok-vidmoat.vercel.app"
         }
       ],
-      "destination": "https://studytok.vidmoat.com/:path",
+      "destination": "https://study-graph.com/:path",
+      "permanent": true
+    },
+    {
+      "source": "/:path((?!api/).*)",
+      "has": [
+        {
+          "type": "host",
+          "value": "www.study-graph.com"
+        }
+      ],
+      "destination": "https://study-graph.com/:path",
       "permanent": true
     }
   ],

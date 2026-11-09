@@ -57,7 +57,7 @@ export async function renderCard(card) {
   rrect(ctx, 72, 84, 76, 76, 22); ctx.fillStyle = HL; ctx.fill(); ctx.translate(6, 6); ctx.fillStyle = INK; rrect(ctx, 72, 84, 76, 76, 22); ctx.fill(); ctx.translate(-6, -6);
   ctx.fillStyle = HL; ctx.beginPath(); ctx.moveTo(100, 102); ctx.lineTo(136, 122); ctx.lineTo(100, 142); ctx.closePath(); ctx.fill();
   ctx.fillStyle = INK; ctx.font = '700 54px Fraunces, Georgia, serif'; ctx.textBaseline = 'middle'; ctx.fillText('StudyGraph', 170, 124);
-  ctx.font = '600 26px "JetBrains Mono", monospace'; ctx.fillStyle = INK3; ctx.textAlign = 'right'; ctx.fillText('studytok.vidmoat.com', W - 72, 124); ctx.textAlign = 'left';
+  ctx.font = '600 26px "JetBrains Mono", monospace'; ctx.fillStyle = INK3; ctx.textAlign = 'right'; ctx.fillText('study-graph.com', W - 72, 124); ctx.textAlign = 'left';
 
   // kicker + title with a highlighter mark
   let y = 300;

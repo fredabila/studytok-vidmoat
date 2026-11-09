@@ -1,8 +1,8 @@
 # StudyGraph
 
-> **StudyGraph was called StudyTok until November 2026.** The app, the docs and everything students see now say StudyGraph. A few internal names keep the old one on purpose, so nothing breaks: the `STUDYTOK_*` environment variables, the `studytok.vidmoat.com` address (until a new domain is pointed at the app), this repository's name, and the `st_` keys in browsers and cookies (renaming them would sign everyone out).
+> **StudyGraph was called StudyTok until November 2026.** The app, the docs and everything students see now say StudyGraph. A few internal names keep the old one on purpose, so nothing breaks: the `STUDYTOK_*` environment variables, this repository's name, and the `st_` keys in browsers and cookies (renaming them would sign everyone out). The old address, `studytok.vidmoat.com`, redirects permanently to `study-graph.com`.
 
-**Live at [studytok.vidmoat.com](https://studytok.vidmoat.com)**, a Vidmoat product, open source under the MIT licence.
+**Live at [study-graph.com](https://study-graph.com)**, a Vidmoat product, open source under the MIT licence.
 
 A TikTok-style vertical feed of short study videos that follows **your actual syllabus**.
 Students pick their level (middle school to postgraduate, professional, or just curious), their
@@ -136,7 +136,7 @@ of labelled images and clips under strict rules (sizes, formats, licences, a `sh
 description for every file). `npm run content:check` validates it and runs on every pull request.
 
 Once merged, the pack is a course a student can add from the Explore tab or by
-opening `https://studytok.vidmoat.com/?pack=<slug>`. Lessons are written from the pack's own
+opening `https://study-graph.com/?pack=<slug>`. Lessons are written from the pack's own
 units and facts, its assets can appear in the videos (`visual.query: "asset:<file>"`), and
 every lesson shows "From <author> · <title>" with the author's link and call to action in the
 *Why* sheet. Nothing is generated until a student adds the pack. The format and the rules are in

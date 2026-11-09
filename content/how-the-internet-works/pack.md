@@ -29,9 +29,9 @@ them. An IPv4 address is four numbers from 0 to 255, such as 142.250.74.46; the 
 
 ### DNS: names into numbers
 Computers route by numbers, people remember names. The Domain Name System translates
-studytok.vidmoat.com into an IP address. Your device asks a resolver (often your ISP's or a public
+study-graph.com into an IP address. Your device asks a resolver (often your ISP's or a public
 one such as 1.1.1.1), which walks the hierarchy: a root server points to the servers for .com,
-which point to the servers for vidmoat.com, which answer with the address. Answers are cached
+which point to the servers for study-graph.com, which answer with the address. Answers are cached
 along the way so the second lookup is instant. DNS runs mostly over UDP on port 53.
 - There are 13 root server names (A to M), served by hundreds of machines worldwide through anycast.
 - A DNS record has a time to live (TTL), the number of seconds it may be cached.

@@ -13,7 +13,7 @@ could usefully watch two minutes about.
 
 Open a pull request adding `content/<slug>/pack.md`. A check runs on every pull request
 (`npm run content:check`); a maintainer reads the pack before merging. Once merged it is live
-within minutes at `https://studytok.vidmoat.com/?pack=<slug>`, a link you can share.
+within minutes at `https://study-graph.com/?pack=<slug>`, a link you can share.
 
 ## The file
 
