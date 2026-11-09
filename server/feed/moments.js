@@ -179,7 +179,7 @@ export function momentItem(m, ctx) {
  * its window, and the student's facts fit. Extras (admin-posted) come first, then the catalogue
  * in order. Returns null when no moment fits.
  */
-export async function pickMoment(userId, { session = {}, ctx, now = Date.now(), hasBreather = false, stats = null, exam = null } = {}) {
+export async function pickMoment(userId, { session = {}, ctx, now = Date.now(), hasBreather = false, stats = null, exam = null, gap = GAP } = {}) {
   if (hasBreather || !ctx) return null;
   const viewed = session.viewed || 0;
   const mark = (await kv.get(`user:${userId}:moments`)) || { seen: {}, at: -GAP, day: '', today: 0 };
@@ -187,7 +187,7 @@ export async function pickMoment(userId, { session = {}, ctx, now = Date.now(), 
   if (opener) return opener;
   // A stale session is over: the new visit starts counting from zero, like the events will.
   if (session.lastAt && now - session.lastAt > STALE_MS) return null;
-  if (viewed < MIN_VIEWED || viewed - (mark.at ?? -GAP) < GAP) return null;
+  if (viewed < MIN_VIEWED || viewed - (mark.at ?? -gap) < gap) return null;
   if (mark.day === dayOf(now) && (mark.today || 0) >= MAX_PER_DAY) return null;
   const fresh = (m) => !(mark.seen?.[m.id]) || now - mark.seen[m.id] > (m.repeatDays || 30) * 86400000;
   for (const m of await extraMoments()) {

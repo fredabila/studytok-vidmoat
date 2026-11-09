@@ -24,6 +24,7 @@ import { applyEvent, emptyState, mastery } from './ranking.js';
 import { audienceFor } from './index.js';
 import { isBreatherUnit } from './breathers.js';
 import { recordOutcome, recordQuizOutcome } from './calibration.js';
+import { armOutcomeWrites, armCountWrites } from './experiments.js';
 import { FORMAT_IDS } from '../video/formats.js';
 
 // ---- Taxonomy ------------------------------------------------------------------------------------
@@ -177,10 +178,13 @@ export async function ingest(userId, batch) {
   const progress = progress0 || {};
   const videos = new Map();
   const videoOf = async (id) => { if (!videos.has(id)) videos.set(id, await db.getVideo(id)); return videos.get(id); };
-  const stat = (id, field, by = 1) => kv.hincrby(`video:${id}:stats`, field, by);
+  // Every counter is kept all-time and per month (db.js blendedHash reads them with decay).
+  const mo = db.monthOf(events[0]?.at || Date.now());
+  const stat = (id, field, by = 1) => Promise.all([kv.hincrby(`video:${id}:stats`, field, by), kv.hincrby(`video:${id}:stats:m${mo}`, field, by)]);
   const fstat = (v, field, by = 1) => {
     const f = v.format || 'explain';
-    return Promise.all([kv.hincrby(`stats:format:${f}`, field, by), v.topic ? kv.hincrby(`stats:format:${f}:${v.topic}`, field, by) : null]);
+    return Promise.all([kv.hincrby(`stats:format:${f}`, field, by), kv.hincrby(`stats:format:${f}:m${mo}`, field, by),
+      ...(v.topic ? [kv.hincrby(`stats:format:${f}:${v.topic}`, field, by), kv.hincrby(`stats:format:${f}:${v.topic}:m${mo}`, field, by)] : [])]);
   };
   const writes = [];
   const log = [];
@@ -192,6 +196,7 @@ export async function ingest(userId, batch) {
     if ((ctx.sid && session.sid !== ctx.sid) || (session.lastAt && e.at - session.lastAt > SESSION_GAP_MS)) {
       session = { ...emptySession(), sid: ctx.sid, startedAt: e.at };
       signals.sessions++;
+      writes.push(...armCountWrites(userId, 'sessions')); // experiments: sessions per arm
     }
     session.lastAt = Math.max(session.lastAt, e.at);
     signals.lastSeenAt = Math.max(signals.lastSeenAt, e.at);
@@ -203,6 +208,7 @@ export async function ingest(userId, batch) {
     session.hour = hour; session.night = hour >= 22 || hour < 5;
     if (['view', 'complete', 'quiz_answer', 'heartbeat'].includes(e.type)) {
       signals.days ||= {};
+      if (!signals.days[day(e.at)]) writes.push(...armCountWrites(userId, 'days')); // experiments: active days per arm
       signals.days[day(e.at)] = 1;
       const keys = Object.keys(signals.days).sort();
       for (const k of keys.slice(0, Math.max(0, keys.length - 90))) delete signals.days[k];
@@ -282,6 +288,7 @@ export async function ingest(userId, batch) {
         session.lastTopics = [topic, ...session.lastTopics].slice(0, 6);
         if (e.dir) writes.push(stat(v.id, `dir_${e.dir.replace(/[^a-z]/g, '').slice(0, 8)}`));
         writes.push(...await recordOutcome(userId, v, { pct, early, posture, hour })); // calibration
+        writes.push(...armOutcomeWrites(userId, { pct, early })); // experiments
         // Where in the video people leave (by scene kind), per format: the drop-off curve.
         const leftIn = pct < 0.95 ? sceneKindAt(v, e.t ?? e.maxT ?? 0) : 'end';
         if (leftIn) writes.push(kv.hincrby(`stats:format:${format}:leaveAt`, leftIn, 1));
@@ -539,7 +546,7 @@ export async function bestVoiceFor(candidates, { minViews = 40, margin = 0.08 } 
 export async function formatPerformance(topic, formats) {
   const out = {};
   for (const f of formats) {
-    const h = (await kv.hgetall(`stats:format:${f}:${topic}`)) || (await kv.hgetall(`stats:format:${f}`)) || {};
+    const h = (await db.blendedHash(`stats:format:${f}:${topic}`)) || (await db.blendedHash(`stats:format:${f}`)) || {};
     const leaves = Number(h.leaves) || 0, views = Number(h.views) || 0;
     if (!leaves && !views) { out[f] = 1; continue; }
     const meanWatch = leaves ? Number(h.pctSum) / 100 / leaves : 0.5;
