@@ -162,6 +162,16 @@ it smooth:
   the project frame rate.
 * **No blur filters** in HTML cards (`backdrop-filter` is expensive on mobile GPUs).
 
+**Audio and video in step.** Inside the embed player every clip is its own media element
+slaved to a 33 ms master clock; an element is only corrected once it is more than 0.5 s off
+(1.5 s on the mobile path), and at most six upcoming clips are preloaded (fewer on mobile), so a
+late clip stalls the picture while narration carries on. The app reduces the load it can: sound
+effects (five to eight extra audio elements per lesson) are off by default on phones (Tune ›
+Playback), captions, music and narration are optional, and a chapter tap re-issues `play` because
+the player's `seek` always pauses. The rest is the player's: driving the master clock from the
+narration element, tighter correction thresholds with rate nudges instead of hard seeks, and
+preloading every clip of a document under a minute.
+
 If a device is still too slow, the remaining lever is rendering popular library videos to MP4
 with `POST /v1/projects/{id}/render` and playing the file instead of the document (costs a
 render per video and a plan with exports); StudyTok does not do that today.

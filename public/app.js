@@ -772,12 +772,16 @@ function unmountPlayer(item) {
 // plays (and re-send it at the current time): captions, music and narration on or off, recall
 // mode that hides the key terms, chapter markers from the scenes, and a stamp with the student's
 // quiz answer inside the video. No new video is made for any of this.
-const PLAY_DEFAULTS = { captions: 'on', music: 'on', voice: 'on', gaps: 'review' }; // gaps: off | review | all
+// Sound effects are separate audio elements (five to eight per lesson); phones keep audio and
+// video in step better with fewer of them, so they are off there unless the student turns them on.
+const PHONE = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+const PLAY_DEFAULTS = { captions: 'on', music: 'on', voice: 'on', sfx: PHONE ? 'off' : 'on', gaps: 'review' }; // gaps: off | review | all
 const playPref = (k) => store.get(`st_play_${k}`) || PLAY_DEFAULTS[k];
 const CAPTION_TRACK = 6;
 const isCaption = (c) => c.type === 'text' && c.trackIndex === CAPTION_TRACK;
 const isVoice = (c) => c.type === 'audio' && /^voice/.test(c.id || '');
 const isMusic = (c) => c.type === 'audio' && c.id === 'music';
+const isSfx = (c) => c.type === 'audio' && !isVoice(c) && !isMusic(c);
 // Text the gaps may hide: captions, beats, items, cards, the explanation; never the quiz options, labels or the chip.
 const GAP_SAFE = /^(opt|quiz|chip|outroLabel|kick|num)/;
 const blank = (term) => '▁'.repeat(Math.min(9, Math.max(4, Math.round(term.length * 0.7))));
@@ -798,6 +802,7 @@ function prepareDocument(item, { reveal = false } = {}) {
   for (const c of src.clips) {
     if (isCaption(c) && playPref('captions') === 'off') continue;
     if (isMusic(c) && playPref('music') === 'off') continue;
+    if (isSfx(c) && playPref('sfx') === 'off') continue;
     if (isVoice(c) && voiceOff) continue;
     let out = c;
     if (item.gaps && !reveal && c.type === 'text' && !GAP_SAFE.test(c.id || '') && c.textStyle?.content) {
@@ -853,7 +858,8 @@ function renderChapters(item) {
     const all = [{ start: 0 }, ...scenes].filter((s) => s.start <= t + 0.75);
     const to = all[all.length - 1].start;
     sendEvent(item.data.id, 'chapter_seek', { from: +(item.lastTime || 0).toFixed(1), to: +to.toFixed(1) });
-    item.player.seek(to);
+    item.player.seek(to); // the player pauses on every seek
+    if (!feed.paused && !item.held) item.player.play();
     if (item.watch) item.watch.pauseBy = 'seek';
   };
 }
@@ -1150,6 +1156,7 @@ async function openTune() {
     ['captions', 'Captions', [['on', 'On'], ['off', 'Off']]],
     ['voice', 'Narration audio', [['on', 'On'], ['off', 'Off']]],
     ['music', 'Music', [['on', 'On'], ['off', 'Off']]],
+    ['sfx', 'Sound effects', [['on', 'On'], ['off', 'Off']], PHONE ? 'Off on phones by default: fewer sounds keep the narration and the picture in step.' : null],
   ];
   for (const [key, label, options, hint] of PLAY) {
     const row = el('div', { class: 'pref-row' }, el('span', { class: 'pref-label' }, label));
