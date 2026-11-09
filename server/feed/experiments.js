@@ -27,7 +27,8 @@ function hash(s) {
 }
 
 /** The arm a student is in for one experiment: stable, even, independent per experiment. */
-export const armOf = (userId, name) => (hash(`${name}:${userId || ''}`) % 1000 < 500 ? 'A' : 'B');
+// STUDYTOK_EXPERIMENTS=off puts everyone in arm A (the designed thresholds); the tests use it.
+export const armOf = (userId, name) => (process.env.STUDYTOK_EXPERIMENTS === 'off' ? 'A' : hash(`${name}:${userId || ''}`) % 1000 < 500 ? 'A' : 'B');
 
 /** Every experiment's settings for a student, plus the arms for the record. */
 export function settingsFor(userId) {

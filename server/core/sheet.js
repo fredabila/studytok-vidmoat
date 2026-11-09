@@ -148,6 +148,7 @@ export async function dailyRow(date, { now = Date.now() } = {}) {
     'Breathers': n('breather_view'),
     'Moments shown': n('moment_view'),
     'Recall answers': n('recall_answer'),
+    'Sync drift': n('drift'),
     'Misses fixed': n('recall_retired'),
     'Landing views': n('funnel_landing'),
     'From invite links': n('funnel_landing_ref'),

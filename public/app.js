@@ -751,7 +751,7 @@ function mountPlayer(item) {
       soundGate(item);
       if (feed.items[feed.active] === item) syncPlayers(); // phones: the next lesson may start loading now
     },
-    onState: ({ time, playing }) => onState(item, time, playing, duration),
+    onState: ({ time, playing, audioTime }) => { onState(item, time, playing, duration); if (playing && audioTime != null) noteDrift(item, time, audioTime); },
     onRetry: (n) => { $('.making-note', item.el).textContent = n === 1 ? 'Slow connection. Loading once more…' : 'Still loading. One more try…'; sendEvent(item.data.id, 'player_retry', { n }); },
     onError: (msg) => {
       item.el.dataset.status = 'failed';
@@ -894,6 +894,19 @@ function syncPlayers() {
     if (i === feed.active && !feed.paused && view === 'feed' && !item.held) item.player.play(); else item.player.pause();
   });
   soundGate(feed.items[feed.active]);
+}
+/**
+ * Sync drift: the player reports its master clock and its audio clock; the gap is how far the
+ * picture and the narration are apart. The worst gap of each view is sent once (drift, in
+ * seconds) when it exceeds a quarter second, so the sheet shows whether the player's fix holds.
+ */
+function noteDrift(item, time, audioTime) {
+  const d = Math.abs(time - audioTime);
+  item.drift = Math.max(item.drift || 0, d);
+  if (d >= 0.25 && !item.driftSent && feed.items[feed.active] === item) {
+    item.driftSent = true;
+    sendEvent(item.data.id, 'drift', { d: +d.toFixed(2), t: +time.toFixed(1) });
+  }
 }
 function onState(item, time, playing, duration) {
   const isActive = feed.items[feed.active] === item;

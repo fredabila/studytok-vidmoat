@@ -70,6 +70,7 @@ acceleration samples never leave the device, and nothing is recorded when permis
 | `gaps_reveal` | `t` | the viewer revealed the hidden terms |
 | `chapter_seek` | `from`, `to` | tapped a scene marker on the progress bar |
 | `quiz_stamp` | | the viewer's quiz answer was stamped into the video over the reveal |
+| `drift` | `d` seconds, `t` | the player's picture and audio clocks were more than 0.25 s apart (worst gap, once per view) |
 | `pack_add` / `pack_remove` | `slug`, `by` library/link | a community pack joined or left the course |
 | `pack_link` | `slug` | the pack's call to action was tapped |
 | `library_search` | `q` | typed in the Library search box |

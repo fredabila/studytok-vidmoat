@@ -55,6 +55,7 @@ export const EVENT_SPECS = {
   sensors: { fields: { motion: 'b', permission: 's' } },
   sound_unlock: { video: true, fields: { t: 'n' } },
   player_retry: { video: true, fields: { n: 'i' } },
+  drift: { video: true, fields: { d: 'n', t: 'n' } }, // audio and picture more than a quarter second apart
   lesson_share: { video: true, fields: { by: 's' } },
   moment_view: { fields: { id: 's', kind: 's' } },
   moment_cta: { fields: { id: 's', action: 's' } },
@@ -366,6 +367,7 @@ export async function ingest(userId, batch) {
         break;
       }
       case 'player_error': writes.push(stat(v.id, 'errors')); break;
+      case 'drift': writes.push(stat(v.id, 'drift'), kv.hincrby(`calib:drift:${(signals.device?.platform || 'unknown').replace(/[^a-z0-9]/gi, '').slice(0, 16) || 'unknown'}`, 'n', 1), kv.hincrby(`calib:drift:${(signals.device?.platform || 'unknown').replace(/[^a-z0-9]/gi, '').slice(0, 16) || 'unknown'}`, 'sum100', Math.round(Math.min(10, Number(e.d) || 0) * 100))); break;
       case 'drop': writes.push(kv.hincrby('stats:device', 'drops', 1)); break;
       case 'sensors': writes.push(kv.hincrby('stats:device', e.motion ? 'motionOn' : 'motionOff', 1), kv.hincrby('stats:device', `perm_${(e.permission || 'unknown').replace(/[^a-z-]/g, '')}`, 1)); break;
       case 'gen_wait': writes.push(kv.hincrby('stats:generation', e.outcome === 'ready' ? 'waitedReady' : 'waitedGaveUp', 1), kv.hincrby('stats:generation', 'waitMs', Math.round(e.ms || 0))); break;
