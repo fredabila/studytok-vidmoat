@@ -479,10 +479,27 @@ function wireGestures() {
   let lastTap = 0;
   let tapTimer = null;
 
+  // A swipe may start anywhere, buttons included (like TikTok): a control only gets its tap when
+  // the finger did not travel. The progress bar (it seeks) and text fields keep their own gestures.
+  let swallowClickUntil = 0;
+  f.addEventListener('click', (e) => { if (performance.now() < swallowClickUntil) { e.stopPropagation(); e.preventDefault(); } }, true);
   f.addEventListener('pointerdown', (e) => {
-    if (!e.isPrimary || e.button > 0 || e.target.closest('button, a, input, .quiz, .progress')) return; // the progress bar seeks, it does not pause
-    start = { x: e.clientX, y: e.clientY, t: performance.now(), dy: 0, moved: false, id: e.pointerId, samples: [{ y: e.clientY, t: performance.now() }] };
-    f.setPointerCapture(e.pointerId);
+    if (!e.isPrimary || e.button > 0 || e.target.closest('input, textarea, select, .progress')) return;
+    const onControl = Boolean(e.target.closest('button, a, .quiz'));
+    // Caught mid-glide: freeze the track where it is and carry on from there, instead of jumping
+    // to the slide it was gliding to.
+    const t = trackEl();
+    let base = 0;
+    if (t.classList.contains('animating')) {
+      const y = new DOMMatrixReadOnly(getComputedStyle(t).transform).m42;
+      base = y + Math.max(0, feed.active) * slideHeight();
+      feed.animUntil = 0;
+      t.classList.remove('animating');
+      t.style.transform = `translate3d(0, ${y}px, 0)`;
+    }
+    start = { x: e.clientX, y: e.clientY, t: performance.now(), dy: 0, base, moved: false, onControl, id: e.pointerId, samples: [{ y: e.clientY, t: performance.now() }] };
+    if (base) feed.dragDy = base;
+    if (!onControl) { try { f.setPointerCapture(e.pointerId); } catch { /* pointer already gone */ } }
   });
   f.addEventListener('pointermove', (e) => {
     if (!start || e.pointerId !== start.id) return;
@@ -491,12 +508,13 @@ function wireGestures() {
     if (start.samples.length > 12) start.samples.shift();
     if (!start.moved && Math.abs(dy) < 8) return;
     if (!start.moved && Math.abs(e.clientX - start.x) > Math.abs(dy)) return; // horizontal: ignore
+    if (!start.moved && start.onControl) { try { f.setPointerCapture(e.pointerId); } catch { /* released already */ } }
     start.moved = true;
-    const atTop = feed.active <= 0 && dy > 0;
-    const atEnd = feed.active >= feed.items.length && dy < 0;
+    const atTop = feed.active <= 0 && start.base + dy > 0;
+    const atEnd = feed.active >= feed.items.length && start.base + dy < 0;
     if (atTop || atEnd) dy *= 0.3; // rubber band
     start.dy = dy;
-    feed.dragDy = dy;
+    feed.dragDy = start.base + dy;
     // One write per frame: pointer events can arrive faster than the screen refreshes.
     if (!feed.dragFrame) feed.dragFrame = requestAnimationFrame(() => { feed.dragFrame = 0; if (feed.dragDy != null) setOffset(feed.dragDy, false); });
   });
@@ -506,7 +524,10 @@ function wireGestures() {
     start = null;
     feed.dragDy = null;
     if (feed.dragFrame) { cancelAnimationFrame(feed.dragFrame); feed.dragFrame = 0; }
+    if (s.base) setOffset(0, true); // a touch that stopped a glide finishes it
+    if (s.moved) swallowClickUntil = performance.now() + 400; // a swipe that began on a button is not a tap
     if (!s.moved) {
+      if (s.onControl || s.base) return; // the control handles its own tap; stopping a glide is not a tap
       // Tap: single = pause/play, double = like (with a heart where you tapped).
       const now = performance.now();
       if (now - lastTap < 280) {
@@ -525,10 +546,11 @@ function wireGestures() {
     const recent = s.samples.filter((p) => now - p.t <= 120);
     const first = recent[0] || s.samples[0];
     const v = (e.clientY - first.y) / Math.max(16, now - first.t);
-    const flick = Math.abs(s.dy) > 24 && Math.abs(v) > 0.35;
-    if (s.dy < -h * 0.18 || (flick && v < 0)) go(1);
-    else if (feed.active <= 0 && s.dy > h * 0.12) { setOffset(0, true); $('#ptr').classList.add('go'); refreshView('feed').finally(() => $('#ptr').classList.remove('go')); }
-    else if (s.dy > h * 0.18 || (flick && v > 0)) go(-1);
+    const off = s.base + s.dy; // where the track is, relative to the active slide
+    const flick = Math.abs(s.dy) > 20 && Math.abs(v) > 0.28;
+    if (off < -h * 0.15 || (flick && v < 0)) go(1);
+    else if (feed.active <= 0 && !s.base && s.dy > h * 0.12) { setOffset(0, true); $('#ptr').classList.add('go'); refreshView('feed').finally(() => $('#ptr').classList.remove('go')); }
+    else if (off > h * 0.15 || (flick && v > 0)) go(-1);
     else setOffset(0, true);
   };
   f.addEventListener('pointerdown', () => startSensors(), { passive: true });
