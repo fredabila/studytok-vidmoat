@@ -38,10 +38,16 @@ export async function getUnit(id) {
  * Claude picks a fresh subtopic each episode. Shared by everyone who adds the same title, so
  * lessons and videos are reused. Returns null for an empty title.
  */
+/** The id a custom topic title gets (the same title always gets the same id), or null. */
+export function customUnitId(title) {
+  const clean = String(title || '').replace(/\s+/g, ' ').trim().slice(0, 60);
+  return clean.length < 2 ? null : `cu:${createHash('sha1').update(normalize(clean)).digest('hex').slice(0, 12)}`;
+}
+
 export async function customUnit(title) {
   const clean = String(title || '').replace(/\s+/g, ' ').trim().slice(0, 60);
   if (clean.length < 2) return null;
-  const id = `cu:${createHash('sha1').update(normalize(clean)).digest('hex').slice(0, 12)}`;
+  const id = customUnitId(clean);
   const existing = await kv.get(`unit:${id}`);
   if (existing) return existing;
   const unit = { id, title: clean, summary: '', topic: guessTopic(clean), open: true, custom: true, createdAt: new Date().toISOString() };

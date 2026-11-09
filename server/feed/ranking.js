@@ -78,7 +78,8 @@ function gamma(k, rand) {
 export const sampleBeta = (a, b, rand = Math.random) => { const x = gamma(a, rand); return x / (x + gamma(b, rand)); };
 
 /**
- * @param candidates  [{ unit, kind: 'course'|'interest', order }] in syllabus order for courses
+ * @param candidates  [{ unit, kind: 'course'|'follow'|'interest', order, intent? }] in syllabus order for courses;
+ *                    'follow' = a course profile the student follows; `intent` (0..1) = they visited it just now
  * @param states      { [unitId]: state }
  * @param recent      unit ids served most recently first
  * @returns {Array<{ unit, kind, score, parts }>}  sorted best first
@@ -111,9 +112,14 @@ export function scoreUnits(candidates, states, recent = [], { now = Date.now(), 
     if (c.kind === 'course') {
       const r = frontierRank.get(c.unit.id);
       progress = r == null ? 0.05 : Math.max(0.1, 1 - r * 0.3);
+    } else if (c.kind === 'follow') {
+      // A followed course is a stated interest: above casual interests, below the student's own syllabus.
+      progress = hasCourse ? 0.25 : 0.5;
     } else {
       progress = hasCourse ? 0.15 : 0.5;
     }
+    // Just visited this course's profile: lean towards it while the visit is fresh (fades over 20 minutes).
+    const intent = c.intent > 0 ? +(0.6 * Math.min(1, c.intent)).toFixed(3) : 0;
 
     // Due units; with an exam near, every unit the student has started is worth revisiting.
     const review = (s.lastSeen && s.due && s.due <= now ? (s.quizWrong > s.quizRight ? 0.9 : 0.6) : s.lastSeen && urgency > 0 ? 0.3 * urgency : 0) * (1 + urgency);
@@ -123,8 +129,8 @@ export function scoreUnits(candidates, states, recent = [], { now = Date.now(), 
     const recency = idx === -1 ? 0 : idx === 0 ? 1.6 : idx < 3 ? 0.9 : idx < 6 ? 0.3 : 0;
 
     const lessFactor = 0.35 ** s.less;
-    const score = (affinity + progress + review - recency) * lessFactor;
-    return { ...c, score, parts: { affinity: +affinity.toFixed(3), progress, review, recency, lessFactor } };
+    const score = (affinity + progress + review + intent - recency) * lessFactor;
+    return { ...c, score, parts: { affinity: +affinity.toFixed(3), progress, review, recency, lessFactor, ...(intent ? { intent } : {}) } };
   }).sort((a, b) => b.score - a.score);
 }
 

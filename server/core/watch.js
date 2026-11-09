@@ -71,7 +71,7 @@ export function isoDuration(seconds) {
   return `PT${m ? `${m}M` : ''}${n % 60 ? `${n % 60}S` : ''}`;
 }
 
-function shell({ title, description, image, imageAlt = '', imageSize = null, url, body, noindex = false, ref = null, ld = null }) {
+export function shell({ title, description, image, imageAlt = '', imageSize = null, url, body, noindex = false, ref = null, ld = null, ogType = 'video.other' }) {
   const e = escapeHtml;
   return `<!doctype html>
 <html lang="en">
@@ -82,7 +82,7 @@ function shell({ title, description, image, imageAlt = '', imageSize = null, url
   <meta name="description" content="${e(description)}">
   <meta name="robots" content="${noindex ? 'noindex' : 'index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1'}">
   <link rel="canonical" href="${e(url)}">
-  <meta property="og:type" content="video.other">
+  <meta property="og:type" content="${e(ogType)}">
   <meta property="og:site_name" content="${SITE_NAME}">
   <meta property="og:title" content="${e(title)}">
   <meta property="og:description" content="${e(description)}">
@@ -115,7 +115,7 @@ ${body}
 `;
 }
 
-const brand = (homeHref) => `<header class="top">
+export const brand = (homeHref) => `<header class="top">
   <a class="brand" href="${escapeHtml(homeHref)}"><span class="brand-mark" aria-hidden="true"></span><span class="serif">StudyGraph</span></a>
 </header>`;
 

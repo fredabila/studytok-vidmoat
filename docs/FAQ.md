@@ -67,6 +67,22 @@ header. Coming back after a long break refreshes on its own.
 Your own lesson is being made (about a minute). Meanwhile you get a ready lesson from the library
 for your level, and yours appears when it is done.
 
+## Course profiles and following
+
+**What is a course profile?** Every course on StudyGraph has a profile with a handle, like
+`@hs-biology`. It shows the course's lessons as a grid, what the course covers, and how many
+students follow it. Tap the `@handle` on any lesson to open it; tap a lesson in the grid to
+watch the course as a feed. Share it with `study-graph.com/@handle`.
+
+**Who names a course?** Official courses and packs have their own handle. When you bring a new
+course (one StudyGraph researched for your school) or add your own topic, you pick its handle.
+If the course or topic is already on StudyGraph, you follow the existing one instead, so
+everyone studying it shares the same lessons.
+
+**What does following do?** You follow your own courses automatically. Following another
+course mixes its lessons into your feed. Unfollowing a course you study removes it from your
+course too. Looking at a profile also leans your feed towards it for about 20 minutes.
+
 ## Progress, streaks and sharing
 
 **What is my member number?**

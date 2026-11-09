@@ -42,6 +42,7 @@ export async function markReady(v) {
   const entry = { score: Date.parse(v.createdAt), member: v.id };
   if (v.level) await kv.zadd(`ready:any:${v.level}`, entry);
   await kv.zadd('ready:any', entry);
+  if (v.unitId) await kv.zadd(`ready:unit:${v.unitId}`, entry); // course profiles list lessons by unit (feed/channels.js)
   if (v._poolOnly) return; // backfill: already filed under its unit and counted
   await kv.zadd(`ready:${v.readyKey}`, entry);
   await kv.hincrby('stats:library', 'ready', 1);

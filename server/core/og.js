@@ -111,3 +111,32 @@ export async function lessonCard(v, { fetchImpl = fetch, site } = {}) {
   const svg = await satori(cardTree(v, { poster, site }), { width: OG_WIDTH, height: OG_HEIGHT, fonts: await fonts() });
   return new Resvg(svg, { fitTo: { mode: 'width', value: OG_WIDTH }, font: { loadSystemFonts: false } }).render().asPng();
 }
+
+/** The share card of a course profile (/og/c/:handle.png): name, @handle, bio, lessons and followers. */
+export function channelTree(ch, { site = 'study-graph.com' } = {}) {
+  const ink = '#141414', ink3 = '#6f6a62', paper = '#f6f1e7', hl = '#ffd93d';
+  const accent = /^#[0-9a-f]{6}$/i.test(ch.topic?.accent || '') ? ch.topic.accent : hl;
+  const name = clip(ch.name, 70);
+  const bio = clip(ch.bio || '', 130);
+  const stat = (n, label) => h('div', { flexDirection: 'column', marginRight: 48 },
+    h('div', { fontFamily: SERIF, fontSize: 52, color: ink, lineHeight: 1 }, String(n)),
+    h('div', { fontFamily: SANS, fontWeight: 500, fontSize: 22, color: ink3, marginTop: 6 }, label));
+  return h('div', { width: OG_WIDTH, height: OG_HEIGHT, background: paper, padding: '64px 80px', flexDirection: 'column', justifyContent: 'space-between', borderTop: `14px solid ${accent}` },
+    h('div', { flexDirection: 'column' },
+      h('div', { alignItems: 'center', gap: 14, fontFamily: MONO, fontSize: 22, color: ink3, letterSpacing: 1 },
+        h('div', { width: 16, height: 16, borderRadius: 8, background: accent }),
+        [ch.topic?.label, ch.level?.label, ch.official ? 'Official course' : ch.kind === 'pack' ? 'Community pack' : 'Student-made course'].filter(Boolean).join(' · ').toUpperCase()),
+      h('div', { fontFamily: SERIF, fontSize: titleSize(name, false), lineHeight: 1.05, color: ink, letterSpacing: -1, marginTop: 22 }, name),
+      h('div', { fontFamily: MONO, fontSize: 32, color: ink, marginTop: 14, background: hl, padding: '2px 12px', alignSelf: 'flex-start' }, `@${ch.handle}`),
+      bio ? h('div', { fontFamily: SANS, fontWeight: 500, fontSize: 26, lineHeight: 1.3, color: '#3d3a35', marginTop: 20 }, bio) : null),
+    h('div', { alignItems: 'flex-end', justifyContent: 'space-between', width: '100%' },
+      h('div', {}, stat(ch.lessons || 0, 'lessons'), stat(ch.followers || 0, 'followers')),
+      h('div', { alignItems: 'center', gap: 14 },
+        h('div', { fontFamily: SANS, fontWeight: 600, fontSize: 30, color: ink, background: hl, padding: '4px 12px' }, 'StudyGraph'),
+        h('div', { fontFamily: MONO, fontSize: 22, color: ink3 }, site))));
+}
+
+export async function channelCard(ch, { site } = {}) {
+  const svg = await satori(channelTree(ch, { site }), { width: OG_WIDTH, height: OG_HEIGHT, fonts: await fonts() });
+  return new Resvg(svg, { fitTo: { mode: 'width', value: OG_WIDTH }, font: { loadSystemFonts: false } }).render().asPng();
+}

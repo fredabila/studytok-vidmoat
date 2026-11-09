@@ -1,4 +1,4 @@
-// /sitemap.xml: the home page and every ready lesson page (/v/:id), each with its share image,
+// /sitemap.xml: the home page, every course profile (/@handle) and every ready lesson page (/v/:id), each with its share image,
 // so search engines find lessons without having to be sent a link first.
 
 import { escapeHtml } from './watch.js';
@@ -9,7 +9,7 @@ export const SITEMAP_LIMIT = 49_000;
 const day = (ms) => (Number.isFinite(ms) && ms > 0 ? new Date(ms).toISOString().slice(0, 10) : null);
 
 /** `lessons`: [{ id, at }] newest first, `at` in ms. */
-export function sitemapXml(site, lessons) {
+export function sitemapXml(site, lessons, profiles = []) {
   const e = escapeHtml;
   const newest = day(lessons[0]?.at) || new Date().toISOString().slice(0, 10);
   const rows = lessons
@@ -30,6 +30,11 @@ export function sitemapXml(site, lessons) {
     <changefreq>daily</changefreq>
     <priority>1.0</priority>
   </url>
+${profiles.filter((h) => /^[a-z0-9._-]{3,40}$/.test(h)).map((h) => `  <url>
+    <loc>${e(`${site}/@${h}`)}</loc>
+    <changefreq>daily</changefreq>
+    <image:image><image:loc>${e(`${site}/og/c/${h}.png`)}</image:loc></image:image>
+  </url>`).join('\n')}
 ${rows.join('\n')}
 </urlset>
 `;

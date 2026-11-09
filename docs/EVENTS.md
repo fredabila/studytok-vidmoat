@@ -90,6 +90,11 @@ Every `leave` and `quiz_answer` is also joined to the decision that served the v
 | `pref_change` | `key`, `value` | changed a lesson preference |
 | `interest_toggle` | `topic`, `on` | followed / unfollowed a topic |
 | `custom_add` / `custom_remove` | `title` / `unitId` | custom topics |
+| `channel_view` | `handle`, `source` slide/card/link/app | opened a course profile (also leans the feed, ALGORITHM.md "intent") |
+| `channel_follow` / `channel_unfollow` | `handle`, `source` | followed / unfollowed a course profile (state changes via `POST`/`DELETE /api/channels/:handle/follow`) |
+| `channel_play` / `channel_lesson_open` | `handle`, `from` / `id` | played a profile's lessons as a feed, from the start / from one tile |
+| `channel_share` | `handle`, `by` | shared a profile link |
+| `channel_search` | `q`, `results` | searched course profiles (Explore, or adding a topic that already exists) |
 | `unit_toggle` | `unitId`, `on` | ticked / unticked a unit in the Library |
 | `library_open` | `tab` course/saved/history | Library tab |
 | `profile_open`, `studies_edit` | | Profile |
@@ -128,7 +133,9 @@ the Google Sheet's Daily tab: `funnel_landing` (and `funnel_landing_ref` when th
 with an invite link), `funnel_signin_click`, `funnel_joined` / `funnel_signed_in` (the OAuth
 callback), `funnel_setup` (first profile save with units), `funnel_install_prompt` /
 `funnel_installed`, `referred` (a sign-up credited to an invite), `gen_ready` / `gen_failed`
-(video generation outcomes), `breather_view` and `push_sent` (Web Push reminders delivered by
+(video generation outcomes), `channel_autofollow` / `channel_follow_state` /
+`channel_unfollow_state` (follow changes), `profile_page_view` (public `/@handle` pages),
+`breather_view` and `push_sent` (Web Push reminders delivered by
 `core/push.js remindDue()`; the sheet's *Reminders sent*). The landing steps arrive through
 `POST /api/funnel` before there is a session; they carry no identifier.
 

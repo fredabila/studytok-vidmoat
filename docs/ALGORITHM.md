@@ -6,11 +6,11 @@ slot, then re-ordered so ready videos come first.
 
 ## Stage 1: which unit
 
-For every candidate unit (the student's course units in syllabus order, plus interest
-topics), with its learning state `s` (`user:{id}:progress`):
+For every candidate unit (the student's course units in syllabus order, the units of course
+profiles they follow, plus interest topics), with its learning state `s` (`user:{id}:progress`):
 
 ```
-score = (affinity + progress + review − recency) × lessFactor
+score = (affinity + progress + review + intent − recency) × lessFactor
 ```
 
 * **affinity**: a Thompson sample from `Beta(1 + engaged, 1 + disengaged)` where
@@ -20,7 +20,13 @@ score = (affinity + progress + review − recency) × lessFactor
   student's feed is driven by the syllabus, not noise.
 * **progress**: the syllabus frontier. Units not yet mastered (`mastery < 0.7`) are ranked per
   program; the first gets 1.0, the next 0.7, 0.4… so the feed walks each course from its start
-  (a student with three subjects starts all three). Interests get 0.15 (0.5 without a course).
+  (a student with three subjects starts all three). Units of a **followed course profile**
+  (kind `follow`, at most 16 per profile, 12 profiles per page) get 0.25; interests get 0.15
+  (both 0.5 without a course of their own).
+* **intent**: opening a course profile (`GET /api/channels/:handle`) leans the feed towards
+  that course for 20 minutes: its units get up to +0.6, fading linearly to 0. This works for
+  courses the student studies and for ones they only looked at. Calibration tracks units chosen
+  this way under the `follow` and `intent` leads.
 * **review**: spaced repetition with Leitner boxes. A correct quiz answer moves the unit up a
   box (due again in 1, 3, 7, 21 days); a wrong one drops it to box 0 (due in 20 minutes).
   When due: +0.6, or +0.9 if the unit has more wrong than right answers.
@@ -229,6 +235,25 @@ so it costs nothing, and it is paced so the feed stays a feed. `feed/moments.js`
 * **Slot**: a moment takes the second slot of the page, so a lesson always comes first, and it
   never counts as a view, a served video or syllabus progress. `moment_view` and `moment_cta`
   events say which ones get read and tapped (the Daily sheet counts them under "Moments shown").
+
+## Course profiles (`feed/channels.js`)
+
+Every course has one public profile with a unique handle: catalog programs and community packs
+get an official one (`@hs-biology`, the pack slug); a researched course or a custom topic is
+named by the student who brings it to StudyGraph (at onboarding, or when they add the topic).
+One course has exactly one profile (`channel:ref:<ref>`), so the next student who researches
+the same course or types the same topic is shown the existing profile and follows it instead of
+making a duplicate, and both share its lessons.
+
+* **Following**: students follow every course they study automatically. Following someone
+  else's course adds its units to the feed (kind `follow`, above). Unfollowing a course the
+  student studies takes it off their course; the choice is remembered so it is not re-followed.
+* **Profiles**: `/@handle` is a public, indexable page (grid of lessons, syllabus, Course
+  JSON-LD, its own share card at `/og/c/:handle.png`); in the app the same profile opens over
+  the feed, and its grid plays as a feed. Lessons are listed from `ready:unit:<unitId>`.
+* **Signals**: `channel_view`, `channel_play`, `channel_lesson_open`, `channel_share`,
+  `channel_follow` / `channel_unfollow` update `signals.channels[handle]` and the profile's
+  counters (`channel:<handle>:stats`); follow state and follower counts change through the API.
 
 ## Calibration (`feed/calibration.js`)
 

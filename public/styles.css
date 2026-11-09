@@ -925,3 +925,69 @@ body.landing-on { background: var(--paper); }
 .lp-note { margin: 10px 0 8px; }
 .lp-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .style-chip[aria-pressed="true"] { background: var(--hl); border-color: var(--ink); }
+
+/* ---- Course profiles (app.js "course profiles"; server/feed/channels.js) ---- */
+.ch-chip { pointer-events: auto; display: inline-flex; align-items: center; gap: 8px; margin: 8px 0 2px; }
+.ch-chip[hidden] { display: none; }
+.ch-at { border: 0; background: none; padding: 0; color: #fff; font-family: var(--mono); font-size: 13.5px; font-weight: 600; text-shadow: 0 1px 4px #000; cursor: pointer; }
+.ch-follow { border: 1.5px solid #fff; background: rgba(13, 13, 14, .45); color: #fff; border-radius: 999px; padding: 3px 10px; font-size: 12px; font-weight: 600; cursor: pointer; }
+.ch-follow[hidden] { display: none; }
+.ch-follow:active { transform: scale(.95); }
+
+body.channel-open { overflow: hidden; }
+.channel-view { position: fixed; inset: 0; z-index: 60; background: var(--paper); color: var(--ink); display: flex; flex-direction: column; }
+.channel-view[hidden] { display: none; }
+.ch-top { display: flex; align-items: center; gap: 10px; padding: calc(10px + env(safe-area-inset-top, 0px)) 12px 10px; border-bottom: 1px solid var(--line); background: var(--paper); }
+.ch-back, .ch-share-top { border: 0; background: none; width: 40px; height: 40px; border-radius: 50%; font-size: 30px; line-height: 1; color: var(--ink); cursor: pointer; display: grid; place-items: center; }
+.ch-share-top svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.ch-top-handle { flex: 1; text-align: center; font-family: var(--mono); font-size: 15px; }
+.ch-scroll { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 0 0 calc(24px + env(safe-area-inset-bottom, 0px)); }
+.ch-loading, .ch-empty { padding: 40px 20px; text-align: center; color: var(--ink-3); }
+.ch-head { text-align: center; padding: 22px 16px 14px; max-width: 560px; margin: 0 auto; }
+.ch-avatar { width: 88px; height: 88px; margin: 0 auto; border-radius: 50%; display: grid; place-items: center; font-size: 42px; background: var(--accent, var(--hl)); border: 2px solid var(--ink); box-shadow: 4px 4px 0 var(--ink); }
+.ch-name { font-family: var(--serif); font-size: 24px; line-height: 1.15; margin: 14px 0 2px; }
+.ch-handle { margin: 0; font-family: var(--mono); font-size: 14px; color: var(--ink-3); display: flex; justify-content: center; align-items: center; gap: 8px; }
+.ch-kicker { margin: 6px 0 0; font-size: 13px; color: var(--ink-2); }
+.ch-stats { list-style: none; display: flex; justify-content: center; gap: 26px; margin: 14px 0; padding: 0; font-size: 12.5px; color: var(--ink-3); }
+.ch-stats strong { display: block; font-family: var(--serif); font-size: 20px; color: var(--ink); }
+.ch-bio { margin: 0 auto 4px; font-size: 14.5px; color: var(--ink-2); max-width: 480px; }
+.ch-actions { display: flex; justify-content: center; gap: 8px; margin-top: 14px; flex-wrap: wrap; }
+.ch-actions .btn svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.ch-follow-btn { min-width: 132px; }
+.ch-syllabus { max-width: 560px; margin: 4px auto 14px; padding: 0 16px; }
+.ch-syllabus summary { cursor: pointer; font-weight: 600; font-size: 14px; padding: 8px 0; }
+.ch-syllabus ol { margin: 0; padding-left: 20px; font-size: 14px; color: var(--ink-2); }
+.ch-syllabus li { margin: 6px 0; }
+.ch-syllabus li strong { color: var(--ink); display: block; }
+.ch-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 3px; max-width: 720px; margin: 0 auto; }
+.ch-grid > .ch-empty { grid-column: 1 / -1; }
+.ch-tile { position: relative; aspect-ratio: 9 / 16; border: 0; padding: 0; overflow: hidden; background: var(--dark); color: #fff; cursor: pointer; text-align: left; }
+.ch-tile img, .ch-tile-blank { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.ch-tile-blank { background: linear-gradient(160deg, #2a2a2e, #0d0d0e); }
+.ch-tile-meta { position: absolute; left: 0; right: 0; bottom: 0; padding: 20px 6px 6px; display: grid; gap: 2px; background: linear-gradient(transparent, rgba(0, 0, 0, .8)); }
+.ch-tile-title { font-size: 11.5px; font-weight: 600; line-height: 1.25; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.ch-tile-len { font-family: var(--mono); font-size: 9.5px; opacity: .85; }
+.ch-more { display: block; margin: 14px auto 0; }
+
+.xch { margin: 0 0 18px; }
+.xch-title { font-family: var(--serif); font-size: 19px; margin: 6px 0 10px; }
+.xch-list { display: grid; gap: 8px; }
+.ch-card { display: flex; align-items: center; gap: 12px; padding: 10px 12px; background: #fff; border: 1.5px solid var(--line-2); border-radius: 14px; cursor: pointer; }
+.ch-card:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+.ch-card-av { flex: none; width: 44px; height: 44px; border-radius: 50%; display: grid; place-items: center; font-size: 22px; background: var(--accent); border: 1.5px solid var(--ink); }
+.ch-card-text { flex: 1; min-width: 0; display: grid; gap: 2px; }
+.ch-card-text strong { font-size: 14.5px; line-height: 1.25; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ch-card-text small { font-family: var(--mono); font-size: 11px; line-height: 1.35; color: var(--ink-3); overflow-wrap: anywhere; }
+.ch-card .btn { flex: none; }
+
+.handle-field { display: grid; gap: 6px; margin: 10px 0 14px; }
+.handle-row { display: flex; align-items: center; gap: 4px; border: 1.5px solid var(--ink); border-radius: 10px; background: #fff; padding: 0 12px; }
+.handle-row span { font-family: var(--mono); font-weight: 600; color: var(--ink-3); }
+.handle-input { flex: 1; min-width: 0; border: 0; outline: 0; background: none; padding: 12px 0; font-family: var(--mono); font-size: 15px; color: var(--ink); }
+.handle-note { font-size: 12.5px; color: var(--ink-3); }
+.handle-note[data-ok="true"] { color: var(--ok); }
+.handle-note[data-ok="false"] { color: var(--bad); }
+.course-handle { margin-top: 12px; padding: 10px 12px; border-radius: 12px; background: var(--paper-2); font-size: 13.5px; }
+.course-handle p { margin: 0; }
+.name-sheet { display: grid; gap: 12px; }
+.name-sheet > p { margin: 0; color: var(--ink-2); }

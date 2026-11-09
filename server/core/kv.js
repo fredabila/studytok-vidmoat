@@ -110,6 +110,7 @@ class LocalKV {
     return opts.withScores ? sorted.flat() : sorted.map(([m]) => m);
   }
   async hincrby(k, f, n) { const h = this.data.get(k) || {}; h[f] = (h[f] || 0) + n; this.data.set(k, h); this.persist(); return h[f]; }
+  async hset(k, fields) { const h = this.data.get(k) || {}; let n = 0; for (const [f, v] of Object.entries(fields || {})) { if (!(f in h)) n++; h[f] = v; } this.data.set(k, h); this.persist(); return n; }
   async hgetall(k) { const h = this.data.get(k); return h && Object.keys(h).length ? { ...h } : null; }
   async lpush(k, ...vs) { const l = this.data.get(k) || []; l.unshift(...vs.reverse()); this.data.set(k, l); this.persist(); return l.length; }
   async ltrim(k, start, stop) { const l = this.data.get(k) || []; this.data.set(k, l.slice(start, stop === -1 ? undefined : stop + 1)); this.persist(); return 'OK'; }

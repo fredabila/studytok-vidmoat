@@ -44,7 +44,7 @@ export async function noteDecision(userId, videoId, parts, { viewed = 0, unit = 
   if (!parts) return;
   await kv.set(dkey(userId, videoId), { rules: rulesOf(parts), unit, viewed, at: Date.now() }, { ex: DECISION_TTL });
 }
-export const UNIT_LEADS = ['affinity-led', 'progress-led', 'review-led', 'explored', 'interest', 'breather'];
+export const UNIT_LEADS = ['affinity-led', 'progress-led', 'review-led', 'explored', 'interest', 'breather', 'follow', 'intent'];
 
 const densityClass = (format) => ((FORMAT_VISUAL_DENSITY[format] ?? 0.5) >= 0.6 ? 'dense' : 'light');
 

@@ -76,6 +76,15 @@ export const EVENT_SPECS = {
   chapter_seek: { video: true, fields: { from: 'n', to: 'n' } },
   quiz_stamp: { video: true, fields: {} },
   pack_add: { fields: { slug: 's', by: 's' } },
+  // Course profiles (feed/channels.js). Follow state changes through the API; these feed the
+  // student's signals and the profile's counters.
+  channel_view: { fields: { handle: 's', source: 's' } },
+  channel_follow: { fields: { handle: 's', source: 's' } },
+  channel_unfollow: { fields: { handle: 's', source: 's' } },
+  channel_share: { fields: { handle: 's', by: 's' } },
+  channel_play: { fields: { handle: 's', from: 's' } },
+  channel_lesson_open: { fields: { handle: 's', id: 's' } },
+  channel_search: { fields: { q: 's', results: 'i' } },
   pack_remove: { fields: { slug: 's' } },
   pack_link: { fields: { slug: 's' } },
   library_search: { fields: { q: 's' } },
@@ -167,6 +176,7 @@ const POSTURES = new Set(['hand', 'flat', 'moving', 'unknown']);
 /** The scene a timeline time falls in (for drop-off curves), by kind. */
 const sceneKindAt = (video, t) => { const s = (video?.scenes || []).findLast((x) => t >= x.start); return s?.kind || null; };
 const SESSION_GAP_MS = 30 * 60 * 1000;
+const CHANNEL_HANDLE = /^[a-z0-9](?:[a-z0-9._-]{1,38}[a-z0-9])$/; // feed/channels.js HANDLE
 
 const bump = (obj, key, field, by = 1) => { obj[key] ||= {}; obj[key][field] = (obj[key][field] || 0) + by; };
 
@@ -400,6 +410,22 @@ export async function ingest(userId, batch) {
       case 'gen_wait': writes.push(kv.hincrby('stats:generation', e.outcome === 'ready' ? 'waitedReady' : 'waitedGaveUp', 1), kv.hincrby('stats:generation', 'waitMs', Math.round(e.ms || 0))); break;
       case 'pref_change': if (e.key) signals.prefs[e.key.slice(0, 16)] = e.value; break;
       case 'session_start': session.served = session.served || 0; break;
+      case 'channel_view': case 'channel_follow': case 'channel_unfollow': case 'channel_share': case 'channel_play': case 'channel_lesson_open': {
+        const h = String(e.handle || '').toLowerCase();
+        if (!CHANNEL_HANDLE.test(h)) break;
+        const c = (signals.channels ||= {})[h] ||= { views: 0, plays: 0, opens: 0, shares: 0, at: 0 };
+        c.at = e.at;
+        if (e.type === 'channel_view') { c.views++; writes.push(kv.hincrby(`channel:${h}:stats`, 'views', 1)); }
+        if (e.type === 'channel_play') { c.plays++; writes.push(kv.hincrby(`channel:${h}:stats`, 'plays', 1)); }
+        if (e.type === 'channel_lesson_open') { c.opens++; writes.push(kv.hincrby(`channel:${h}:stats`, 'opens', 1)); }
+        if (e.type === 'channel_share') { c.shares++; writes.push(kv.hincrby(`channel:${h}:stats`, 'shares', 1)); }
+        if (e.type === 'channel_follow') c.followed = true;
+        if (e.type === 'channel_unfollow') c.followed = false;
+        // Keep the 60 most recently touched profiles.
+        const keys = Object.keys(signals.channels);
+        if (keys.length > 60) for (const k of keys.sort((a, b) => signals.channels[a].at - signals.channels[b].at).slice(0, keys.length - 60)) delete signals.channels[k];
+        break;
+      }
       default: break;
     }
   }
