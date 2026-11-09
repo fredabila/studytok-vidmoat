@@ -62,6 +62,12 @@ framing, then straight back to the syllabus. Never two within six videos, never 
 mastery, and switched off for anyone who says "less" to them. See
 [docs/ALGORITHM.md](docs/ALGORITHM.md#breathers).
 
+**Finding things.** The Library's title, tabs and search box stay on screen while the page
+scrolls; the tabs show counts; one search box filters units, packs, saved lessons and history
+with match counts per tab and a one-tap "add as a topic" when nothing matches; long lists scroll
+inside a bounded box rather than making the page endless; keyboard users get `/` for search and
+arrow keys on the tabs.
+
 **An interactive player.** The app edits the lesson document before Vidmoat's player gets it,
 and re-sends it live: recall mode blanks the key terms out of the on-screen text and mutes the
 narration until you tap to reveal (retrieval practice from any explainer, no new video made),

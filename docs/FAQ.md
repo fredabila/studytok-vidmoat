@@ -107,6 +107,13 @@ Yes. Add the date when you set up (or edit) your studies. From 45 days out your 
 towards revision of the units you have started, more lessons become retrieval practice
 (flashcards, true or false, drills), and a countdown appears on your Library and Profile.
 
+**How do I find something in my Library?**
+The search box under the Library tabs filters whatever tab you are on: units and packs on
+Course, lessons on Saved and History. The pills under it say how many matches each tab has;
+tap one to switch. If nothing matches, one tap adds what you typed as a topic. On a computer,
+press `/` to jump to the box and the arrow keys to move between tabs. Long lists scroll inside
+their own box, so the page never becomes endless.
+
 **Can I start over?**
 Yes, from your Profile under *Start fresh*. *Reset my feed* clears your progress, streak,
 history, missed questions and everything the algorithm learned about your tastes; your course,

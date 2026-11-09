@@ -68,6 +68,7 @@ export const EVENT_SPECS = {
   pack_add: { fields: { slug: 's', by: 's' } },
   pack_remove: { fields: { slug: 's' } },
   pack_link: { fields: { slug: 's' } },
+  library_search: { fields: { q: 's' } },
   invite_share: { fields: {} },
   refresh: { fields: { where: 's' } },
   skip: { video: true, fields: {} }, // legacy: an early leave

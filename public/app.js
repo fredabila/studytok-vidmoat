@@ -171,9 +171,14 @@ function programBlock(part) {
         p.units.forEach((u) => (on ? ob.selected.add(u.id) : ob.selected.delete(u.id)));
         block.render(p); updateStart();
       } }, allOn() ? 'Untick all' : 'Tick all')));
-    const list = el('div', { class: 'unit-list' });
+    const list = el('div', { class: `unit-list${p.units.length > 8 ? ' scroll-box' : ''}` });
+    if (p.units.length > 8) {
+      const filter = el('input', { type: 'search', class: 'unit-filter', placeholder: `Find a unit (${p.units.length})…`, 'aria-label': 'Find a unit', autocomplete: 'off' });
+      filter.oninput = () => { const q = filter.value.trim().toLowerCase(); $$('.unit', list).forEach((b) => { b.classList.toggle('off', Boolean(q) && !b.dataset.search.includes(q)); }); };
+      box.append(filter);
+    }
     for (const u of p.units) {
-      const b = el('button', { type: 'button', class: 'unit', 'aria-pressed': String(ob.selected.has(u.id)) },
+      const b = el('button', { type: 'button', class: 'unit', 'aria-pressed': String(ob.selected.has(u.id)), 'data-search': `${u.title} ${u.summary || ''}`.toLowerCase() },
         el('strong', {}, u.title), u.summary ? el('span', {}, u.summary) : null, el('i', { class: 'tick', 'aria-hidden': 'true' }));
       b.onclick = () => {
         ob.selected.has(u.id) ? ob.selected.delete(u.id) : ob.selected.add(u.id);
@@ -183,6 +188,7 @@ function programBlock(part) {
       list.append(b);
     }
     box.append(list);
+    requestAnimationFrame(markOverflow); // the 'scroll for more' hint, once the list has a height
     if (p.sources?.length) {
       box.append(el('p', { class: 'sources' }, 'Sources: ', ...p.sources.slice(0, 4).flatMap((s, i) => [i ? ' · ' : '',
         el('a', { href: s.url, target: '_blank', rel: 'noopener noreferrer' }, s.title.slice(0, 48))])));
@@ -1383,8 +1389,10 @@ function statTiles(stats) {
 }
 
 // ============================================================================ library
+let libData = null;
 async function showLibrary() {
   const lib = await api('GET', '/api/library');
+  libData = lib;
   const byProgram = new Map();
   for (const u of lib.units) {
     const key = u.programKey || 'custom';
@@ -1395,20 +1403,20 @@ async function showLibrary() {
   course.replaceChildren();
   const stats = me?.stats;
   const due = lib.units.filter((u) => u.active && u.dueForReview).length;
-  course.append(el('div', { class: 'hero' }, svgEl(mascot(due ? 'think' : stats?.streak >= 3 ? 'cheer' : 'happy')), goalRing(stats),
+  course.append(el('div', { class: 'hero search-hide' }, svgEl(mascot(due ? 'think' : stats?.streak >= 3 ? 'cheer' : 'happy')), goalRing(stats),
     el('div', {}, el('h3', {}, due ? `${due} unit${due > 1 ? 's' : ''} due for review` : 'Your syllabus'),
       el('p', {}, due ? 'Spaced repetition says now is the moment. They are first in your feed.' : 'Untick what you have mastered; your feed follows what stays ticked.'),
       examChip(me?.profile),
       el('div', { class: 'bubble' }, buddyLine(stats)))));
-  course.append(statTiles(stats));
+  course.append(Object.assign(statTiles(stats), { className: 'tiles search-hide' }));
   if (lib.misses?.length) {
     const due = lib.misses.length;
-    course.append(el('div', { class: 'lib-strip fix-strip' }, svgEl(mascot('think', 64)),
+    course.append(el('div', { class: 'lib-strip fix-strip search-hide' }, svgEl(mascot('think', 64)),
       el('div', {}, el('h3', {}, `${due} question${due > 1 ? 's' : ''} to fix`), el('p', {}, 'Quick checks you got wrong. Get each one right twice and it is yours for good.')),
       el('button', { type: 'button', class: 'btn small primary', onclick: () => fixMisses(lib.misses) }, 'Fix them now')));
   }
   const recap = recapCard(stats);
-  if (recap && stats?.week) course.append(recap);
+  if (recap && stats?.week) course.append(Object.assign(recap, { className: `${recap.className} search-hide` }));
   if (!lib.units.length) {
     course.append(el('div', { class: 'empty' }, svgEl(mascot('sleepy', 110)), el('b', {}, 'No course yet'), 'Add your course or subjects in Profile, or add your own topics below.'));
   }
@@ -1424,7 +1432,7 @@ async function showLibrary() {
       const box = el('input', { type: 'checkbox', class: 'unit-on', 'aria-label': `Include ${u.title}` });
       box.checked = u.active;
       box.onchange = async () => { box.checked ? activeIds.add(u.id) : activeIds.delete(u.id); u.active = box.checked; row.classList.toggle('off', !u.active); await saveUnits(); };
-      const row = el('div', { class: `unit-row${u.active ? '' : ' off'}` },
+      const row = el('div', { class: `unit-row${u.active ? '' : ' off'}`, 'data-search': u.title.toLowerCase() },
         el('label', { class: 'unit-name' }, box, el('span', {}, u.title), u.custom ? el('span', { class: 'tag' }, 'yours') : null, u.dueForReview && u.active ? el('span', { class: 'due' }, 'Review due') : null),
         el('div', { class: 'meter', role: 'meter', 'aria-valuemin': '0', 'aria-valuemax': '100', 'aria-valuenow': String(Math.round(u.mastery * 100)), 'aria-label': `${u.title} mastery` },
           el('i', { style: `width:${Math.round(u.mastery * 100)}%` })),
@@ -1446,9 +1454,9 @@ async function showLibrary() {
     input.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); add(); } });
     const corner = pct >= 70 ? sbadge('🏅 mastered', { hot: true, r: 6 }) : pct >= 30 ? sbadge('📈 on it', { r: 6 }) : null;
     const pk = program?.pack;
-    course.append(el('div', { class: `course-card${pk ? ' pack-card' : ''}` }, corner ? Object.assign(corner, { className: corner.className + ' corner-badge' }) : null,
+    course.append(el('div', { class: `course-card${pk ? ' pack-card' : ''}`, 'data-search': String(program?.name || '').toLowerCase() }, corner ? Object.assign(corner, { className: corner.className + ' corner-badge' }) : null,
       el('div', { class: 'course-head' }, ring, el('div', {}, el('h3', {}, program?.name || (key === 'custom' ? 'My topics' : 'Your course')), el('p', {}, program?.basis || (key === 'custom' ? 'Topics you added' : `${units.length} units`)))),
-      ...rows,
+      el('div', { class: `unit-rows${rows.length > 7 ? ' scroll-box' : ''}` }, ...rows),
       pk ? el('div', { class: 'pack-foot' },
         pk.link ? el('a', { class: 'btn small', href: pk.link, target: '_blank', rel: 'noopener noreferrer', onclick: () => track('pack_link', { slug: pk.slug }) }, pk.cta || 'Find out more') : null,
         el('button', { type: 'button', class: 'btn ghost small', onclick: async () => { track('pack_remove', { slug: pk.slug }); await patchMe({ removePack: pk.slug }).catch(() => {}); showLibrary(); } }, 'Remove pack'))
@@ -1471,10 +1479,10 @@ async function showLibrary() {
   // Community packs: anything people have shared in the repo (content/), one tap to add.
   const packs = (lib.packs || []).filter((p) => !p.added);
   if (lib.packs?.length) {
-    const list = el('div', { class: 'packs' });
+    const list = el('div', { class: `packs${packs.length > 4 ? ' scroll-box' : ''}` });
     for (const p of packs.slice(0, 12)) {
       const topic = cfg.topics.find((t) => t.id === p.topic);
-      list.append(el('div', { class: 'pack-row' },
+      list.append(el('div', { class: 'pack-row', 'data-search': `${p.title} ${p.by} ${p.kind} ${p.about}`.toLowerCase() },
         el('div', { class: 'pack-body' }, el('b', {}, p.title), el('small', {}, `${topic?.emoji || '📘'} ${p.kind} · ${p.units.length} units · by ${p.by}`), el('p', {}, p.about.length > 140 ? `${p.about.slice(0, 137)}…` : p.about)),
         el('button', { type: 'button', class: 'btn small primary', onclick: async (e) => {
           e.target.disabled = true;
@@ -1493,6 +1501,53 @@ async function showLibrary() {
   }
   renderSaved(lib.saved);
   renderHistory(lib.history);
+  const counts = { course: lib.units.filter((u) => u.active).length, saved: lib.saved.length, history: lib.history.length };
+  for (const b of $$('.segmented [data-seg]')) { const n = $('.seg-n', b); if (n) { n.textContent = String(counts[b.dataset.seg] || ''); n.hidden = !counts[b.dataset.seg]; } }
+  applyLibrarySearch();
+  markOverflow();
+}
+
+// ---- Library search -------------------------------------------------------------------------------
+// One box filters whatever is on screen: units and packs on Course, tiles on Saved, rows on History.
+// Everything searchable carries data-search; decorative blocks carry .search-hide and step aside.
+function applyLibrarySearch() {
+  const input = $('#lib-search');
+  if (!input) return;
+  const q = input.value.trim().toLowerCase();
+  $('.lib-clear').hidden = !q;
+  const counts = {};
+  for (const panel of $$('.seg-panel')) {
+    let n = 0;
+    $$('[data-search]', panel).forEach((x) => { const hit = !q || x.dataset.search.includes(q); x.classList.toggle('off', !hit); if (hit && q) n++; });
+    $$('.course-card', panel).forEach((c) => {
+      const rows = $$('.unit-row', c);
+      const own = Boolean(q) && c.dataset.search?.includes(q);
+      if (own) rows.forEach((r) => r.classList.remove('off'));
+      c.classList.toggle('off', Boolean(q) && !own && rows.length > 0 && rows.every((r) => r.classList.contains('off')));
+      if (q && !own && rows.length) n -= 0; // rows already counted
+    });
+    $$('.lib-day', panel).forEach((h) => { const any = h.nextElementSibling && $$('.hrow', h.nextElementSibling).some((r) => !r.classList.contains('off')); h.classList.toggle('off', Boolean(q) && !any); });
+    $$('.packs-card', panel).forEach((c) => c.classList.toggle('off', Boolean(q) && !$$('.pack-row', c).some((r) => !r.classList.contains('off'))));
+    $$('.search-hide', panel).forEach((x) => x.classList.toggle('off', Boolean(q)));
+    counts[panel.dataset.panel] = $$('[data-search]', panel).filter((x) => !x.classList.contains('off') && !x.classList.contains('course-card')).length;
+  }
+  const out = $('#lib-results');
+  out.hidden = !q;
+  if (!q) return;
+  const total = (counts.course || 0) + (counts.saved || 0) + (counts.history || 0);
+  const parts = [['course', 'Course'], ['saved', 'Saved'], ['history', 'History']].map(([k, label]) => el('button', { type: 'button', class: 'lib-res', 'aria-pressed': String($(`.segmented [data-seg="${k}"]`).getAttribute('aria-selected') === 'true'), onclick: () => $(`.segmented [data-seg="${k}"]`).click() }, `${counts[k] || 0} in ${label}`));
+  out.replaceChildren(...parts);
+  if (!total) out.append(el('button', { type: 'button', class: 'btn small primary lib-add', onclick: async () => {
+    const title = input.value.trim();
+    const { added } = await patchMe({ addCustom: { title } }).catch(() => ({}));
+    if (!added) return toast("Couldn't add that topic.");
+    toast(`Added "${added.title}". Lessons are on their way.`);
+    input.value = ''; showLibrary();
+  } }, `Add "${input.value.trim().slice(0, 30)}" as a topic`));
+}
+/** Marks bounded lists that actually overflow, so they can show their scroll hint. */
+function markOverflow() {
+  $$('.scroll-box').forEach((b) => b.classList.toggle('overflows', b.scrollHeight > b.clientHeight + 4));
 }
 
 // ---- Saved and History ---------------------------------------------------------------------------
@@ -1524,7 +1579,7 @@ function lessonTile(v, { onRemove } = {}) {
     el('span', { class: 'lt-top' }, el('span', { class: 'lt-topic' }, `${topic?.emoji || ''} ${topic?.label || 'Lesson'}`.trim()), v.duration ? el('span', { class: 'lt-dur' }, minsOf(v.duration)) : null),
     el('span', { class: 'lt-play', 'aria-hidden': 'true' }, svgEl('<svg viewBox="0 0 24 24"><polygon points="6 3 20 12 6 21 6 3"/></svg>')),
     el('span', { class: 'lt-body' }, el('b', {}, v.title || 'Untitled'), el('small', {}, [v.unit, fmtTag(v.format)].filter(Boolean).join(' · '))));
-  const wrap = el('div', { class: 'ltile-wrap' }, open);
+  const wrap = el('div', { class: 'ltile-wrap', 'data-search': `${v.title || ''} ${v.unit || ''} ${topic?.label || ''}`.toLowerCase() }, open);
   if (onRemove) wrap.append(el('button', { type: 'button', class: 'lt-x', 'aria-label': 'Remove from Saved', title: 'Remove from Saved', onclick: onRemove }, '×'));
   return wrap;
 }
@@ -1533,7 +1588,7 @@ function renderSaved(list) {
   box.classList.remove('grid');
   if (!list.length) { box.replaceChildren(el('div', { class: 'empty' }, svgEl(mascot('think', 110)), el('b', {}, 'Nothing saved yet'), 'Tap the bookmark on any lesson to keep it here for revision.')); return; }
   const total = list.reduce((s, v) => s + (v.duration || 0), 0);
-  const strip = el('div', { class: 'lib-strip' }, svgEl(mascot('cheer', 64)),
+  const strip = el('div', { class: 'lib-strip search-hide' }, svgEl(mascot('cheer', 64)),
     el('div', {}, el('h3', {}, `${list.length} saved lesson${list.length > 1 ? 's' : ''}`), el('p', {}, `${minsOf(total)} of revision, ready when you are.`)),
     el('button', { type: 'button', class: 'btn small primary', onclick: () => queueLessons(list, 'saved') }, 'Revise all'));
   const tiles = list.map((v) => lessonTile(v, { onRemove: () => {
@@ -1542,14 +1597,15 @@ function renderSaved(list) {
     toast('Removed from Saved');
     renderSaved(list.filter((x) => x.id !== v.id));
   } }));
-  box.replaceChildren(strip, el('div', { class: 'grid tiles-grid' }, ...tiles));
+  box.replaceChildren(strip, el('div', { class: `grid tiles-grid${tiles.length > 6 ? ' scroll-box tall' : ''}` }, ...tiles));
+  applyLibrarySearch();
 }
 function renderHistory(list) {
   const box = $('#lib-history');
   box.classList.remove('grid');
   if (!list.length) { box.replaceChildren(el('div', { class: 'empty' }, svgEl(mascot('sleepy', 110)), el('b', {}, 'No history yet'), 'Lessons you watch show up here.')); return; }
   const stats = me?.stats;
-  const strip = el('div', { class: 'lib-strip' }, svgEl(mascot('happy', 64)),
+  const strip = el('div', { class: 'lib-strip search-hide' }, svgEl(mascot('happy', 64)),
     el('div', {}, el('h3', {}, `${stats?.watched || list.length} lesson${(stats?.watched || list.length) === 1 ? '' : 's'} watched`), el('p', {}, stats?.streak >= 2 ? `${stats.streak}-day streak. Tap any lesson to watch it again.` : 'Tap any lesson to watch it again.')),
     el('button', { type: 'button', class: 'btn small', onclick: () => queueLessons(list.slice(0, 8), 'history') }, 'Replay recent'));
   const groups = new Map();
@@ -1559,13 +1615,14 @@ function renderHistory(list) {
     sections.push(el('h4', { class: 'lib-day' }, label, el('span', {}, `${items.length}`)));
     sections.push(el('div', { class: 'hlist' }, ...items.map((v) => {
       const topic = topicOf(v.topic);
-      return el('button', { type: 'button', class: 'hrow', style: `--accent:${topic?.accent || '#ffd93d'}`, onclick: () => openVideo(v.id) },
+      return el('button', { type: 'button', class: 'hrow', style: `--accent:${topic?.accent || '#ffd93d'}`, 'data-search': `${v.title || ''} ${v.unit || ''} ${topic?.label || ''}`.toLowerCase(), onclick: () => openVideo(v.id) },
         v.poster ? el('img', { src: v.poster, alt: '', loading: 'lazy' }) : el('span', { class: 'ph' }, topic?.emoji || '📚'),
         el('span', { class: 'h-body' }, el('b', {}, v.title || 'Untitled'), el('small', {}, [v.unit, fmtTag(v.format), v.duration ? minsOf(v.duration) : null].filter(Boolean).join(' · '))),
         el('span', { class: 'h-when' }, agoText(v.at) || '', svgEl('<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 3v5h5"/></svg>')));
     })));
   }
-  box.replaceChildren(strip, ...sections);
+  box.replaceChildren(strip, el('div', { class: `hist-box${list.length > 6 ? ' scroll-box tall' : ''}` }, ...sections));
+  applyLibrarySearch();
 }
 /** Queues several Library lessons right after the current slide and jumps to the first. */
 async function queueLessons(list, source) {
@@ -1760,13 +1817,29 @@ async function editStudies() {
 
 function wireChrome() {
   $$('.tabbtn').forEach((t) => { t.onclick = () => showView(t.dataset.tab); });
-  $$('.segmented [data-seg]').forEach((b) => {
+  const tabs = $$('.segmented [data-seg]');
+  tabs.forEach((b, i) => {
     b.onclick = () => {
       track('library_open', { tab: b.dataset.seg });
-      $$('.segmented [data-seg]').forEach((x) => x.setAttribute('aria-selected', String(x === b)));
+      tabs.forEach((x) => { x.setAttribute('aria-selected', String(x === b)); x.tabIndex = x === b ? 0 : -1; });
       $$('.seg-panel').forEach((p) => { p.hidden = p.dataset.panel !== b.dataset.seg; });
+      applyLibrarySearch();
+      markOverflow();
+    };
+    b.onkeydown = (e) => { // arrow keys move between tabs, as a tablist should
+      if (!['ArrowRight', 'ArrowLeft', 'Home', 'End'].includes(e.key)) return;
+      e.preventDefault();
+      const j = e.key === 'Home' ? 0 : e.key === 'End' ? tabs.length - 1 : (i + (e.key === 'ArrowRight' ? 1 : -1) + tabs.length) % tabs.length;
+      tabs[j].click(); tabs[j].focus();
     };
   });
+  const search = $('#lib-search');
+  let searchTimer = null;
+  search.oninput = () => { clearTimeout(searchTimer); searchTimer = setTimeout(() => { applyLibrarySearch(); if (search.value.trim()) track('library_search', { q: search.value.trim().slice(0, 40) }); }, 120); };
+  search.onkeydown = (e) => { if (e.key === 'Escape') { search.value = ''; applyLibrarySearch(); search.blur(); } };
+  $('.lib-clear').onclick = () => { search.value = ''; applyLibrarySearch(); search.focus(); };
+  document.addEventListener('keydown', (e) => { if (e.key === '/' && view === 'library' && !e.target.closest('input, textarea')) { e.preventDefault(); search.focus(); } });
+  window.addEventListener('resize', markOverflow);
   $('#edit-studies').onclick = editStudies;
   $('#reset-feed').onclick = () => resetMe('feed');
   $('#reset-all').onclick = () => resetMe('everything');
