@@ -698,8 +698,9 @@ export const FORMATS = {
     scenes: (l) => [
       { id: 'hook', kind: 'hook', spoken: sentence(l.hook), minDur: 3 },
       ...l.beats.slice(0, 2).map((b, i) => ({ id: `beat${i}`, kind: 'beat', index: i, spoken: sentence(b.text), captions: true, beat: b, kicker: i === 0 ? 'LEARN IT' : 'AND' })),
-      { id: 'yourturn', kind: 'callout', spoken: 'Your turn. Say it in one sentence, out loud, before the answer appears.', label: 'YOUR TURN', text: 'Say it in one sentence, out loud.', color: '#ffd93d', captions: false, pauseAfter: 5, minDur: 3 },
-      { id: 'model', kind: 'stamp', spoken: `Here's one way: ${sentence(l.fact)}`, label: 'SAY IT LIKE THIS', text: l.fact, color: '#2bbf6a', minDur: 3.5 },
+      // The label is deep orange so it reads on paper and dark cards; stamp labels stay short (set at 150 px).
+      { id: 'yourturn', kind: 'callout', spoken: 'Your turn. Say it in one sentence, out loud, before the answer appears.', label: 'YOUR TURN', text: 'Say it in one sentence, out loud.', color: '#c2410c', captions: false, pauseAfter: 5, minDur: 3 },
+      { id: 'model', kind: 'stamp', spoken: `Here's one way: ${sentence(l.fact)}`, label: 'LIKE THIS', text: l.fact, color: '#2bbf6a', minDur: 3.5 },
       ...quizScenes(l, 'Now check it.'), outro(l, 'You can explain it'),
     ],
   },

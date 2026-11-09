@@ -9,6 +9,7 @@ const FONT = "'Montserrat', 'Inter', sans-serif";
 
 export const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const round = (n) => Math.round(n * 100) / 100;
+const round6 = (n) => Math.round(n * 1e6) / 1e6;
 
 /**
  * Keep only a self-contained SVG: no scripts, event handlers, foreign objects, embedded
@@ -62,7 +63,7 @@ ${extra}`;
 
 function html(id, start, duration, track, html, css, { y = CARD.y, w = CARD.w, h = CARD.h, motion, x } = {}) {
   const patch = { y, ...(x != null ? { x } : {}) };
-  const cmds = [{ op: 'addHtmlElement', clipId: id, start: round(start), duration: round(duration), trackIndex: track, width: w, height: h, html, css, patch }];
+  const cmds = [{ op: 'addHtmlElement', clipId: id, start: round(start), duration: round6(duration), trackIndex: track, width: w, height: h, html, css, patch }];
   if (motion) cmds.push({ op: 'applyMotionPreset', clipId: id, preset: motion });
   return cmds;
 }
@@ -71,10 +72,13 @@ function html(id, start, duration, track, html, css, { y = CARD.y, w = CARD.w, h
 function staged(id, start, duration, track, n, render, css, opts = {}) {
   const cmds = [];
   const span = duration * 0.75;
+  const edge = (k) => round(k === 0 ? start : start + 0.35 + (span * k) / n);
   for (let k = 0; k < n; k++) {
-    const s = start + (k === 0 ? 0 : 0.35 + (span * k) / n);
-    const e = k === n - 1 ? start + duration : start + 0.35 + (span * (k + 1)) / n;
-    cmds.push(...html(`${id}s${k}`, s, e - s, track, render(k), css, { ...opts, motion: k === 0 ? opts.motion || 'slide-up' : undefined }));
+    // One rounded edge shared by both stages, each ending a microsecond before the next begins: the
+    // editor pushes a clip that overlaps (in floating point) up a track, over the captions.
+    const s = edge(k);
+    const e = k === n - 1 ? round(start + duration) : edge(k + 1);
+    cmds.push(...html(`${id}s${k}`, s, e - s - 1e-6, track, render(k), css, { ...opts, motion: k === 0 ? opts.motion || 'slide-up' : undefined }));
   }
   return cmds;
 }
@@ -103,7 +107,7 @@ export function teachingVisual(v, { id, start, duration, track, accent, theme = 
       const suffix = (v.unit || '').trim();
       if (theme === 'dark' && Number.isInteger(v.value) && n >= 0 && n <= 999_999 && suffix.length <= 2) {
         return [
-          { op: 'addMotionComponent', clipId: id, component: 'stat-counter', start: round(start), duration: round(duration), trackIndex: track,
+          { op: 'addMotionComponent', clipId: id, component: 'stat-counter', start: round(start), duration: round6(duration), trackIndex: track,
             props: { value: n, suffix, title: (v.title || '').slice(0, 60), accent, reveal: Math.min(1.5, duration / 2) } },
           { op: 'updateClip', clipId: id, patch: { y: CARD.y, scale: 1.25 } },
         ];

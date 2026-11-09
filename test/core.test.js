@@ -129,6 +129,12 @@ test('every format composes cleanly, silent and narrated, with its own skin', ()
         if (c.clipId && c.op.startsWith('add') && c.op !== 'addKeyframe') { assert.ok(!ids.has(c.clipId), `${id}: duplicate clipId ${c.clipId}`); ids.add(c.clipId); }
         if (typeof c.start === 'number' && typeof c.duration === 'number') assert.ok(c.start >= -0.2 && c.start + c.duration <= duration + 0.6, `${id}: ${c.op} ${c.clipId} inside the timeline`);
       }
+      // The editor pushes a clip up a track when its own track is busy (even touching counts), which
+      // would put footage over the scrim and dims over cards: these tracks must never overlap.
+      for (const track of [1, 4, 5]) {
+        const on = commands.filter((c) => c.trackIndex === track && typeof c.start === 'number' && c.op !== 'addKeyframe').sort((a, b) => a.start - b.start);
+        on.slice(1).forEach((c, k) => assert.ok(on[k].start + on[k].duration <= c.start, `${id}: ${on[k].clipId} overlaps ${c.clipId} on track ${track}`));
+      }
       assert.ok(duration > 15 && duration < 90, `${id}: duration ${duration}`);
       if (l.quiz) assert.ok(quiz && quiz.from < quiz.hold && quiz.hold < quiz.reveal, `${id}: quiz timing`);
       else assert.equal(quiz, null);
