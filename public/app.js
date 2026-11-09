@@ -579,7 +579,7 @@ function wireGestures() {
   $$('.pager-btn').forEach((b) => { b.onclick = () => go(Number(b.dataset.go)); });
   window.addEventListener('resize', () => layout(false));
   document.addEventListener('keydown', (e) => {
-    if ($('#app').hidden || view !== 'feed' || e.target.closest('input, textarea') || !$('#sheet').hidden) return;
+    if ($('#app').hidden || view !== 'feed' || e.target.closest('input, textarea') || !$('#sheet').hidden || talkOpen) return;
     if (['ArrowDown', 'PageDown', 'j'].includes(e.key)) { e.preventDefault(); go(1); }
     if (['ArrowUp', 'PageUp', 'k'].includes(e.key)) { e.preventDefault(); go(-1); }
     if (e.key === ' ') { e.preventDefault(); togglePause(); }
@@ -602,9 +602,7 @@ function addSlide(data, { at } = {}) {
   wireChannelChip(item);
   $('.more', node).onclick = () => openMore(item);
   // Comments are for adults only (server/core/safety.js): the button is not even shown to minors.
-  const talk = $('.comments', node);
-  talk.hidden = true; // shown by renderSlide once the lesson is ready
-  talk.onclick = () => openComments(item);
+  $('.comments', node).onclick = () => openComments(item); // renderSlide shows it on ready lessons, for adults
   $('.up-next', node).onclick = () => { track('upnext_tap', { videoId: item.data.id }); go(1); };
   if (data.status === 'generating') poll(item);
   return item;
@@ -3317,47 +3315,128 @@ const timeAgo = (iso) => {
   const s = Math.max(0, (Date.now() - Date.parse(iso)) / 1000);
   return s < 60 ? 'now' : s < 3600 ? `${Math.floor(s / 60)}m` : s < 86400 ? `${Math.floor(s / 3600)}h` : `${Math.floor(s / 86400)}d`;
 };
+// The comments panel, like TikTok's: a bottom sheet over the lower part of the screen while the
+// lesson keeps playing above it. Top comments first, likes, one level of replies, and answers from
+// the StudyGraph Tutor under questions (server/feed/comments.js).
+const AV_COLORS = ['#ffd93d', '#8fc1ff', '#ff9ecb', '#9be7b0', '#c6a8ff', '#ffb48a'];
+const avColor = (name) => AV_COLORS[[...String(name)].reduce((n, ch) => n + ch.charCodeAt(0), 0) % AV_COLORS.length];
+const heartSvg = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/></svg>';
+let talkOpen = null; // { item, close }
+function talkAvatar(c) {
+  return c.ai
+    ? el('span', { class: 'tk-av ai', 'aria-hidden': 'true' }, '✨')
+    : el('span', { class: 'tk-av', style: `background:${avColor(c.name)}`, 'aria-hidden': 'true' }, (c.name || '?')[0].toUpperCase());
+}
 async function openComments(item) {
   const d = item.data;
+  if (talkOpen) talkOpen.close();
   sendEvent(d.id, 'comments_open');
-  const list = el('ul', { class: 'talk-list' }, el('li', { class: 'muted' }, el('span', { class: 'spinner' })));
-  const input = el('input', { type: 'text', class: 'talk-input', maxlength: '300', placeholder: 'Add a comment about the lesson…', 'aria-label': 'Comment' });
-  const post = el('button', { type: 'button', class: 'btn primary small' }, 'Post');
-  const note = el('p', { class: 'talk-note', 'aria-live': 'polite' });
-  const row = (c) => {
-    const li = el('li', { class: 'talk-row' },
-      el('div', { class: 'talk-head' }, el('b', {}, c.name), el('span', { class: 'muted' }, timeAgo(c.at))),
-      el('p', {}, c.text));
-    const act = c.mine
-      ? el('button', { type: 'button', class: 'talk-act', onclick: async () => { try { await api('DELETE', `/api/comments/${c.id}`); li.remove(); } catch { toast("Couldn't delete that."); } } }, 'Delete')
-      : el('button', { type: 'button', class: 'talk-act', onclick: async (e) => { const b = e.currentTarget; try { await api('POST', `/api/comments/${c.id}/report`); b.textContent = 'Reported'; b.disabled = true; } catch { toast("Couldn't report that."); } } }, 'Report');
-    li.append(act);
-    return li;
+  let replyTo = null; // { id, name }
+  let refreshTimers = [];
+  const count = el('strong', { class: 'tk-count' }, 'Comments');
+  const list = el('div', { class: 'tk-list' }, el('div', { class: 'tk-empty' }, el('span', { class: 'spinner' })));
+  const input = el('input', { type: 'text', class: 'tk-input', maxlength: '300', placeholder: 'Add a comment…', 'aria-label': 'Add a comment', enterkeyhint: 'send' });
+  const sendBtn = el('button', { type: 'button', class: 'tk-send', 'aria-label': 'Post', disabled: true }, svgEl('<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg>'));
+  const replying = el('div', { class: 'tk-replying', hidden: true });
+  const note = el('p', { class: 'tk-note', 'aria-live': 'polite' });
+  const meName = me?.vidmoat?.name || 'You';
+
+  const heart = (c) => {
+    const b = el('button', { type: 'button', class: `tk-heart${c.liked ? ' on' : ''}`, 'aria-label': c.liked ? 'Unlike' : 'Like', 'aria-pressed': String(c.liked) },
+      svgEl(heartSvg), el('span', {}, c.likes ? fmtCount(c.likes) : ''));
+    b.onclick = async () => {
+      const on = !c.liked;
+      c.liked = on; c.likes = Math.max(0, c.likes + (on ? 1 : -1));
+      b.classList.toggle('on', on); b.setAttribute('aria-pressed', String(on)); $('span', b).textContent = c.likes ? fmtCount(c.likes) : '';
+      try { await api(on ? 'POST' : 'DELETE', `/api/comments/${c.id}/like`); } catch { /* the next load shows the truth */ }
+    };
+    return b;
+  };
+  const row = (c, { reply = false, parent = null } = {}) => {
+    const actions = el('div', { class: 'tk-meta' }, el('span', {}, timeAgo(c.at)));
+    if (!c.ai) actions.append(el('button', { type: 'button', class: 'tk-link', onclick: () => startReply(parent || c, c.name) }, 'Reply'));
+    if (c.mine) actions.append(el('button', { type: 'button', class: 'tk-link', onclick: async () => { try { await api('DELETE', `/api/comments/${c.id}`); load(); } catch { toast("Couldn't delete that."); } } }, 'Delete'));
+    else if (!c.ai) actions.append(el('button', { type: 'button', class: 'tk-link', onclick: async (e) => { const b = e.currentTarget; try { await api('POST', `/api/comments/${c.id}/report`); b.textContent = 'Reported'; b.disabled = true; } catch { toast("Couldn't report that."); } } }, 'Report'));
+    return el('div', { class: `tk-row${reply ? ' reply' : ''}${c.ai ? ' ai' : ''}` }, talkAvatar(c),
+      el('div', { class: 'tk-body' },
+        el('div', { class: 'tk-name' }, c.name, c.ai ? el('span', { class: 'tk-badge' }, 'AI tutor') : null, c.mine ? el('span', { class: 'tk-you' }, '· you') : null),
+        el('p', { class: 'tk-text' }, c.text), actions),
+      c.ai ? el('span') : heart(c));
+  };
+  const thread = (c) => {
+    const box = el('div', { class: 'tk-thread' }, row(c));
+    if (c.tutorPending) box.append(el('div', { class: 'tk-row reply ai pending' }, talkAvatar({ ai: true }), el('div', { class: 'tk-body' }, el('div', { class: 'tk-name' }, 'StudyGraph Tutor', el('span', { class: 'tk-badge' }, 'AI tutor')), el('p', { class: 'tk-text tk-typing' }, 'is answering', el('i'), el('i'), el('i')))));
+    if (c.replies.length) {
+      // The tutor's answer shows at once; students' replies fold behind "View replies" like TikTok.
+      const shown = c.replies.filter((r) => r.ai);
+      const folded = c.replies.filter((r) => !r.ai);
+      const wrap = el('div', { class: 'tk-replies' }, ...shown.map((r) => row(r, { reply: true, parent: c })));
+      box.append(wrap);
+      if (folded.length) {
+        const more = el('button', { type: 'button', class: 'tk-more' }, `View ${folded.length} repl${folded.length > 1 ? 'ies' : 'y'}`);
+        more.onclick = () => { more.replaceWith(...folded.map((r) => row(r, { reply: true, parent: c }))); };
+        wrap.append(more);
+      }
+    }
+    return box;
   };
   const load = async () => {
     try {
       const r = await api('GET', `/api/videos/${d.id}/comments`);
-      list.replaceChildren(...(r.comments.length ? r.comments.map(row) : [el('li', { class: 'muted talk-empty' }, 'No comments yet. Ask a question or share a tip.')]));
-    } catch (err) { list.replaceChildren(el('li', { class: 'muted' }, err.message || "Couldn't load comments.")); }
+      count.textContent = r.count ? `${fmtCount(r.count)} comment${r.count > 1 ? 's' : ''}` : 'Comments';
+      list.replaceChildren(...(r.comments.length ? r.comments.map(thread) : [el('div', { class: 'tk-empty' }, el('b', {}, 'No comments yet'), el('span', {}, 'Ask a question and the AI tutor answers it here, for everyone who watches this lesson.'))]));
+      // A tutor answer on its way: look again shortly.
+      if (r.comments.some((c) => c.tutorPending)) { refreshTimers.forEach(clearTimeout); refreshTimers = [setTimeout(load, 4000), setTimeout(load, 9000), setTimeout(load, 16000)]; }
+    } catch (err) { list.replaceChildren(el('div', { class: 'tk-empty' }, err.message || "Couldn't load comments.")); }
+  };
+  const startReply = (c, name) => {
+    replyTo = { id: c.id, name };
+    replying.hidden = false;
+    replying.replaceChildren(el('span', {}, `Replying to ${name}`), el('button', { type: 'button', 'aria-label': 'Cancel reply', onclick: () => { replyTo = null; replying.hidden = true; } }, '✕'));
+    input.placeholder = `Reply to ${name}…`;
+    input.focus();
   };
   const submit = async () => {
     const text = input.value.trim();
     if (text.length < 2) return;
-    post.disabled = true; note.textContent = 'Checking…';
+    sendBtn.disabled = true; note.textContent = 'Checking…';
     try {
-      const { comment } = await api('POST', `/api/videos/${d.id}/comments`, { text });
+      const r = await api('POST', `/api/videos/${d.id}/comments`, { text, parentId: replyTo?.id });
       sendEvent(d.id, 'comment_post');
-      input.value = ''; note.textContent = '';
-      $('.talk-empty', list)?.remove();
-      list.prepend(row(comment));
+      input.value = ''; note.textContent = r.tutor ? 'Posted. The AI tutor is answering your question…' : '';
+      replyTo = null; replying.hidden = true; input.placeholder = 'Add a comment…';
+      await load();
+      if (r.tutor) setTimeout(() => { if (note.textContent.startsWith('Posted')) note.textContent = ''; }, 6000);
     } catch (err) { note.textContent = err.message || "Couldn't post that."; }
-    finally { post.disabled = false; }
+    finally { sendBtn.disabled = !input.value.trim(); }
   };
-  post.onclick = submit;
-  input.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); submit(); } });
-  openSheet('Comments', el('div', { class: 'talk' },
-    el('p', { class: 'pref-hint' }, 'Be kind and keep it about the lesson. No links or contact details. Comments are checked before they appear.'),
-    el('div', { class: 'talk-compose' }, input, post), note, list));
+  input.addEventListener('input', () => { sendBtn.disabled = !input.value.trim(); });
+  input.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); submit(); } if (e.key === 'Escape') close(); });
+  sendBtn.onclick = submit;
+
+  const panel = el('section', { class: 'tk-panel', role: 'dialog', 'aria-modal': 'true', 'aria-label': 'Comments' },
+    el('div', { class: 'tk-head' }, el('span', { class: 'tk-grab', 'aria-hidden': 'true' }), count, el('button', { type: 'button', class: 'tk-close', 'aria-label': 'Close comments', onclick: () => close() }, '✕')),
+    list,
+    el('div', { class: 'tk-foot' }, replying, note,
+      el('div', { class: 'tk-compose' }, el('span', { class: 'tk-av', style: `background:${avColor(meName)}`, 'aria-hidden': 'true' }, meName[0].toUpperCase()), input, sendBtn),
+      el('p', { class: 'tk-rules' }, 'Be kind, keep it about the lesson. No links or contact details.')));
+  const shade = el('div', { class: 'tk-shade', onclick: () => close() });
+  const root = el('div', { class: 'tk-root' }, shade, panel);
+  // Swipe the header down to close, like any bottom sheet.
+  let y0 = null;
+  $('.tk-head', panel).addEventListener('pointerdown', (e) => { y0 = e.clientY; });
+  window.addEventListener('pointerup', function up(e) { if (y0 != null && e.clientY - y0 > 60) close(); y0 = null; if (!talkOpen) window.removeEventListener('pointerup', up); });
+  function close() {
+    refreshTimers.forEach(clearTimeout);
+    root.classList.remove('open');
+    setTimeout(() => root.remove(), 220);
+    talkOpen = null;
+    document.body.classList.remove('talk-open');
+  }
+  document.body.append(root);
+  document.body.classList.add('talk-open');
+  requestAnimationFrame(() => root.classList.add('open'));
+  talkOpen = { item, close };
   load();
 }
 

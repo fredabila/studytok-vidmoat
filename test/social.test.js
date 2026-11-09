@@ -84,7 +84,8 @@ test('comments: links, emails, phones and contact asks are refused before any mo
 test('comments: post, list (name as first name + initial), report to hide, delete own only', async () => {
   const ok = async () => ({ ok: true });
   const now = Date.now();
-  const c = await comments.postComment({ user: adult, videoId: video.id, text: '  Equal   and opposite, got it ', moderate: ok, now });
+  const { comment: c, tutor } = await comments.postComment({ user: adult, videoId: video.id, text: '  Equal   and opposite, got it ', moderate: ok, now });
+  assert.equal(tutor, false, 'not a question: no tutor reply');
   assert.equal(c.text, 'Equal and opposite, got it');
   assert.equal(c.name, 'Ama M.');
   await assert.rejects(comments.postComment({ user: adult, videoId: video.id, text: 'again', moderate: ok, now: now + 1000 }), /Wait a few seconds/);
@@ -96,7 +97,7 @@ test('comments: post, list (name as first name + initial), report to hide, delet
   assert.equal((await comments.reportComment({ userId: 'u0', id: c.id })).hidden, true);
   list = await comments.listComments(video.id, adult.id);
   assert.equal(list.count, 0);
-  const c2 = await comments.postComment({ user: adult, videoId: video.id, text: 'Second one', moderate: ok, now: now + 20_000 });
+  const { comment: c2 } = await comments.postComment({ user: adult, videoId: video.id, text: 'Second one', moderate: ok, now: now + 20_000 });
   await assert.rejects(comments.deleteComment({ userId: 'someone-else', id: c2.id }), /your own/);
   await comments.deleteComment({ userId: adult.id, id: c2.id });
   assert.equal((await comments.listComments(video.id, adult.id)).count, 0);
@@ -143,4 +144,45 @@ test('exam: countdown, readiness, focus grows near the exam; mock questions come
   assert.equal(qs[0].answerIndex, 1);
   const r = await call('GET', '/api/exam/mock', { cookie: adult.id });
   assert.equal(r.status, 200);
+});
+
+test('comments: questions get a public tutor reply; replies thread one level; likes order the list', async () => {
+  const ok = async () => ({ ok: true });
+  const author = { ...adult, id: crypto.randomUUID(), vidmoat: { name: 'Kofi Boateng' } };
+  const other = { ...adult, id: crypto.randomUUID(), vidmoat: { name: 'Esi' } };
+  const vid = { ...video, id: crypto.randomUUID() };
+  await db.saveVideo(vid);
+  const t0 = Date.now() + 100_000;
+  const q = await comments.postComment({ user: author, videoId: vid.id, text: 'Why does the wall not move?', moderate: ok, now: t0 });
+  assert.equal(q.tutor, true);
+  assert.equal(q.comment.tutorPending, true);
+  let asked;
+  const reply = await comments.tutorReply({ commentId: q.comment.id, video: vid, answer: async (args) => { asked = args; return { answer: 'It does push back, but its huge mass means it barely accelerates.', onTopic: true }; } });
+  assert.equal(reply.ai, true);
+  assert.equal(asked.publicReply, true);
+  assert.equal(asked.question, 'Why does the wall not move?');
+  // A student's reply to the question, and a reply to a reply lands on the same thread.
+  const r1 = await comments.postComment({ user: other, videoId: vid.id, text: 'Same question, thanks', parentId: q.comment.id, moderate: ok, now: t0 + 1000 });
+  assert.equal(r1.tutor, false, 'replies are not sent to the tutor');
+  await comments.postComment({ user: author, videoId: vid.id, text: 'Makes sense now', parentId: r1.comment.id, moderate: ok, now: t0 + 20_000 });
+  const plain = await comments.postComment({ user: other, videoId: vid.id, text: 'Great lesson', moderate: ok, now: t0 + 40_000 });
+  let list = await comments.listComments(vid.id, author.id);
+  assert.equal(list.comments[0].id, plain.comment.id, 'newest first when no likes');
+  const thread = list.comments.find((c) => c.id === q.comment.id);
+  assert.equal(thread.tutorPending, false);
+  assert.deepEqual(thread.replies.map((r) => r.name), ['StudyGraph Tutor', 'Esi', 'Kofi B.']);
+  assert.equal(list.count, 5);
+  // Likes: one per student, and the most liked comes first.
+  assert.deepEqual(await comments.likeComment({ userId: other.id, id: q.comment.id }), { liked: true, likes: 1 });
+  assert.deepEqual(await comments.likeComment({ userId: other.id, id: q.comment.id }), { liked: true, likes: 1 });
+  list = await comments.listComments(vid.id, other.id);
+  assert.equal(list.comments[0].id, q.comment.id);
+  assert.equal(list.comments[0].liked, true);
+  assert.deepEqual(await comments.likeComment({ userId: other.id, id: q.comment.id, on: false }), { liked: false, likes: 0 });
+  // An off-topic or failing tutor leaves no reply, only clears the pending mark.
+  const q2 = await comments.postComment({ user: other, videoId: vid.id, text: 'What is the best phone?', moderate: ok, now: t0 + 60_000 });
+  assert.equal(await comments.tutorReply({ commentId: q2.comment.id, video: vid, answer: async () => ({ answer: 'I only help with study questions.', onTopic: false }) }), null);
+  assert.equal((await comments.listComments(vid.id, other.id)).comments.find((c) => c.id === q2.comment.id).tutorPending, false);
+  assert.equal(comments.isQuestion('how do I balance this'), true);
+  assert.equal(comments.isQuestion('nice one'), false);
 });

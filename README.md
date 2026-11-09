@@ -188,9 +188,12 @@ is a worked example.
 * **Data saver** (Tune, or Auto with the phone's data-saving mode): the next lesson is not
   preloaded and the music is left out. Offline viewing is not possible: lessons are played live
   from their media, there are no MP4 files to store.
-* **Comments** (adults only): under each lesson, checked before they appear (no links or contact
-  details, then a model that fails closed), rate-limited, hidden after three reports, deletable
-  by their author (`server/feed/comments.js`).
+* **Comments** (adults only), TikTok-style: a bottom sheet over the playing lesson, most liked
+  first, likes, one level of replies. Questions get a public answer from the **StudyGraph Tutor**
+  within seconds, written with that lesson in front of it, so later viewers see it too (capped at
+  40 a lesson a day). Every comment is checked before it appears (no links or contact details,
+  then a model that fails closed), rate-limited, hidden after three reports, deletable by its
+  author (`server/feed/comments.js`).
 
 ## Age rules
 

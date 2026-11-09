@@ -73,13 +73,23 @@ export function cleanQuestion(q) {
 export async function askAboutLesson({ userId, video, question, audience = {}, ask = askClaude, now = Date.now() }) {
   const q = cleanQuestion(question);
   if (ask === askClaude && !config.anthropic.enabled) throw Object.assign(new Error('The tutor is not available right now.'), { status: 503 });
+  // The daily limit is checked before the model is called (and counts the attempt).
   const day = new Date(now).toISOString().slice(0, 10);
   if ((await kv.hincrby('ask:counts', `${userId}:${day}`, 1)) > ASKS_PER_DAY) {
     throw Object.assign(new Error(`That's ${ASKS_PER_DAY} questions today. Ask again tomorrow, or watch the lesson notes.`), { status: 429 });
   }
+  const r = await tutorAnswer({ video, question: q, audience, ask });
+  await kv.hincrby(`events:day:${day}`, 'ask', 1);
+  return r;
+}
+
+/** The tutor's answer to one question about `video`, with no limits applied (callers limit). */
+export async function tutorAnswer({ video, question, audience = {}, ask = askClaude, publicReply = false }) {
+  if (ask === askClaude && !config.anthropic.enabled) throw Object.assign(new Error('The tutor is not available right now.'), { status: 503 });
   let out;
   try {
-    out = await ask({ system: systemFor(audience), context: lessonContext(video), question: q });
+    const system = systemFor(audience) + (publicReply ? '\nThis is a public reply under the lesson, read by other students too: answer the question only, never mention the asker personally.' : '');
+    out = await ask({ system, context: lessonContext(video), question });
   } catch (err) {
     console.warn('[ask] failed:', err.message);
     throw Object.assign(new Error("The tutor couldn't answer just now. Try again in a moment."), { status: 502 });
@@ -87,6 +97,5 @@ export async function askAboutLesson({ userId, video, question, audience = {}, a
   const answer = String(out?.answer || '').trim().slice(0, 1200);
   if (!answer) throw Object.assign(new Error("The tutor couldn't answer that. Try asking it another way."), { status: 502 });
   const followUp = out?.onTopic === false ? '' : String(out?.followUp || '').replace(/\s+/g, ' ').trim().slice(0, 60);
-  await kv.hincrby(`events:day:${day}`, 'ask', 1);
   return { answer, followUp: followUp.length >= 3 ? followUp : '', onTopic: out?.onTopic !== false };
 }

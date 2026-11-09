@@ -666,7 +666,7 @@ async function route(req, res, url) {
 
   // ---- Asking, discussing, exam practice (core/safety.js decides who may use what) ----
   const lessonActMatch = /^\/api\/videos\/([0-9a-f-]{36})\/(ask|comments)$/.exec(path);
-  const commentMatch = /^\/api\/comments\/([0-9a-f-]{36})(\/report)?$/.exec(path);
+  const commentMatch = /^\/api\/comments\/([0-9a-f-]{36})(\/report|\/like)?$/.exec(path);
   if (lessonActMatch || commentMatch || path.startsWith('/api/exam')) {
     try {
       const me = await db.getUser(userId);
@@ -686,12 +686,16 @@ async function route(req, res, url) {
         if (what === 'comments' && req.method === 'POST') {
           requireCap(me, 'commentPost');
           const body = await readJson(req, 4096);
-          return send(res, 200, { comment: await comments.postComment({ user: me, videoId, text: body.text }) });
+          const r = await comments.postComment({ user: me, videoId, text: body.text, parentId: typeof body.parentId === 'string' ? body.parentId : null });
+          // A question gets a public answer from the tutor a few seconds later (the app re-reads).
+          if (r.tutor) waitUntil(comments.tutorReply({ commentId: r.comment.id, video: v }));
+          return send(res, 200, r);
         }
       }
       if (commentMatch) {
         requireCap(me, 'comments');
-        if (commentMatch[2] && req.method === 'POST') return send(res, 200, await comments.reportComment({ userId, id: commentMatch[1] }));
+        if (commentMatch[2] === '/report' && req.method === 'POST') return send(res, 200, await comments.reportComment({ userId, id: commentMatch[1] }));
+        if (commentMatch[2] === '/like' && (req.method === 'POST' || req.method === 'DELETE')) return send(res, 200, await comments.likeComment({ userId, id: commentMatch[1], on: req.method === 'POST' }));
         if (!commentMatch[2] && req.method === 'DELETE') return send(res, 200, await comments.deleteComment({ userId, id: commentMatch[1] }));
       }
       if (key === 'GET /api/exam') return send(res, 200, await examPlan(me));
