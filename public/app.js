@@ -366,7 +366,7 @@ async function refreshView(which = view) {
     if (which === 'feed') await restartFeed();
     else {
       me = (await api('GET', '/api/me')).user;
-      if (which === 'library') await showLibrary(); else renderProfile();
+      if (which === 'library') await showLibrary(); else if (which === 'explore') await renderExplore(); else renderProfile();
     }
   } catch { toast("Couldn't refresh. Check your connection."); }
   finally { setTimeout(() => btn?.classList.remove('spin'), 500); }
@@ -624,6 +624,7 @@ function momentAction(item, cta) {
   const reveal = (sel) => setTimeout(() => $(sel)?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 150);
   switch (cta.action) {
     case 'library': showView('library'); seg('course'); break;
+    case 'explore': showView('explore'); break;
     case 'saved': showView('library'); seg('saved'); break;
     case 'profile': showView('profile'); break;
     case 'invite': showView('profile'); reveal('#invite-card'); break;
@@ -1476,9 +1477,9 @@ async function showLibrary() {
     course.append(el('div', { class: 'card' }, el('h3', {}, 'My topics'), el('p', { class: 'muted' }, 'Anything you want to learn, in your own words.'),
       el('div', { class: 'add-row' }, input, el('button', { type: 'button', class: 'btn small', onclick: add }, 'Add'))));
   }
-  // Community packs: anything people have shared in the repo (content/), one tap to add.
-  const packs = (lib.packs || []).filter((p) => !p.added);
-  if (lib.packs?.length) {
+  // Community packs live on the Explore tab; the Library only shows the ones added (as courses).
+  const packs = [];
+  if (false) {
     const list = el('div', { class: `packs${packs.length > 4 ? ' scroll-box' : ''}` });
     for (const p of packs.slice(0, 12)) {
       const topic = cfg.topics.find((t) => t.id === p.topic);
@@ -1507,6 +1508,50 @@ async function showLibrary() {
   markOverflow();
 }
 
+// ============================================================================ explore (community packs)
+let explorePacks = null;
+let exploreTopic = '';
+async function renderExplore() {
+  const list = $('#explore-list');
+  if (!explorePacks) {
+    list.replaceChildren(el('div', { class: 'explore-empty' }, el('span', { class: 'spinner' })));
+    try { explorePacks = (await api('GET', '/api/packs')).packs; } catch { list.replaceChildren(el('div', { class: 'explore-empty' }, "Couldn't load the packs. Pull to refresh.")); return; }
+  }
+  const added = new Set(me?.packs || []);
+  // topic filter chips: only topics that have packs
+  const topics = [...new Set(explorePacks.map((p) => p.topic))].map((id) => cfg.topics.find((t) => t.id === id)).filter(Boolean);
+  const filters = $('#explore-filters');
+  filters.replaceChildren(el('button', { type: 'button', class: 'chip-btn', 'aria-pressed': String(!exploreTopic), onclick: () => { exploreTopic = ''; renderExplore(); } }, `All · ${explorePacks.length}`),
+    ...topics.map((t) => el('button', { type: 'button', class: 'chip-btn', 'aria-pressed': String(exploreTopic === t.id), onclick: () => { exploreTopic = exploreTopic === t.id ? '' : t.id; renderExplore(); } }, `${t.emoji} ${t.label}`)));
+  const q = ($('#explore-search').value || '').trim().toLowerCase();
+  $('[data-view="explore"] .lib-clear').hidden = !q;
+  const shown = explorePacks.filter((p) => (!exploreTopic || p.topic === exploreTopic) && (!q || `${p.title} ${p.by} ${p.kind} ${p.about} ${p.tags.join(' ')} ${p.units.map((u) => u.title).join(' ')}`.toLowerCase().includes(q)));
+  if (!shown.length) { list.replaceChildren(el('div', { class: 'explore-empty' }, svgEl(mascot('think', 100)), el('b', { style: 'display:block;color:var(--ink);font-family:var(--serif);font-size:20px;margin:6px 0' }, explorePacks.length ? 'No pack matches' : 'No packs yet'), explorePacks.length ? 'Try another word or topic.' : 'Be the first to share one on GitHub.')); return; }
+  list.replaceChildren(...shown.map((p) => {
+    const topic = cfg.topics.find((t) => t.id === p.topic);
+    const isAdded = added.has(p.slug);
+    const btn = el('button', { type: 'button', class: `btn small ${isAdded ? 'ghost' : 'primary'}` }, isAdded ? 'Remove from Library' : 'Add to Library');
+    btn.onclick = async () => {
+      btn.disabled = true;
+      try {
+        if (isAdded) { track('pack_remove', { slug: p.slug }); await patchMe({ removePack: p.slug }); toast(`Removed "${p.title}".`); }
+        else { track('pack_add', { slug: p.slug, by: 'explore' }); const { added: a } = await patchMe({ addPack: p.slug }); if (!a?.pack) throw new Error('no'); toast(`Added "${p.title}". Lessons are on their way.`); }
+        me = (await api('GET', '/api/me')).user;
+        renderExplore();
+      } catch { btn.disabled = false; toast("Couldn't change that pack."); }
+    };
+    return el('article', { class: `xpack${isAdded ? ' added' : ''}`, style: `--accent:${topic?.accent || '#ffe580'}` },
+      el('div', { class: 'xpack-head' }, el('div', { class: 'xpack-emoji', 'aria-hidden': 'true' }, topic?.emoji || '📘'),
+        el('div', {}, el('h3', {}, p.title), el('small', {}, `${p.kind} · ${topic?.label || 'General'} · by ${p.by}${isAdded ? ' · in your Library' : ''}`)),
+        el('span', { class: 'sbadge', style: '--r:3deg' }, `${p.units.length} units`)),
+      el('p', { class: 'xpack-about' }, p.about),
+      el('details', {}, el('summary', {}, `What you will learn`), el('ol', {}, ...p.units.map((u) => el('li', {}, u.title)))),
+      el('div', { class: 'xpack-foot' }, btn,
+        p.link ? el('a', { class: 'btn small ghost', href: p.link, target: '_blank', rel: 'noopener noreferrer', onclick: () => track('pack_link', { slug: p.slug }) }, p.cta || 'Find out more') : null,
+        p.tags?.length ? el('span', { class: 'tags' }, p.tags.slice(0, 3).map((t) => `#${t}`).join(' ')) : null));
+  }));
+}
+
 // ---- Library search -------------------------------------------------------------------------------
 // One box filters whatever is on screen: units and packs on Course, tiles on Saved, rows on History.
 // Everything searchable carries data-search; decorative blocks carry .search-hide and step aside.
@@ -1514,7 +1559,7 @@ function applyLibrarySearch() {
   const input = $('#lib-search');
   if (!input) return;
   const q = input.value.trim().toLowerCase();
-  $('.lib-clear').hidden = !q;
+  $('[data-view="library"] .lib-clear').hidden = !q;
   const counts = {};
   for (const panel of $$('.seg-panel')) {
     let n = 0;
@@ -1776,6 +1821,7 @@ function showView(next) {
     const refresh = api('GET', '/api/me').then((r) => { me = { ...r.user, billing: r.user.billing || me?.billing }; }).catch(() => {});
     if (next === 'library') { track('library_open', { tab: 'course' }); refresh.then(() => showLibrary()).catch(() => toast("Couldn't load your library.")); }
     if (next === 'profile') { track('profile_open'); renderProfile(); refresh.then(renderProfile); }
+    if (next === 'explore') { track('explore_open'); refresh.then(() => renderExplore()).catch(() => renderExplore()); }
   }
 }
 
@@ -1837,8 +1883,13 @@ function wireChrome() {
   let searchTimer = null;
   search.oninput = () => { clearTimeout(searchTimer); searchTimer = setTimeout(() => { applyLibrarySearch(); if (search.value.trim()) track('library_search', { q: search.value.trim().slice(0, 40) }); }, 120); };
   search.onkeydown = (e) => { if (e.key === 'Escape') { search.value = ''; applyLibrarySearch(); search.blur(); } };
-  $('.lib-clear').onclick = () => { search.value = ''; applyLibrarySearch(); search.focus(); };
-  document.addEventListener('keydown', (e) => { if (e.key === '/' && view === 'library' && !e.target.closest('input, textarea')) { e.preventDefault(); search.focus(); } });
+  $('[data-view="library"] .lib-clear').onclick = () => { search.value = ''; applyLibrarySearch(); search.focus(); };
+  const xs = $('#explore-search');
+  let xsTimer = null;
+  xs.oninput = () => { clearTimeout(xsTimer); xsTimer = setTimeout(() => { renderExplore(); if (xs.value.trim()) track('explore_search', { q: xs.value.trim().slice(0, 40) }); }, 120); };
+  xs.onkeydown = (e) => { if (e.key === 'Escape') { xs.value = ''; renderExplore(); xs.blur(); } };
+  $('[data-view="explore"] .lib-clear').onclick = () => { xs.value = ''; renderExplore(); xs.focus(); };
+  document.addEventListener('keydown', (e) => { if (e.key === '/' && (view === 'library' || view === 'explore') && !e.target.closest('input, textarea')) { e.preventDefault(); (view === 'explore' ? xs : search).focus(); } });
   window.addEventListener('resize', markOverflow);
   $('#edit-studies').onclick = editStudies;
   $('#reset-feed').onclick = () => resetMe('feed');
@@ -2089,7 +2140,7 @@ async function boot() {
   }
   ensureEndSlide();
   track('session_start', { source: matchMedia('(display-mode: standalone)').matches || navigator.standalone ? 'app' : 'browser', entry: linked ? 'link' : hash ? hash.slice(1, 12) : 'feed', ageBand: ageBand(me?.profile?.age) });
-  if (hash === '#library' || hash === '#profile') showView(hash.slice(1)); else showView('feed');
+  if (hash === '#library' || hash === '#profile' || hash === '#explore') showView(hash.slice(1)); else showView('feed');
   $('#sound-go')?.addEventListener('click', startSensors, { once: true });
   if (linked) await openVideo(linked);
   await loadMore(3);

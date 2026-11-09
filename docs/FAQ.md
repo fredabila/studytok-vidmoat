@@ -132,10 +132,15 @@ watching.
 **Can I jump around inside a lesson?**
 Yes. The marks on the progress bar are the lesson's scenes; tap one to jump there.
 
+**What is the Explore tab?**
+Community packs: courses people have shared (the ideas of a book, notes from a class, what a
+project does). Search them, filter by topic, open "What you will learn", and *Add to Library*
+puts the pack's units in your course. The Library only shows what you have added.
+
 **Can I bring my own material, or promote what I am doing?**
 Yes. StudyTok is open source: add a *pack*, one Markdown file in the repo with the ideas of a
 book, your course notes or what your project does, written in your own words, plus optional
-labelled images or clips. Once merged, anyone can add it from Library › Community packs or your
+labelled images or clips. Once merged, anyone can add it from the Explore tab or your
 link `studytok.vidmoat.com/?pack=<slug>`, lessons are made from it, and every lesson shows your
 name, link and call to action. The format and the rules are in
 [content/README.md](https://github.com/fredabila/studytok-vidmoat/blob/main/content/README.md).

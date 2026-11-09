@@ -110,7 +110,7 @@ units written in your own words, facts, an optional quiz bank) and an optional `
 of labelled images and clips under strict rules (sizes, formats, licences, a `shows`
 description for every file). `npm run content:check` validates it and runs on every pull request.
 
-Once merged, the pack is a course a student can add from Library › Community packs or by
+Once merged, the pack is a course a student can add from the Explore tab or by
 opening `https://studytok.vidmoat.com/?pack=<slug>`. Lessons are written from the pack's own
 units and facts, its assets can appear in the videos (`visual.query: "asset:<file>"`), and
 every lesson shows "From <author> · <title>" with the author's link and call to action in the
