@@ -38,37 +38,116 @@
 </head>
 <body>
   <!-- ================================================================ Landing -->
-  <section id="landing" class="landing" hidden aria-label="Welcome to StudyGraph">
-    <header class="ld-bar">
+  <section id="landing" class="landing lp" hidden aria-label="Welcome to StudyGraph">
+    <div class="lp-aurora" aria-hidden="true"><i></i><i></i><i></i></div>
+    <header class="lp-nav">
       <span class="ld-brand"><span class="ld-logo" aria-hidden="true"></span>StudyGraph</span>
-      <a class="ld-signin" href="/api/auth/vidmoat/start">Sign in</a>
+      <nav class="lp-links" aria-label="Sections"><a href="#lp-features">Features</a><a href="#lp-how">How it works</a></nav>
+      <a class="ld-signin lp-signin" href="/api/auth/vidmoat/start">Sign in</a>
     </header>
 
-    <div class="ld-main">
-      <div class="ld-hero">
-        <p class="ld-kicker">Made with the Vidmoat API</p>
-        <h1>Your syllabus, as a feed you <mark>can't stop scrolling.</mark></h1>
-        <p class="lead">Short narrated lessons written for your course, level and exam. A new kind of video every swipe, with a quick check so it sticks.</p>
-      </div>
-
-      <div class="ld-samples" id="ld-samples" aria-label="Sample videos"></div>
-
-      <ul class="ld-pills" aria-label="What you get">
-        <li>🧭 Follows your real syllabus</li>
-        <li>🎬 32 video formats</li>
-        <li>🔁 Quick checks &amp; spaced review</li>
-        <li>📱 Installs like an app</li>
-      </ul>
-
-      <div class="ld-cta">
-        <div class="ld-buttons">
-          <a class="btn primary ld-go" href="/api/auth/vidmoat/start"><img class="vm-logo" src="https://www.vidmoat.com/logo-512.png" alt="" width="22" height="22">Continue with Vidmoat</a>
-          <button type="button" class="btn ghost" id="ld-install" hidden>Install the app</button>
+    <main class="lp-main">
+      <section class="lp-hero">
+        <div class="lp-copy">
+          <p class="lp-eyebrow"><span class="lp-dot" aria-hidden="true"></span>Short lessons made for your course</p>
+          <h1>Your syllabus, as a feed you <mark>can’t stop scrolling.</mark></h1>
+          <p class="lp-lead">Narrated lessons written for your course, level and exam. A new kind of video every swipe, with a quick check so it sticks.</p>
+          <div class="lp-actions">
+            <a class="btn primary ld-go lp-cta" href="/api/auth/vidmoat/start"><img class="vm-logo" src="https://www.vidmoat.com/logo-512.png" alt="" width="22" height="22">Continue with Vidmoat<span class="lp-shine" aria-hidden="true"></span></a>
+            <button type="button" class="btn ghost" id="ld-install" hidden>Install the app</button>
+          </div>
+          <ul class="lp-trust" aria-label="Good to know">
+            <li><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>Free to start</li><li><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>15 lessons on us</li><li><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>No app store needed</li>
+          </ul>
+          <p id="ld-invited" class="ld-invited" hidden></p>
         </div>
-        <p class="ld-trust">Free to start on StudyGraph's credits; connect your own Vidmoat account when you want more. We never touch renders or exports.</p>
-        <p id="ld-invited" class="ld-invited" hidden></p>
-      </div>
-    </div>
+
+        <div class="lp-stage" aria-hidden="true">
+          <div class="lp-phone">
+            <div class="lp-screen">
+              <div class="lp-track" id="lp-track"></div>
+              <div class="lp-rail"><span class="lp-like"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/></svg></span><span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 11.5a8.4 8.4 0 0 1-9 8.5 9 9 0 0 1-4-.9L3 20l1.1-4A8 8 0 0 1 3 11.5 8.4 8.4 0 0 1 12 3a8.4 8.4 0 0 1 9 8.5Z"/></svg></span><span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m19 21-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16z"/></svg></span></div>
+              <div class="lp-bar"><i></i></div>
+            </div>
+          </div>
+          <div class="lp-float f1"><b class="ok"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg></b><span><strong>Quick check</strong>Correct. Nice one.</span></div>
+          <div class="lp-float f2"><b class="ai">AI</b><span><strong>Tutor replied</strong>“Think of two skaters…”</span></div>
+          <div class="lp-float f3"><b class="up"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></b><span><strong>Up next</strong>Made for your exam</span></div>
+        </div>
+      </section>
+
+      <section class="lp-marquee" aria-label="Video formats">
+        <div class="lp-row" id="lp-row-a"></div>
+        <div class="lp-row rev" id="lp-row-b"></div>
+      </section>
+
+      <section class="lp-stats" data-reveal>
+        <div><b data-count="40">40</b><span>video formats</span></div>
+        <div><b><span data-count="15">15</span>–<span data-count="50">50</span>s</b><span>per lesson</span></div>
+        <div><b data-count="15">15</b><span>free lessons to start</span></div>
+      </section>
+
+      <section class="lp-section" id="lp-features">
+        <p class="lp-eyebrow center" data-reveal>What makes it stick</p>
+        <h2 data-reveal>Feels like scrolling. <em>Works like studying.</em></h2>
+        <div class="lp-bento">
+          <article class="lp-tile wide t-local" data-reveal>
+            <div class="lp-tile-copy"><h3>Written for your world</h3><p>The same idea, explained with examples from where you live, at your level, for your exam.</p></div>
+            <div class="lp-quotes" id="lp-quotes">
+              <blockquote class="on"><small>In Accra</small>“Feel the trotro brake hard? That lurch forward is inertia.”</blockquote>
+              <blockquote><small>In London</small>“Feel the bus brake hard? That lurch forward is inertia.”</blockquote>
+            </div>
+          </article>
+          <article class="lp-tile t-quiz" data-reveal>
+            <h3>Pause to think</h3><p>The video waits for your answer. Try it:</p>
+            <div class="lp-quiz" id="lp-quiz">
+              <b>You push a wall. What does the wall do?</b>
+              <button type="button" data-k="0">Nothing</button>
+              <button type="button" data-k="1">Pushes back just as hard</button>
+              <button type="button" data-k="2">Pulls you in</button>
+              <small aria-live="polite"></small>
+            </div>
+          </article>
+          <article class="lp-tile t-tutor" data-reveal>
+            <h3>An AI tutor in every lesson</h3><p>Tap “I’m confused” and get a simpler explanation of exactly that part.</p>
+            <div class="lp-chat">
+              <span class="me">Why doesn’t the wall move?</span>
+              <span class="typing"><i></i><i></i><i></i></span>
+              <span class="ai">It does push back. It’s fixed to the whole building, so that huge mass barely moves.</span>
+            </div>
+          </article>
+          <article class="lp-tile t-exam" data-reveal>
+            <h3>Exam mode</h3><p>A countdown, what to focus on today, and mock exams from what you’ve watched.</p>
+            <div class="lp-exam"><div class="lp-exam-top"><strong>Your exam in <span data-count="23">23</span> days</strong><em><span data-count="68">68</span>% ready</em></div><div class="lp-meter"><i></i></div>
+              <ul><li>Electricity<span class="bad">needs work</span></li><li>Forces<span class="mid">getting there</span></li><li>Waves<span class="good">ready</span></li></ul></div>
+          </article>
+          <article class="lp-tile t-safe" data-reveal>
+            <h3>Safe for young learners</h3><p>Built to be engaging without the tricks.</p>
+            <ul class="lp-checks"><li><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>Under-18s are set up by a parent</li><li><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>No comments or strangers for minors</li><li><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>Break reminders and quiet nights</li><li><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>Lessons fact-checked, posts moderated</li></ul>
+          </article>
+          <article class="lp-tile wide t-app" data-reveal>
+            <div class="lp-tile-copy"><h3>Installs like an app</h3><p>Add it to your Home Screen in two taps. Smart reminders at the time you usually study, never late at night.</p></div>
+            <div class="lp-notifs"><div class="lp-notif n1"><span class="ld-logo"></span><span><strong>3 units are due for review</strong>5 minutes brings them back.</span></div><div class="lp-notif n2"><span class="ld-logo"></span><span><strong>The tutor answered your question</strong>“It does push back on you…”</span></div></div>
+          </article>
+        </div>
+      </section>
+
+      <section class="lp-section" id="lp-how">
+        <p class="lp-eyebrow center" data-reveal>How it works</p>
+        <h2 data-reveal>Set up once. <em>Then just swipe.</em></h2>
+        <ol class="lp-steps">
+          <li data-reveal><span>1</span><h3>Tell us what you study</h3><p>Your level, course or school, and exam date. Or just topics you’re curious about.</p></li>
+          <li data-reveal><span>2</span><h3>Lessons are made for you</h3><p>Each one is written, fact-checked and turned into a narrated video with captions and visuals.</p></li>
+          <li data-reveal><span>3</span><h3>Swipe, answer, remember</h3><p>What you miss comes back later, until you get it right twice.</p></li>
+        </ol>
+      </section>
+
+      <section class="lp-final" data-reveal>
+        <h2>Start learning, <mark>one swipe at a time.</mark></h2>
+        <p>Free to start. Sign in with Vidmoat and your first lessons are ready in a minute.</p>
+        <a class="btn primary ld-go lp-cta" href="/api/auth/vidmoat/start"><img class="vm-logo" src="https://www.vidmoat.com/logo-512.png" alt="" width="22" height="22">Continue with Vidmoat<span class="lp-shine" aria-hidden="true"></span></a>
+      </section>
+    </main>
 
     <footer class="ld-foot">
       <img src="https://www.vidmoat.com/logo-512.png" alt="" width="16" height="16">Built by <a href="https://www.vidmoat.com" target="_blank" rel="noopener noreferrer">Vidmoat</a>, a Buzz Innovations Ltd. company · <a href="https://github.com/fredabila/studytok-vidmoat" target="_blank" rel="noopener noreferrer">Open source</a>

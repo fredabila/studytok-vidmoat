@@ -2614,18 +2614,8 @@ const SAMPLE_HOOKS = {
   challenge: { topic: 'Maths', accent: '#34d399', hook: 'Ten seconds. <em>Go.</em>', card: ['10 seconds', '17 × 6 = ?'] },
 };
 function renderLanding(notice) {
-  const wrap = $('#ld-samples');
-  wrap.replaceChildren(...(cfg.formats || []).map((f, i) => {
-    const s = SAMPLE_HOOKS[f.id] || { topic: 'Study', accent: '#ffd93d', hook: f.blurb, card: [f.tag, ''] };
-    const card = el('article', { class: 'sample', 'data-f': f.id, style: `--accent:${s.accent};animation-delay:${i * 60}ms`, 'aria-label': `${f.name} sample` },
-      el('span', { class: 's-chip' }, `${s.topic} · ${f.tag}`),
-      el('div', { class: 's-hook' }, el('span', {})),
-      s.stamp ? el('span', { class: 's-stamp' }, s.stamp) : null,
-      el('div', { class: 's-card' }, el('b', {}, s.card[0]), s.card[1]),
-      el('div', { class: 's-foot' }, el('span', {}, f.name), el('span', {}, '▶ 0:38')));
-    $('.s-hook span', card).innerHTML = s.hook; // trusted static copy above
-    return card;
-  }));
+  // The page's moving parts (phone, ticker, reveals, quiz) live in landing.js, loaded only here.
+  import('./landing.js').then((m) => m.initLanding($('#landing'), cfg.formats || [], SAMPLE_HOOKS)).catch(() => {});
   const install = $('#ld-install');
   const standalone = matchMedia('(display-mode: standalone)').matches || navigator.standalone;
   const ios = /iphone|ipad|ipod/i.test(navigator.userAgent);
@@ -3625,7 +3615,12 @@ async function maybeAskNotifications() {
       } }, 'Turn on notifications'),
       el('button', { type: 'button', class: 'btn ghost', onclick: later }, 'Not now'));
   }
-  openSheet('', body, () => { if (!store.get('st_np_snooze')) store.set('st_np_snooze', JSON.stringify({ n: 1, until: Date.now() + 3 * 86400000 })); });
+  // Closed any other way (dragged down, Back, tapped outside): the same as "Not now", every time,
+  // so the card never comes back on the next open.
+  openSheet('', body, () => {
+    const now = JSON.parse(store.get('st_np_snooze') || '{"until":0,"n":0}');
+    if (Date.now() >= now.until) store.set('st_np_snooze', JSON.stringify({ n: now.n + 1, until: Date.now() + [3, 7, 30][Math.min(now.n, 2)] * 86400000 }));
+  });
 }
 
 // ============================================================================ study materials
