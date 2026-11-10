@@ -18,12 +18,15 @@ export function haptic(kind = 'tap') {
 
 // ---- Back closes the top layer ---------------------------------------------------------------
 // While any layer is open there is one extra history entry (a guard). Back pops it: the top layer
-// closes and, if others remain, the guard is pushed again. A layer closed by its own button leaves
-// the guard in place for the next one (going back from code races with new pushes).
+// closes and, if others remain, the guard is pushed again. When the last layer closes by its own
+// button, the guard is taken back out a moment later (unless another layer opened meanwhile), so
+// the next Back press does what the student expects instead of doing nothing once.
 const layers = [];
+let selfPop = false;
 const hasGuard = () => Boolean(history.state?.sgLayer);
 function ensureGuard() { if (!hasGuard()) history.pushState({ ...(history.state || {}), sgLayer: true }, ''); }
 window.addEventListener('popstate', () => {
+  if (selfPop) { selfPop = false; if (layers.length) ensureGuard(); return; } // our own clean-up, not the student's Back
   const top = layers.pop();
   if (!top) return;
   top.close({ fromBack: true });
@@ -34,7 +37,12 @@ export function pushLayer(close) {
   const entry = { close };
   layers.push(entry);
   ensureGuard();
-  return () => { const i = layers.indexOf(entry); if (i >= 0) layers.splice(i, 1); };
+  return () => {
+    const i = layers.indexOf(entry);
+    if (i < 0) return; // closed by Back: the guard is already gone
+    layers.splice(i, 1);
+    setTimeout(() => { if (!layers.length && hasGuard() && !selfPop) { selfPop = true; history.back(); } }, 60);
+  };
 }
 
 // ---- Drag a sheet down to dismiss ------------------------------------------------------------
