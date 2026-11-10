@@ -1227,3 +1227,28 @@ img, svg { -webkit-user-drag: none; -webkit-touch-callout: none; }
 .np .btn { width: 100%; }
 @media (prefers-reduced-motion: reduce) { .np-bell { animation: none; } }
 #sheet:has(.np) .sheet-panel > .btn[data-close] { display: none; }
+
+/* ---- I'm confused, study materials, comment kinds, collections ---- */
+.ask h4, .study h4 { margin: 14px 0 8px; font-size: 15px; }
+.ask-parts { display: grid; gap: 8px; }
+.ask-part { text-align: left; font: inherit; line-height: 1.35; color: var(--ink); background: #fff; border: 1.5px solid var(--line-2); border-radius: 14px; padding: 10px 12px; cursor: pointer; }
+.ask-part:active { transform: scale(.98); }
+.study-sum { margin: 0; line-height: 1.45; }
+.flash-row { display: flex; gap: 10px; overflow-x: auto; scroll-snap-type: x mandatory; padding: 2px 2px 8px; margin: 0 -2px; scrollbar-width: none; }
+.flash { flex: 0 0 78%; max-width: 320px; min-height: 150px; scroll-snap-align: start; display: grid; align-content: center; gap: 8px; text-align: left; font: inherit; color: var(--ink); background: #fff; border: 2px solid var(--ink); border-radius: 18px; padding: 16px; box-shadow: 4px 4px 0 var(--hl); cursor: pointer; }
+.flash small { font-size: 11px; font-weight: 700; letter-spacing: 1.5px; text-transform: uppercase; color: var(--ink-2, #666); }
+.flash span { font-size: 17px; font-weight: 600; line-height: 1.3; }
+.flash.back { background: var(--ink); color: var(--paper); box-shadow: 4px 4px 0 var(--hl); }
+.flash.back small { color: var(--hl); }
+.study-q { display: grid; gap: 8px; margin: 0 0 14px; }
+.study-q p { margin: 0; font-size: 13px; min-height: 1em; }
+.coll-chips { margin: 4px 0 10px; }
+.tk-filters { flex: none; display: flex; gap: 8px; overflow-x: auto; padding: 8px 16px 0; scrollbar-width: none; }
+.tk-filter { flex: none; font: inherit; font-size: 13px; font-weight: 700; color: #555; background: #f1f1f2; border: 0; border-radius: 16px; padding: 6px 12px; cursor: pointer; display: flex; gap: 6px; align-items: center; }
+.tk-filter small { font-weight: 600; color: #8a8a8a; }
+.tk-filter[aria-pressed="true"] { background: #161616; color: #fff; }
+.tk-filter[aria-pressed="true"] small { color: #ffd93d; }
+.tk-kind { font-size: 10px; font-weight: 800; letter-spacing: .3px; text-transform: uppercase; padding: 2px 6px; border-radius: 6px; background: #eef4ff; color: #1d4ed8; }
+.tk-kind.explanation { background: #e8f7ec; color: #14622a; }
+.tk-kind.correction { background: #fff1c2; color: #6b4e00; }
+.tk-kind.tip { background: #f6f3ff; color: #5b21b6; }

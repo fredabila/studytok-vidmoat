@@ -186,3 +186,57 @@ test('comments: questions get a public tutor reply; replies thread one level; li
   assert.equal(comments.isQuestion('how do I balance this'), true);
   assert.equal(comments.isQuestion('nice one'), false);
 });
+
+test('confused: pointing at a part asks for a simpler explanation of that part and counts it per lesson', async () => {
+  const { confusingPart } = await import('../server/feed/ask.js');
+  assert.equal(confusingPart(video, 0), 'Every push has an equal push back.');
+  assert.equal(confusingPart(video, 9), null);
+  let seen;
+  const r = await askAboutLesson({ userId: adult.id, video, part: 0, audience: {}, ask: async (a) => { seen = a; return { answer: 'Lean on a wall: it leans back on you just as hard.', followUp: 'What Is a Force', onTopic: true }; } });
+  assert.match(seen.question, /confused by this part of the lesson: "Every push has an equal push back\."/);
+  assert.match(seen.question, /simpler way/);
+  assert.equal(r.followUp, 'What Is a Force');
+  assert.equal(Number((await kv.hgetall(`video:${video.id}:confusion`))['0']), 1);
+});
+
+test('study materials: written once from the lesson and cached; built from the lesson itself when the model fails', async () => {
+  const { studyMaterials, basicMaterials, cleanMaterials } = await import('../server/feed/study.js');
+  const basic = basicMaterials(video);
+  assert.ok(basic.flashcards.some((c) => c.a === 'Forces come in pairs.'));
+  assert.equal(basic.questions[0].answerIndex, 1);
+  assert.equal(cleanMaterials({ flashcards: [{ q: '', a: 'x' }], questions: [{ question: 'Is it?', options: ['a', 'b'], answerIndex: 0 }] }).questions.length, 0, 'two options is not a question');
+  const vid = { ...video, id: crypto.randomUUID() };
+  const failed = await studyMaterials(vid, { write: async () => { throw new Error('down'); } });
+  assert.equal(failed.source, 'lesson');
+  let calls = 0;
+  const write = async () => { calls++; return { summary: 'Forces come in pairs.', flashcards: [{ q: 'Third law?', a: 'Equal and opposite forces.' }, { q: 'Pairs act on?', a: 'Different objects.' }], questions: [{ question: 'A book rests on a table. The table…', options: ['does nothing', 'pushes up equally', 'pulls down'], answerIndex: 1, explanation: 'Equal and opposite.' }] }; };
+  const a = await studyMaterials(vid, { write });
+  const b = await studyMaterials(vid, { write });
+  assert.equal(a.source, 'ai');
+  assert.equal(calls, 1, 'cached for everyone after the first student');
+  assert.deepEqual(a, b);
+});
+
+test('comments carry a kind from the moderator; an unpunctuated question still reaches the tutor', async () => {
+  const user = { ...adult, id: crypto.randomUUID(), vidmoat: { name: 'Yaw Darko' } };
+  const vid = crypto.randomUUID();
+  const t0 = Date.now() + 500_000;
+  const ex = await comments.postComment({ user, videoId: vid, text: 'Think of two skaters pushing off each other', moderate: async () => ({ ok: true, kind: 'explanation' }), now: t0 });
+  assert.equal(ex.comment.kind, 'explanation');
+  assert.equal(ex.tutor, false);
+  const q = await comments.postComment({ user, videoId: vid, text: 'I do not get the wall part', moderate: async () => ({ ok: true, kind: 'question' }), now: t0 + 20_000 });
+  assert.equal(q.tutor, true);
+  assert.deepEqual((await comments.listComments(vid, user.id)).comments.map((c) => c.kind).sort(), ['explanation', 'question']);
+});
+
+test('streak days count learning, not opening the app: a view alone does not, finishing a lesson does', async () => {
+  const { ingest, getSignals, streakOf, day } = await import('../server/feed/events.js');
+  const u = await saveProfile(null, { profile: { level: 'university', age: 22, country: 'GH' }, units: [], interests: ['physics'] });
+  const now = Date.now();
+  await ingest(u.id, { events: [{ type: 'view', videoId: video.id, at: now }, { type: 'heartbeat', videoId: video.id, at: now }] });
+  assert.equal(Boolean((await getSignals(u.id)).days?.[day(now)]), false);
+  await ingest(u.id, { events: [{ type: 'complete', videoId: video.id, at: now }] });
+  const s = await getSignals(u.id);
+  assert.equal(s.days[day(now)], 1);
+  assert.equal(streakOf(s, now), 1);
+});

@@ -185,6 +185,16 @@ is a worked example.
   of it (`server/feed/ask.js`): short answers, school-safe, gentler for under-13s, 30 a day. When
   a short extra lesson would help, one tap turns it into a topic in the student's feed. Every
   question is counted per lesson (`asks`), a sign that something in it did not land.
+* **I'm confused** (⋯ menu): the student taps the part of the lesson that lost them (or asks
+  anything) and gets a simpler explanation of exactly that part, plus the topic to learn first
+  when there is one. Which parts confuse students is counted per lesson (`video:<id>:confusion`).
+* **Create study materials** (⋯ menu): flashcards, practice questions and a summary written from
+  that lesson only, made once and shared (`server/feed/study.js`); built from the lesson's own
+  fields when no model is available.
+* **Study collections** (Library → Saved): saved lessons sort themselves by subject, plus "To
+  revisit" for lessons whose quick check was missed; any collection plays as a revision playlist.
+* **Streaks count learning**: a day counts when a lesson is finished, a question answered, a mock
+  exam taken or the tutor asked, not for opening the app or scrolling.
 * **Exam mode** (Library): a countdown to the exam date from setup, readiness per unit (mastery),
   today's focus (more units a day as the exam nears) and a **mock exam** of up to 10 questions
   from lessons the student has watched, weakest units first. Answers count like quick checks.
@@ -194,7 +204,8 @@ is a worked example.
   preloaded and the music is left out. Offline viewing is not possible: lessons are played live
   from their media, there are no MP4 files to store.
 * **Comments** (adults only), TikTok-style: a bottom sheet over the playing lesson, most liked
-  first, likes, one level of replies. Questions get a public answer from the **StudyGraph Tutor**
+  first, likes, one level of replies, each comment tagged as a question, explanation, correction
+  or tip (with filters). Questions get a public answer from the **StudyGraph Tutor**
   within seconds, written with that lesson in front of it, so later viewers see it too (capped at
   40 a lesson a day). Every comment is checked before it appears (no links or contact details,
   then a model that fails closed), rate-limited, hidden after three reports, deletable by its

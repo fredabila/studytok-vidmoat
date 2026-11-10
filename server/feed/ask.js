@@ -58,6 +58,13 @@ async function askClaude({ system, context, question }) {
   return response.parsed_output;
 }
 
+/** The text of the lesson point the student marked as confusing (null when there is no such part). */
+export function confusingPart(video, part) {
+  const points = notesOf(video).points;
+  const i = Number(part);
+  return Number.isInteger(i) && i >= 0 && i < points.length ? points[i].slice(0, 300) : null;
+}
+
 /** Cleans the question; throws a 400 with a friendly message when it is not usable. */
 export function cleanQuestion(q) {
   const text = String(q || '').replace(/\s+/g, ' ').trim();
@@ -70,8 +77,13 @@ export function cleanQuestion(q) {
  * { answer, followUp, onTopic } for one question about `video`. Throws 429 past the daily limit,
  * 503 when no tutor is configured.
  */
-export async function askAboutLesson({ userId, video, question, audience = {}, ask = askClaude, now = Date.now() }) {
-  const q = cleanQuestion(question);
+export async function askAboutLesson({ userId, video, question, part = null, audience = {}, ask = askClaude, now = Date.now() }) {
+  // "I'm confused": the student points at a part of the lesson instead of typing a question.
+  const confusing = part != null ? confusingPart(video, part) : null;
+  const q = confusing
+    ? `I am confused by this part of the lesson: "${confusing}". ${String(question || '').replace(/\s+/g, ' ').trim().slice(0, 200)} Explain it again in a simpler way, with a different everyday example. If I need to understand something else first, name that topic as the follow-up.`
+    : cleanQuestion(question);
+  if (confusing) await kv.hincrby(`video:${video.id}:confusion`, String(Number(part)), 1); // which parts lose students, per lesson
   if (ask === askClaude && !config.anthropic.enabled) throw Object.assign(new Error('The tutor is not available right now.'), { status: 503 });
   // The daily limit is checked before the model is called (and counts the attempt).
   const day = new Date(now).toISOString().slice(0, 10);

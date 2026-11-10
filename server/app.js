@@ -45,6 +45,7 @@ import { askAboutLesson } from './feed/ask.js';
 import * as comments from './feed/comments.js';
 import { examPlan, mockExam } from './feed/exam.js';
 import { remindAll } from './feed/notify.js';
+import { studyMaterials } from './feed/study.js';
 
 
 export const SECURITY_HEADERS = {
@@ -666,7 +667,7 @@ async function route(req, res, url) {
   }
 
   // ---- Asking, discussing, exam practice (core/safety.js decides who may use what) ----
-  const lessonActMatch = /^\/api\/videos\/([0-9a-f-]{36})\/(ask|comments)$/.exec(path);
+  const lessonActMatch = /^\/api\/videos\/([0-9a-f-]{36})\/(ask|comments|study)$/.exec(path);
   const commentMatch = /^\/api\/comments\/([0-9a-f-]{36})(\/report|\/like)?$/.exec(path);
   if (lessonActMatch || commentMatch || path.startsWith('/api/exam')) {
     try {
@@ -678,8 +679,9 @@ async function route(req, res, url) {
         if (what === 'ask' && req.method === 'POST') {
           requireCap(me, 'ask');
           const body = await readJson(req, 4096);
-          return send(res, 200, await askAboutLesson({ userId, video: v, question: body.q, audience: audienceFor(me) }));
+          return send(res, 200, await askAboutLesson({ userId, video: v, question: body.q, part: body.part ?? null, audience: audienceFor(me) }));
         }
+        if (what === 'study' && req.method === 'GET') return send(res, 200, await studyMaterials(v));
         if (what === 'comments' && req.method === 'GET') {
           requireCap(me, 'comments');
           return send(res, 200, await comments.listComments(videoId, userId));
