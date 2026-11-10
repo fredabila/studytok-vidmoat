@@ -105,7 +105,7 @@ test('lessons carry real view counts and the viewer mastery for the progress aft
 });
 
 test('the third-wave formats keep to their rules (or fall back)', () => {
-  for (const id of ['detective', 'teachback', 'numbers', 'zoom', 'interview', 'debate', 'connect', 'howto']) assert.equal(sanitizeLesson(SAMPLES[id], 'physics').format, id);
+  for (const id of ['detective', 'teachback', 'numbers', 'zoom', 'interview', 'debate', 'connect', 'howto', 'redflags', 'personify', 'starterpack', 'plottwist', 'examiner', 'translate']) assert.equal(sanitizeLesson(SAMPLES[id], 'physics').format, id);
   // By the numbers needs real number visuals; without them it is an ordinary explainer.
   const plain = { ...SAMPLES.numbers, beats: SAMPLES.numbers.beats.map((b) => ({ ...b, visual: { ...b.visual, kind: 'footage', query: 'earth' } })) };
   assert.equal(sanitizeLesson(plain, 'physics').format, 'explain');

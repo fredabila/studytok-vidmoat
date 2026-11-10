@@ -33,15 +33,15 @@ export const LessonSchema = z.object({
   hookTerm: z.string().describe('1-3 words copied exactly from the hook to highlight'),
   hookStyle: z.enum(['curiosity', 'challenge', 'number', 'question', 'pain', 'claim', 'story', 'secret']).describe('The kind of hook used (see the hook rules)'),
   ambient: z.string().describe('Background footage search query for the whole video, 1-3 concrete visual nouns'),
-  beats: z.array(Beat).describe('explain/why/story/mythbust/detective/teachback/numbers/zoom/debate/connect and the other beat formats: the beats (see the format spec); else []'),
-  myth: z.string().describe('mythbust: the common wrong belief; else ""'),
-  fact: z.string().describe('mythbust/hottake: the correct statement or real point; wow: the astonishing true fact; mnemonic: the mnemonic phrase; detective: the solution; teachback: the model one-sentence explanation; debate: the verdict; else ""'),
+  beats: z.array(Beat).describe('explain/why/story/mythbust/detective/teachback/numbers/zoom/debate/connect/personify/plottwist/translate and the other beat formats: the beats (see the format spec); else []'),
+  myth: z.string().describe('mythbust: the common wrong belief; plottwist: what you would expect; examiner: the vague answer that loses marks; translate: the textbook sentence; else ""'),
+  fact: z.string().describe('mythbust/hottake: the correct statement or real point; wow: the astonishing true fact; mnemonic: the mnemonic phrase; detective: the solution; teachback: the model one-sentence explanation; debate: the verdict; redflags: the green flag; plottwist: the twist; examiner: the full-mark sentence; translate: the plain-words version; else ""'),
   items: z.array(z.object({
     title: z.string().describe('max 28 chars (thisorthat: "Left|Right"; mnemonic: "Word|Term"; history: "YEAR|what happened")'),
     text: z.string().describe('one spoken sentence, 8-16 words'),
     visual: z.string().describe('stock footage/photo query for this item'),
     tier: z.string().describe('tierlist: S, A, B or C; else ""'),
-  })).describe('rapid/tierlist/thisorthat/countdown/speedrun/cheatsheet/mistakes/history/mnemonic/realworld/howto: the items (see the format spec); else []'),
+  })).describe('rapid/tierlist/thisorthat/countdown/speedrun/cheatsheet/mistakes/history/mnemonic/realworld/howto/redflags/starterpack/examiner: the items (see the format spec); else []'),
   cards: z.array(z.object({ q: z.string().describe('recall question or true/false statement, max 70 chars'), a: z.string().describe('answer, max 60 chars') })).describe('flashcards/truefalse: exactly 4; else []'),
   exam: z.object({
     question: z.string().describe('examdrill: the question, max 120 chars; else ""'),
@@ -143,10 +143,13 @@ export function sanitizeLesson(raw, topicId, meta = {}) {
     detective: beats.length >= 3 && Boolean(raw.fact), teachback: beats.length >= 2 && Boolean(raw.fact),
     numbers: beats.length >= 3 && beats.filter((b) => b.visual.kind === 'stat' || b.visual.kind === 'bars').length >= 2,
     zoom: beats.length >= 3, interview: Boolean(chat), debate: beats.length >= 4 && Boolean(raw.fact), connect: beats.length >= 3, howto: items.length >= 3,
+    redflags: items.length >= 3 && Boolean(raw.fact), personify: beats.length >= 3, starterpack: items.length >= 4,
+    plottwist: Boolean(raw.myth && raw.fact) && beats.length >= 2, examiner: Boolean(raw.myth && raw.fact) && items.length >= 3,
+    translate: Boolean(raw.myth && raw.fact) && beats.length >= 2,
   };
   if (!ok[format]) format = beats.length >= 2 ? 'explain' : items.length >= 3 ? 'rapid' : cards.length >= 3 ? 'flashcards' : examFull ? 'examdrill' : chat ? 'chat' : null;
   if (!format) throw new Error('Lesson has no usable content');
-  if (['explain', 'why', 'story', 'pov', 'levels', 'tierlist', 'thisorthat', 'countdown', 'speedrun', 'wyr', 'onething', 'analogy', 'cheatsheet', 'mistakes', 'history', 'eli5', 'whatif', 'beforeafter', 'wow', 'mnemonic', 'realworld', 'detective', 'teachback', 'numbers', 'zoom', 'interview', 'debate', 'connect', 'howto'].includes(format) && !quiz) throw new Error('Lesson needs a quiz');
+  if (['explain', 'why', 'story', 'pov', 'levels', 'tierlist', 'thisorthat', 'countdown', 'speedrun', 'wyr', 'onething', 'analogy', 'cheatsheet', 'mistakes', 'history', 'eli5', 'whatif', 'beforeafter', 'wow', 'mnemonic', 'realworld', 'detective', 'teachback', 'numbers', 'zoom', 'interview', 'debate', 'connect', 'howto', 'redflags', 'personify', 'starterpack', 'plottwist', 'examiner', 'translate'].includes(format) && !quiz) throw new Error('Lesson needs a quiz');
 
   return {
     topic: topicId,

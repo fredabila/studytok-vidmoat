@@ -524,10 +524,10 @@ async function route(req, res, url) {
   }
 
   if (key === 'GET /api/library') return send(res, 200, await library(userId));
-  // A mini game on demand, from the student's recently watched lessons (?type=match|order|sort|truefalse|fillgap).
+  // A mini game on demand, from the student's recently watched lessons (?type= one of GAME_TYPES).
   if (key === 'GET /api/games/next') {
     const type = url.searchParams.get('type');
-    const item = await gameFor(userId, { type: GAME_TYPES.includes(type) ? type : null });
+    const item = await gameFor(userId, { type: GAME_TYPES.includes(type) ? type : null, played: (await getSignals(userId)).games?.byType || {} });
     if (!item) return send(res, 404, { error: 'Watch a few more lessons first: games are made from what you have watched.' });
     await noteGame(userId, item, {});
     return send(res, 200, { item });

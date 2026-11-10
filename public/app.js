@@ -487,7 +487,7 @@ function wireGestures() {
   let swallowClickUntil = 0;
   f.addEventListener('click', (e) => { if (performance.now() < swallowClickUntil) { e.stopPropagation(); e.preventDefault(); } }, true);
   f.addEventListener('pointerdown', (e) => {
-    if (!e.isPrimary || e.button > 0 || e.target.closest('input, textarea, select, .progress')) return;
+    if (!e.isPrimary || e.button > 0 || e.target.closest('input, textarea, select, .progress, .g-grid')) return;
     const onControl = Boolean(e.target.closest('button, a, .quiz'));
     // Caught mid-glide: freeze the track where it is and carry on from there, instead of jumping
     // to the slide it was gliding to.
@@ -816,6 +816,190 @@ function addGameSlide(data, { at } = {}) {
       };
       body.replaceChildren(sentence, opts);
       show(); setDots(st.total, 0);
+    },
+
+    // ---- the arcade games: letters, cards and bubbles (server/feed/games.js ARCADE_TYPES)
+    hangman() {
+      st.total = 1;
+      const word = g.word, max = g.lives || 6, guessed = new Set();
+      let lives = max;
+      const isLetter = (ch) => /[A-Z]/.test(ch);
+      const balloons = el('div', { class: 'g-balloons', role: 'img' });
+      const slots = el('div', { class: 'g-slots' });
+      const keys = el('div', { class: 'g-keys' });
+      const draw = () => {
+        balloons.setAttribute('aria-label', `${lives} of ${max} balloons left`);
+        balloons.replaceChildren(svgEl(mascot(lives <= 2 ? 'think' : 'happy', 54)), ...Array.from({ length: max }, (_, k) => el('i', { class: k < lives ? '' : 'gone' }, '🎈')));
+        slots.replaceChildren(...[...word].map((ch) => (isLetter(ch) ? el('b', { class: guessed.has(ch) ? 'on' : '' }, guessed.has(ch) ? ch : '') : el('span', {}, ch === ' ' ? '' : ch))));
+      };
+      const over = (won) => {
+        $$('button', keys).forEach((b) => { b.disabled = true; });
+        if (!won) { st.wrong.add(0); [...word].forEach((ch) => guessed.add(ch)); draw(); slots.classList.add('lost'); }
+        else slots.classList.add('won');
+        haptic(won ? 'success' : 'error');
+        setDots(1, -1, [won]);
+        setTimeout(finish, won ? 800 : 1700);
+      };
+      for (const ch of 'ABCDEFGHIJKLMNOPQRSTUVWXYZ') {
+        const b = el('button', { type: 'button', class: 'g-key' }, ch);
+        b.onclick = () => {
+          if (b.disabled || st.done) return;
+          b.disabled = true; guessed.add(ch);
+          if (word.includes(ch)) { b.classList.add('ok'); haptic('select'); draw(); if ([...word].every((c) => !isLetter(c) || guessed.has(c))) over(true); }
+          else { b.classList.add('bad'); lives--; haptic('tap'); draw(); if (lives <= 0) over(false); }
+        };
+        keys.append(b);
+      }
+      body.replaceChildren(balloons, el('p', { class: 'g-clue' }, g.clue), slots, keys);
+      draw(); setDots(1, 0);
+    },
+    memory() {
+      st.total = g.pairs.length;
+      const cards = shuffled(g.pairs.flatMap((p, i) => [{ i, text: p.left, kind: 'term' }, { i, text: p.right, kind: 'def' }]));
+      const seen = new Set();
+      let open = [], lock = false, found = 0;
+      const grid = el('div', { class: 'g-mem' });
+      cards.forEach((c, k) => {
+        const b = el('button', { type: 'button', class: `g-flip ${c.kind}`, 'aria-label': 'Card' }, el('span', { class: 'g-flip-back', 'aria-hidden': 'true' }, '?'), el('span', { class: 'g-flip-face' }, c.text));
+        b.onclick = () => {
+          if (lock || st.done || b.classList.contains('up')) return;
+          b.classList.add('up'); haptic('tap');
+          open.push({ c, b, k });
+          if (open.length < 2) return;
+          const [a, z] = open; open = [];
+          if (a.c.i === z.c.i) {
+            [a.b, z.b].forEach((x) => x.classList.add('ok'));
+            found++; haptic('success');
+            setDots(st.total, -1, g.pairs.map((_, j) => (cards.some((x, q) => x.i === j && grid.children[q].classList.contains('ok')) ? !st.wrong.has(j) : undefined)));
+            if (found === st.total) setTimeout(finish, 650);
+          } else {
+            // A miss only counts once the student has already been shown where the partner card is.
+            const partner = cards.findIndex((x, j) => x.i === a.c.i && j !== a.k);
+            if (seen.has(partner)) st.wrong.add(a.c.i);
+            lock = true;
+            [a.b, z.b].forEach((x) => x.classList.add('bad'));
+            setTimeout(() => { [a.b, z.b].forEach((x) => x.classList.remove('up', 'bad')); lock = false; }, 950);
+          }
+          seen.add(a.k); seen.add(z.k);
+        };
+        grid.append(b);
+      });
+      body.replaceChildren(grid);
+      setDots(st.total, -1);
+    },
+    scramble() {
+      st.total = g.rounds.length;
+      let i = 0;
+      const clue = el('p', { class: 'g-clue' });
+      const slots = el('button', { type: 'button', class: 'g-slots tap', 'aria-label': 'Your word. Tap to take the last letter back.' });
+      const tiles = el('div', { class: 'g-letters' });
+      const skip = el('button', { type: 'button', class: 'link g-skip' }, 'Show me');
+      const show = () => {
+        const r = g.rounds[i];
+        let picked = [], busy = false;
+        clue.textContent = r.clue;
+        const btns = [...r.letters].map((ch) => el('button', { type: 'button', class: 'g-key big' }, ch));
+        const draw = (letters = picked.map((x) => x.textContent)) => slots.replaceChildren(...[...r.answer].map((_, k) => el('b', { class: letters[k] ? 'on' : '' }, letters[k] || '')));
+        const done = (ok) => {
+          busy = true;
+          if (!ok) st.wrong.add(i);
+          slots.classList.add(ok ? 'won' : 'lost'); haptic(ok ? 'success' : 'error');
+          i++;
+          setDots(st.total, i, g.rounds.map((_, k) => (k < i ? !st.wrong.has(k) : undefined)));
+          setTimeout(() => { slots.classList.remove('won', 'lost'); if (i === st.total) finish(); else show(); }, ok ? 800 : 1500);
+        };
+        btns.forEach((b) => {
+          b.onclick = () => {
+            if (busy || b.disabled) return;
+            b.disabled = true; picked.push(b); haptic('tap'); draw();
+            if (picked.length < r.answer.length) return;
+            if (picked.map((x) => x.textContent).join('') === r.answer) { done(true); return; }
+            st.wrong.add(i); busy = true; haptic('error');
+            slots.classList.add('shake');
+            setTimeout(() => { slots.classList.remove('shake'); picked.forEach((x) => { x.disabled = false; }); picked = []; busy = false; draw(); }, 520);
+          };
+        });
+        slots.onclick = () => { if (busy) return; const last = picked.pop(); if (last) { last.disabled = false; draw(); } };
+        skip.onclick = () => { if (busy) return; btns.forEach((b) => { b.disabled = true; }); draw([...r.answer]); done(false); };
+        tiles.replaceChildren(...btns);
+        draw();
+      };
+      body.replaceChildren(clue, slots, tiles, skip);
+      show(); setDots(st.total, 0);
+    },
+    pop() {
+      st.total = g.chips.length;
+      const popped = new Set();
+      let ended = false;
+      const bar = el('div', { class: 'g-timer' }, el('i'));
+      const arena = el('div', { class: 'g-arena' });
+      const end = () => {
+        if (ended) return;
+        ended = true; clearTimer(); bar.classList.remove('run');
+        let missed = 0;
+        g.chips.forEach((c, k) => { bubbles[k].disabled = true; if (c.hit && !popped.has(k)) { st.wrong.add(k); bubbles[k].classList.add('missed'); missed++; } });
+        setTimeout(finish, missed ? 1400 : 650);
+      };
+      const bubbles = g.chips.map((c, k) => {
+        const b = el('button', { type: 'button', class: 'g-bubble', style: `--d:${(k % 4) * -0.7}s;--t:${3.2 + (k % 3) * 0.6}s` }, c.text);
+        b.onclick = () => {
+          if (ended || b.disabled) return;
+          b.disabled = true;
+          if (c.hit) { popped.add(k); b.classList.add('popped'); haptic('select'); if (g.chips.every((x, j) => !x.hit || popped.has(j))) end(); }
+          else { st.wrong.add(k); b.classList.add('bad'); haptic('error'); }
+        };
+        return b;
+      });
+      const run = () => {
+        bar.style.setProperty('--secs', `${g.seconds || 25}s`);
+        bar.classList.remove('run'); void bar.offsetWidth; bar.classList.add('run');
+        clearTimer(); st.timer = setTimeout(end, (g.seconds || 25) * 1000);
+      };
+      arena.append(...bubbles);
+      body.replaceChildren(bar, arena, el('p', { class: 'g-clue small' }, `Leave anything about “${g.other}”.`));
+      st.resume = () => { if (!ended) run(); };
+      run(); setDots(0, -1);
+    },
+    hunt() {
+      st.total = g.words.length;
+      const n = g.size, found = new Set(), cells = [];
+      const grid = el('div', { class: 'g-grid', style: `--n:${n}` });
+      g.grid.forEach((row, r) => [...row].forEach((ch, c) => { const d = el('span', { class: 'g-cell' }, ch); d.dataset.r = String(r); d.dataset.c = String(c); cells.push(d); grid.append(d); }));
+      const hidden = (w) => `${w[0]}${' ·'.repeat(w.length - 1)}`;
+      const list = el('ul', { class: 'g-hunt-list' }, ...g.words.map((w) => el('li', {}, el('b', {}, hidden(w.word)), el('span', {}, w.clue))));
+      const at = (r, c) => cells[r * n + c];
+      const line = (a, b) => {
+        const dr = b.r - a.r, dc = b.c - a.c;
+        if (dr && dc && Math.abs(dr) !== Math.abs(dc)) return null;
+        return Array.from({ length: Math.max(Math.abs(dr), Math.abs(dc)) + 1 }, (_, k) => at(a.r + Math.sign(dr) * k, a.c + Math.sign(dc) * k));
+      };
+      const cellAt = (e) => { const t = document.elementFromPoint(e.clientX, e.clientY); return t?.classList?.contains('g-cell') && grid.contains(t) ? { r: Number(t.dataset.r), c: Number(t.dataset.c) } : null; };
+      let from = null, sel = [];
+      const paint = () => { cells.forEach((x) => x.classList.toggle('sel', sel.includes(x))); };
+      grid.addEventListener('pointerdown', (e) => {
+        if (st.done) return;
+        from = cellAt(e); sel = from ? [at(from.r, from.c)] : []; paint();
+        try { grid.setPointerCapture(e.pointerId); } catch { /* pointer already gone */ }
+      });
+      grid.addEventListener('pointermove', (e) => { if (!from) return; const to = cellAt(e); const l = to && line(from, to); if (l) { sel = l; paint(); } });
+      const up = () => {
+        if (!from) return;
+        from = null;
+        const word = sel.map((x) => x.textContent).join(''), back = [...word].reverse().join('');
+        const k = g.words.findIndex((w, j) => !found.has(j) && (w.word === word || w.word === back));
+        if (k >= 0) {
+          found.add(k); haptic('success');
+          sel.forEach((x) => x.classList.add('found'));
+          list.children[k].classList.add('done'); $('b', list.children[k]).textContent = g.words[k].word;
+          setDots(st.total, -1, g.words.map((_, j) => (found.has(j) ? true : undefined)));
+          if (found.size === st.total) setTimeout(finish, 650);
+        }
+        sel = []; paint();
+      };
+      grid.addEventListener('pointerup', up); grid.addEventListener('pointercancel', up);
+      const giveUp = el('button', { type: 'button', class: 'link g-skip', onclick: () => { g.words.forEach((_, k) => { if (!found.has(k)) st.wrong.add(k); }); finish(); } }, 'I give up');
+      body.replaceChildren(grid, list, giveUp);
+      setDots(st.total, -1);
     },
   };
   item.onEnter = () => {
@@ -1878,7 +2062,7 @@ async function showLibrary() {
       el('div', {}, el('h3', {}, `${due} question${due > 1 ? 's' : ''} to fix`), el('p', {}, 'Quick checks you got wrong. Get each one right twice and it is yours for good.')),
       el('button', { type: 'button', class: 'btn small primary', onclick: () => fixMisses(lib.misses) }, 'Fix them now')));
   }
-  const GAMES = [['match', '🧩', 'Match it'], ['order', '🔢', 'Put it in order'], ['sort', '🗂️', 'Sort it'], ['truefalse', '⚡', 'True or false'], ['fillgap', '✍️', 'Fill the gap']];
+  const GAMES = [['hangman', '🎈', 'Save Noti'], ['memory', '🃏', 'Flip and match'], ['scramble', '🔀', 'Unscramble'], ['pop', '🫧', 'Pop it'], ['hunt', '🔎', 'Word hunt'], ['match', '🧩', 'Match it'], ['order', '🔢', 'Put it in order'], ['sort', '🗂️', 'Sort it'], ['truefalse', '⚡', 'True or false'], ['fillgap', '✍️', 'Fill the gap']];
   const ready = new Set(lib.games || []);
   course.append(el('div', { class: 'card games-card search-hide' }, el('h3', {}, 'Practice games'),
     el('p', { class: 'muted' }, ready.size ? 'Quick games made from lessons you have watched. What you miss comes back for review.' : 'Watch a few lessons and games made from them unlock here.'),

@@ -814,6 +814,126 @@ export const FORMATS = {
       ...quizScenes(l, 'Try it.'), outro(l, 'Remember the steps'),
     ],
   },
+
+  // ---- Fifth wave: the shapes students already scroll past every day (red flags, starter packs,
+  // plot twists, "if it were a person"), plus two exam ones: what the marker is looking for, and
+  // the textbook sentence put into plain words.
+
+  redflags: {
+    name: 'Red flags', tag: 'Red flags',
+    blurb: 'Three red flags that show an answer or an idea has gone wrong, each stamped 🚩, then the one green flag to look for.',
+    spec: 'items: exactly 3 red flags (title = the warning sign in 2-5 words, max 28 chars; text = one spoken sentence of 12-20 words: why it is a sign something is wrong; visual query). fact: the green flag, what a correct answer shows instead, max 90 chars. hook: "3 red flags in <topic>" style. quiz required (spot the red flag in a new example). Leave beats, myth, cards, exam.question and chat empty.',
+    weights: { default: 2, math: 3, chemistry: 3, physics: 3, biology: 2, economics: 3, language: 3, health: 3, 'computer-science': 3 },
+    skin: {
+      hook: { fontFamily: 'Anton', fontWeight: 400, fontSize: 170, uppercase: true, animIn: 'word-slam', outline: '#000000', outlineWidth: 6 },
+      term: { fontFamily: 'Anton', fontWeight: 400, uppercase: true },
+      captions: { preset: 'Boxed Red', y: 430, maxWordsPerLine: 3 },
+      filter: 'punch', transition: 'glitch', music: ['tension', 'energetic'], voice: 'ash', cards: 'dark', scrim: 0.7, stampSfx: true,
+    },
+    scenes: (l) => [
+      { id: 'hook', kind: 'hook', spoken: sentence(l.hook), minDur: 2.4 },
+      ...l.items.slice(0, 3).map((it, i) => ({ id: `flag${i}`, kind: 'stamp', spoken: `Red flag ${i + 1}: ${it.title}. ${sentence(it.text)}`, label: `RED FLAG ${i + 1}`, text: it.title, color: '#e5484d', minDur: 4, captions: true })),
+      { id: 'green', kind: 'stamp', spoken: `The green flag: ${sentence(l.fact)}`, label: 'GREEN FLAG', text: l.fact, color: '#2bbf6a', minDur: 3.5 },
+      ...quizScenes(l, 'Spot the red flag.'), outro(l, 'Look for the green flag'),
+    ],
+  },
+
+  personify: {
+    name: 'If it were a person', tag: 'If it were a person',
+    blurb: 'The idea as someone you know: who they are, what they do all day, and who they cannot stand. Characters stick where definitions slide off.',
+    spec: 'hook: "If <thing> were a person" (max 80 chars); the thing is a concept, process, object or quantity, never a real person or a group of people. beats: exactly 3: WHO THEY ARE (their personality, which is the definition), THEIR DAY JOB (what it does), THEIR NEMESIS (what opposes, limits or breaks it); each one spoken sentence that is accurate science dressed as character, keyTerm = the real term, a teaching visual where it helps. quiz required (on the real idea, not the character). Leave items, myth, fact, cards, exam.question and chat empty.',
+    weights: { default: 2, biology: 4, chemistry: 4, physics: 3, economics: 3, 'computer-science': 3, earth: 2, psychology: 2 },
+    skin: {
+      hook: { fontFamily: 'Bungee', fontWeight: 400, fontSize: 150, uppercase: false, animIn: 'pop' },
+      term: { fontFamily: 'Bungee', fontWeight: 400 },
+      captions: { preset: 'Comic Pop', y: 440, maxWordsPerLine: 4 },
+      filter: 'Vivid', transition: 'whip-pan', music: ['quirky', 'playful'], voice: 'nova', cards: 'paper', scrim: 0.6,
+    },
+    scenes: (l) => [
+      { id: 'hook', kind: 'hook', spoken: sentence(l.hook), minDur: 2.8 },
+      ...l.beats.slice(0, 3).map((b, i) => ({ id: `beat${i}`, kind: 'beat', index: i, spoken: sentence(b.text), captions: true, beat: b, kicker: ['WHO THEY ARE', 'THEIR DAY JOB', 'THEIR NEMESIS'][i] })),
+      ...quizScenes(l, 'Now the real thing.'), outro(l, 'Remember them'),
+    ],
+  },
+
+  starterpack: {
+    name: 'Starter pack', tag: 'Starter pack',
+    blurb: 'The four things you need to get a topic, as a starter pack: each one named over footage, then the whole pack on one card.',
+    spec: 'items: exactly 4 things every student needs for this topic (title = the thing in 1-4 words, max 28 chars; text = one spoken sentence of 8-16 words: why it is in the pack; visual = stock footage query). hook: "The <topic> starter pack". quiz required (which item does a given job, or which does not belong). Leave beats, myth, fact, cards, exam.question and chat empty.',
+    weights: { default: 2, math: 3, chemistry: 3, biology: 3, physics: 3, history: 2, economics: 3, 'computer-science': 3, language: 3, business: 3 },
+    skin: {
+      hook: { fontFamily: 'Archivo Black', fontWeight: 400, fontSize: 150, uppercase: true, animIn: 'pop' },
+      term: { fontFamily: 'Archivo Black', fontWeight: 400, uppercase: true },
+      captions: { preset: 'Karaoke', y: 430, maxWordsPerLine: 4 },
+      filter: 'Vivid', transition: 'slide', music: ['upbeat', 'funky'], voice: 'coral', cards: 'paper', scrim: 0.6, countdown: true,
+    },
+    scenes: (l) => [
+      { id: 'hook', kind: 'hook', spoken: sentence(l.hook), minDur: 2.6 },
+      ...l.items.slice(0, 4).map((it, i) => ({ id: `item${i}`, kind: 'item', index: i, total: Math.min(4, l.items.length), spoken: sentence(it.text), captions: true, item: it })),
+      { id: 'recap', kind: 'recap', spoken: '', items: l.items.slice(0, 4).map((it) => it.title), minDur: 3.4, title: 'The starter pack' },
+      ...quizScenes(l, 'What is in the pack?'), outro(l, 'Pack it'),
+    ],
+  },
+
+  plottwist: {
+    name: 'Plot twist', tag: 'Plot twist',
+    blurb: 'What you would expect to happen, stamped; then PLOT TWIST, what really happens; then two beats on why. Surprise is what memory keeps.',
+    spec: 'myth: what a sensible person would expect, max 70 chars ("Heavier things fall faster"). fact: the twist, what really happens, max 80 chars, true and well established. beats: exactly 2 that explain why the twist is true (text, keyTerm, teaching visual). hook: sets up the expectation without giving the twist away. quiz required (apply the twist to a new case). Leave items, cards, exam.question and chat empty.',
+    weights: { default: 2, physics: 4, biology: 3, chemistry: 3, space: 4, earth: 3, history: 3, psychology: 3, economics: 2 },
+    skin: {
+      hook: { fontFamily: 'DM Serif Display', fontWeight: 400, fontSize: 150, uppercase: false, animIn: 'fade-in' },
+      term: { fontFamily: 'Oswald', fontWeight: 700, uppercase: true },
+      captions: { preset: 'Clean Subtitle', y: 480, maxWordsPerLine: 5 },
+      filter: 'Moody', transition: 'zoom-blur', music: ['suspense', 'cinematic'], voice: 'fable', cards: 'dark', scrim: 0.66, stampSfx: true,
+    },
+    scenes: (l) => [
+      { id: 'hook', kind: 'hook', spoken: sentence(l.hook), minDur: 2.8 },
+      { id: 'expect', kind: 'stamp', spoken: `You would expect: ${sentence(l.myth)}`, label: 'YOU EXPECT', text: l.myth, color: '#5fb0ff', minDur: 3.5 },
+      { id: 'twist', kind: 'stamp', spoken: `Plot twist: ${sentence(l.fact)}`, label: 'PLOT TWIST', text: l.fact, color: '#ff6b2c', minDur: 3.5 },
+      ...l.beats.slice(0, 2).map((b, i) => ({ id: `beat${i}`, kind: 'beat', index: i, spoken: sentence(b.text), captions: true, beat: b, kicker: i === 0 ? 'HERE IS WHY' : 'AND SO' })),
+      ...quizScenes(l, 'Same twist, new case.'), outro(l, 'The twist'),
+    ],
+  },
+
+  examiner: {
+    name: 'What the examiner wants', tag: 'Mark scheme',
+    blurb: 'The answer most students write, stamped LOSES MARKS; the three things the mark scheme is looking for; then the full-mark sentence.',
+    spec: 'myth: the vague answer most students write, max 70 chars. items: exactly 3 mark points (title = the point in 2-5 words, max 28 chars; text = one spoken sentence of 8-16 words saying what to write; visual query). fact: one sentence that would earn full marks, max 90 chars, built from the three points. hook: names the exam question type ("Explain why… questions"). quiz required (which answer scores highest). Leave beats, cards, exam.question and chat empty.',
+    weights: { default: 2, biology: 4, chemistry: 4, physics: 4, economics: 4, history: 3, language: 3, law: 3, business: 3, math: 2 },
+    skin: {
+      hook: { fontFamily: 'Oswald', fontWeight: 700, fontSize: 150, uppercase: true, animIn: 'slide-up' },
+      term: { fontFamily: 'Oswald', fontWeight: 700 },
+      captions: { preset: 'Clean', y: 470, maxWordsPerLine: 4 },
+      filter: 'cool-clean', transition: 'push', music: ['calm piano', 'lofi'], voice: 'sage', cards: 'paper', scrim: 0.68, stampSfx: true, countdown: true,
+    },
+    scenes: (l) => [
+      { id: 'hook', kind: 'hook', spoken: sentence(l.hook), minDur: 2.6 },
+      { id: 'loses', kind: 'stamp', spoken: `Most students write: ${sentence(l.myth)}`, label: 'LOSES MARKS', text: l.myth, color: '#e5484d', minDur: 3.5 },
+      ...l.items.slice(0, 3).map((it, i) => ({ id: `item${i}`, kind: 'item', index: i, total: Math.min(3, l.items.length), spoken: sentence(it.text), captions: true, item: it })),
+      { id: 'full', kind: 'stamp', spoken: `Full marks: ${sentence(l.fact)}`, label: 'FULL MARKS', text: l.fact, color: '#2bbf6a', minDur: 4 },
+      ...quizScenes(l, 'You are the examiner.'), outro(l, 'Write it like that'),
+    ],
+  },
+
+  translate: {
+    name: 'In plain words', tag: 'In plain words',
+    blurb: 'The sentence exactly as the textbook says it, then the same thing in words you would use with a friend, then an example of it happening.',
+    spec: 'myth: the definition or law as a textbook states it, in formal wording, accurate, max 80 chars (this field holds the textbook sentence here, not a wrong belief). fact: the same thing in plain everyday words, max 90 chars, still correct. beats: exactly 2: an everyday example of it, then why the formal wording is worded the way it is (text, keyTerm, teaching visual). hook: "What <term> actually means". quiz required (match the plain meaning to the formal term). Leave items, cards, exam.question and chat empty.',
+    weights: { default: 2, physics: 3, chemistry: 3, biology: 3, law: 4, economics: 3, math: 3, 'computer-science': 3, psychology: 2 },
+    skin: {
+      hook: { fontFamily: 'Montserrat', fontWeight: 900, fontSize: 150, uppercase: false, animIn: 'slide-up' },
+      term: { fontFamily: 'Montserrat', fontWeight: 900 },
+      captions: { preset: 'Minimal', y: 500, maxWordsPerLine: 5 },
+      filter: 'Warm', transition: 'fade', music: ['lofi', 'chill beat'], voice: 'marin', cards: 'paper', scrim: 0.68,
+    },
+    scenes: (l) => [
+      { id: 'hook', kind: 'hook', spoken: sentence(l.hook), minDur: 2.6 },
+      { id: 'textbook', kind: 'stamp', spoken: `The textbook says: ${sentence(l.myth)}`, label: 'TEXTBOOK', text: l.myth, color: '#5fb0ff', minDur: 4 },
+      { id: 'plain', kind: 'stamp', spoken: `In plain words: ${sentence(l.fact)}`, label: 'PLAIN WORDS', text: l.fact, color: '#2bbf6a', minDur: 4 },
+      ...l.beats.slice(0, 2).map((b, i) => ({ id: `beat${i}`, kind: 'beat', index: i, spoken: sentence(b.text), captions: true, beat: b, kicker: i === 0 ? 'FOR EXAMPLE' : 'WHY THOSE WORDS' })),
+      ...quizScenes(l, 'Translate this one.'), outro(l, 'In your own words'),
+    ],
+  },
 };
 
 export const FORMAT_IDS = Object.keys(FORMATS);
@@ -836,10 +956,10 @@ export function pickFormats(topic, count = 3, { recent = [], rand = Math.random,
 }
 
 /** Light, fun, still-accurate formats the feed uses for a breather (feed/breathers.js). */
-export const BREATHER_FORMATS = ['wow', 'whatif', 'realworld', 'story', 'pov', 'onething', 'eli5', 'mythbust', 'levels', 'detective', 'interview', 'zoom', 'numbers'];
+export const BREATHER_FORMATS = ['wow', 'whatif', 'realworld', 'story', 'pov', 'onething', 'eli5', 'mythbust', 'levels', 'detective', 'interview', 'zoom', 'numbers', 'personify', 'plottwist', 'starterpack'];
 
 /** Retrieval practice: the formats a review session uses once a unit is due again (spaced repetition). */
-export const RETRIEVAL_FORMATS = ['flashcards', 'truefalse', 'challenge', 'examdrill', 'spotmistake', 'guess', 'cheatsheet', 'mnemonic', 'thisorthat', 'mistakes', 'teachback'];
+export const RETRIEVAL_FORMATS = ['flashcards', 'truefalse', 'challenge', 'examdrill', 'spotmistake', 'guess', 'cheatsheet', 'mnemonic', 'thisorthat', 'mistakes', 'teachback', 'examiner', 'redflags'];
 
 /** Formats that can run without Claude (the offline bank only has explainers). */
 export const OFFLINE_FORMATS = ['explain'];

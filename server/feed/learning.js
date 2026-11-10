@@ -36,9 +36,12 @@ export const FORMAT_STYLE = {
   detective: { handson: 0.5, listening: 0.5 }, teachback: { handson: 0.7, listening: 0.3 }, numbers: { visual: 0.8, listening: 0.2 },
   zoom: { visual: 0.8, listening: 0.2 }, interview: { reading: 0.6, listening: 0.4 }, debate: { listening: 0.7, handson: 0.3 },
   connect: { listening: 0.5, visual: 0.5 }, howto: { handson: 0.6, visual: 0.4 },
+  redflags: { reading: 0.6, visual: 0.4 }, personify: { listening: 0.8, visual: 0.2 }, starterpack: { visual: 0.6, reading: 0.4 },
+  plottwist: { listening: 0.6, visual: 0.4 }, examiner: { reading: 0.6, handson: 0.4 }, translate: { reading: 0.6, listening: 0.4 },
 };
 /** Games count towards doing it, and the word games towards reading it too. */
-const GAME_STYLE = { match: { handson: 0.5, reading: 0.5 }, order: { handson: 0.7, visual: 0.3 }, sort: { handson: 0.7, visual: 0.3 }, truefalse: { handson: 0.8, reading: 0.2 }, fillgap: { handson: 0.5, reading: 0.5 } };
+const GAME_STYLE = { match: { handson: 0.5, reading: 0.5 }, order: { handson: 0.7, visual: 0.3 }, sort: { handson: 0.7, visual: 0.3 }, truefalse: { handson: 0.8, reading: 0.2 }, fillgap: { handson: 0.5, reading: 0.5 },
+  hangman: { handson: 0.5, reading: 0.5 }, memory: { handson: 0.6, visual: 0.4 }, scramble: { handson: 0.5, reading: 0.5 }, pop: { handson: 0.8, visual: 0.2 }, hunt: { visual: 0.5, reading: 0.5 } };
 
 export const cleanStyles = (a) => [...new Set((Array.isArray(a) ? a : []).filter((s) => STYLES.includes(s)))];
 

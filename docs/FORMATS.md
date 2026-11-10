@@ -46,6 +46,19 @@ A format is a kind of video: what scenes it has, how it looks and sounds. All th
 | `debate` | Debate | the question · FOR / AGAINST / FOR / AGAINST · VERDICT stamp from the evidence · quiz | DM Serif Display / Archivo Black, Clean Subtitle, Matte, push cuts, dramatic music, voice *sage* |
 | `connect` | Connections | HERE → ALSO HERE (another subject) → THE LINK · quiz | Archivo Black, Dark Pill, Teal, whip-pans, upbeat, voice *echo* |
 | `howto` | How to | numbered steps over footage · silent recap · quiz | Oswald, Clean captions, cool-clean LUT, paper cards, slide cuts, voice *marin* |
+| `redflags` | Red flags | RED FLAG 1-3 stamped (signs an answer has gone wrong) · GREEN FLAG stamp · quiz | Anton, Boxed Red, punch LUT, glitch, voice *ash* |
+| `personify` | If it were a person | WHO THEY ARE → THEIR DAY JOB → THEIR NEMESIS: the idea as a character (never a real person) · quiz | Bungee, Comic Pop, Vivid, whip-pans, quirky music, voice *nova* |
+| `starterpack` | Starter pack | four things you need for the topic over footage · the pack on one card · quiz | Archivo Black, Karaoke, Vivid, slide cuts, upbeat, voice *coral* |
+| `plottwist` | Plot twist | YOU EXPECT stamp → PLOT TWIST stamp → HERE IS WHY / AND SO · quiz on a new case | DM Serif Display / Oswald, Clean Subtitle, Moody, zoom-blur, suspense, voice *fable* |
+| `examiner` | Mark scheme | the vague answer stamped LOSES MARKS · three mark points · FULL MARKS sentence · quiz: which answer scores highest | Oswald, Clean captions, cool-clean LUT, paper cards, push cuts, voice *sage* |
+| `translate` | In plain words | TEXTBOOK stamp (the formal sentence) → PLAIN WORDS stamp → FOR EXAMPLE / WHY THOSE WORDS · quiz | Montserrat, Minimal captions, Warm grade, fades, lo-fi, voice *marin* |
+
+The fifth wave (`redflags`, `personify`, `starterpack`, `plottwist`, `examiner`, `translate`)
+borrows the shapes students already scroll past every day, plus two for exams: what the marker
+is looking for, and the textbook sentence put into plain words. `personify`, `plottwist` and
+`starterpack` are also breather formats; `examiner` and `redflags` are retrieval formats, used
+when a unit is due for review. They are built from the existing scenes (stamp, item, beat,
+recap), so the composer needed no changes.
 
 The fourth wave (`eli5`, `mnemonic`, `realworld`, `whatif`, `wow`, `beforeafter`, `truefalse`)
 is for tired brains and curious ones. Several of them (`wow`, `whatif`, `realworld`, `eli5`,
