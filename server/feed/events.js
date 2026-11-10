@@ -123,6 +123,10 @@ export const EVENT_SPECS = {
   push_open: { fields: { kind: 's' } },
   push_prompt: { fields: { action: 's', state: 's' } },
   ask_open: { video: true, fields: {} },
+  confused: { video: true, fields: { part: 'i' } },
+  study_open: { video: true, fields: {} },
+  study_answer: { video: true, fields: { correct: 'b' } },
+  collection_play: { fields: { name: 's', n: 'i' } },
   ask: { video: true, fields: { len: 'i', onTopic: 'b' } },
   ask_follow: { video: true, fields: {} },
   comments_open: { video: true, fields: {} },
@@ -186,6 +190,7 @@ export function cleanContext(ctx = {}) {
 const WATCH_BUCKET = (pct) => `wf${Math.min(4, Math.floor(pct * 5))}`; // wf0: <20% … wf4: ≥80%
 /** Hour of the day (0..23) at `at` in the viewer's time zone, UTC when unknown or invalid. */
 export const hourOf = (at, tz) => { try { return Number(new Intl.DateTimeFormat('en-GB', { hour: 'numeric', hour12: false, timeZone: tz || 'UTC' }).format(new Date(at))) % 24; } catch { return new Date(at).getUTCHours(); } };
+export const LEARNING_EVENTS = new Set(['complete', 'quiz_answer', 'recall_answer', 'mock_done', 'ask', 'study_answer']);
 export const day = (at) => new Date(at).toISOString().slice(0, 10);
 
 export const emptySignals = () => ({ formats: {}, topics: {}, watch: { n: 0, pctSum: 0, completes: 0, early: 0 }, quiz: { n: 0, right: 0, msSum: 0, skips: 0 }, hours: Array(24).fill(0), sessions: 0, lastSeenAt: 0, prefs: {}, days: {}, weeks: {} });
@@ -250,7 +255,9 @@ export async function ingest(userId, batch) {
     const posture = POSTURES.has(e.posture) ? e.posture : POSTURES.has(ctx.posture) ? ctx.posture : null;
     if (posture && posture !== 'unknown') session.posture = posture;
     session.hour = hour; session.night = hour >= 22 || hour < 5;
-    if (['view', 'complete', 'quiz_answer', 'heartbeat'].includes(e.type)) {
+    // A day counts towards the streak when something was learned in it (a lesson finished, a question
+    // answered, a mock exam, a question to the tutor), not for opening the app or scrolling past.
+    if (LEARNING_EVENTS.has(e.type)) {
       signals.days ||= {};
       if (!signals.days[day(e.at)]) writes.push(...armCountWrites(userId, 'days')); // experiments: active days per arm
       signals.days[day(e.at)] = 1;
@@ -388,6 +395,7 @@ export async function ingest(userId, batch) {
       case 'why_open': writes.push(stat(v.id, 'whyOpens')); break;
       // A question means something in this lesson did not land: counted per lesson for the writers.
       case 'ask': writes.push(stat(v.id, 'asks')); break;
+      case 'confused': writes.push(stat(v.id, 'confused')); bump(signals.topics, topic, 'confused'); break;
       case 'comment_post': writes.push(stat(v.id, 'comments')); break;
       case 'quiz_shown': writes.push(stat(v.id, 'quizShown')); break;
       case 'quiz_hold': writes.push(stat(v.id, 'quizHeld')); break;

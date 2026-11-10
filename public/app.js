@@ -2241,21 +2241,34 @@ function lessonTile(v, { onRemove } = {}) {
   if (onRemove) wrap.append(el('button', { type: 'button', class: 'lt-x', 'aria-label': 'Remove from Saved', title: 'Remove from Saved', onclick: onRemove }, '×'));
   return wrap;
 }
+// Saved lessons sort themselves into study collections: one per subject, plus "To revisit" (lessons
+// whose quick check the student missed). Any collection plays as a revision playlist.
+let savedCollection = 'all';
 function renderSaved(list) {
   const box = $('#lib-saved');
   box.classList.remove('grid');
   if (!list.length) { box.replaceChildren(el('div', { class: 'empty' }, svgEl(mascot('think', 110)), el('b', {}, 'Nothing saved yet'), 'Tap the bookmark on any lesson to keep it here for revision.')); return; }
-  const total = list.reduce((s, v) => s + (v.duration || 0), 0);
+  const missed = new Set((libData?.misses || []).map((m) => m.recall?.videoId));
+  const subjectOf = (v) => cfg.topics.find((t) => t.id === v.topic)?.label || v.unit || 'My topics';
+  const groups = new Map();
+  for (const v of list) { const k = subjectOf(v); if (!groups.has(k)) groups.set(k, []); groups.get(k).push(v); }
+  const revisit = list.filter((v) => missed.has(v.id));
+  const collections = [['all', 'All', list], ...(revisit.length ? [['revisit', 'To revisit', revisit]] : []), ...[...groups].sort((a, b) => b[1].length - a[1].length).map(([k, vs]) => [`s:${k}`, k, vs])];
+  if (!collections.some(([id]) => id === savedCollection)) savedCollection = 'all';
+  const [, name, shown] = collections.find(([id]) => id === savedCollection);
+  const total = shown.reduce((s, v) => s + (v.duration || 0), 0);
   const strip = el('div', { class: 'lib-strip search-hide' }, svgEl(mascot('cheer', 64)),
-    el('div', {}, el('h3', {}, `${list.length} saved lesson${list.length > 1 ? 's' : ''}`), el('p', {}, `${minsOf(total)} of revision, ready when you are.`)),
-    el('button', { type: 'button', class: 'btn small primary', onclick: () => queueLessons(list, 'saved') }, 'Revise all'));
-  const tiles = list.map((v) => lessonTile(v, { onRemove: () => {
+    el('div', {}, el('h3', {}, savedCollection === 'all' ? `${list.length} saved lesson${list.length > 1 ? 's' : ''}` : `${name} · ${shown.length}`), el('p', {}, `${minsOf(total)} of revision, ready when you are.`)),
+    el('button', { type: 'button', class: 'btn small primary', onclick: () => { track('collection_play', { name: name.slice(0, 40), n: shown.length }); queueLessons(shown, 'saved'); } }, savedCollection === 'all' ? 'Revise all' : 'Play collection'));
+  const chips = collections.length > 2 ? el('div', { class: 'chips coll-chips search-hide' }, ...collections.map(([id, label, vs]) =>
+    el('button', { type: 'button', class: 'chip-btn', 'aria-pressed': String(id === savedCollection), onclick: () => { savedCollection = id; renderSaved(list); } }, `${label} ${vs.length}`))) : null;
+  const tiles = shown.map((v) => lessonTile(v, { onRemove: () => {
     sendEvent(v.id, 'unsave');
     const slide = feed.items.find((it) => it.data.id === v.id); if (slide) { slide.data.saved = false; renderSlide(slide); }
     toast('Removed from Saved');
     renderSaved(list.filter((x) => x.id !== v.id));
   } }));
-  box.replaceChildren(strip, el('div', { class: `grid tiles-grid${tiles.length > 6 ? ' scroll-box tall' : ''}` }, ...tiles));
+  box.replaceChildren(...[strip, chips, el('div', { class: `grid tiles-grid${tiles.length > 6 ? ' scroll-box tall' : ''}` }, ...tiles)].filter(Boolean));
   applyLibrarySearch();
 }
 function renderHistory(list) {
@@ -2899,9 +2912,9 @@ function openMore(item) {
     el('span', { class: 'set-ic', 'aria-hidden': 'true' }, icon), el('span', { class: 'set-text' }, el('strong', {}, title), sub ? el('small', {}, sub) : null));
   const rows = [
     d.channel ? row(d.topic?.emoji || '📚', d.channel.name || 'Course', `@${d.channel.handle}`, () => openChannel(d.channel.handle, { source: 'more' })) : null,
-    d.status === 'ready' ? row('🙋', 'Ask about this lesson', 'A private question to the tutor', () => openAsk(item)) : null,
+    d.status === 'ready' ? row('🤔', "I'm confused", 'Pick the part that lost you, or ask the tutor', () => openAsk(item)) : null,
+    d.status === 'ready' && d.notes ? row('🗂️', 'Create study materials', 'Flashcards, practice questions, notes', () => openStudy(item)) : null,
     row('💡', "Why you're seeing this", 'What the algorithm used', () => { sendEvent(d.id, 'why_open'); openWhy(item); }),
-    d.notes ? row('📝', 'Lesson notes', 'Points, definitions and the quick check', () => openNotes(item)) : null,
     row('🙈', 'Show me less of this', d.unit?.title || d.topic?.label || '', () => {
       sendEvent(d.id, 'less', { t: +(item.watch?.lastT || 0).toFixed(1) });
       toast(`Got it: less of ${d.unit?.title || d.topic.label}`);
@@ -3306,15 +3319,18 @@ function openAsk(item) {
   const input = el('textarea', { class: 'ask-input', rows: '3', maxlength: '300', placeholder: 'What would you like to understand better?' });
   const out = el('div', { class: 'ask-out', 'aria-live': 'polite' });
   const send = el('button', { type: 'button', class: 'btn primary' }, 'Ask');
-  const ask = async (q) => {
+  const parts = (d.notes?.points || []).slice(0, 6);
+  const ask = async (q, part = null) => {
     q = String(q || '').trim();
-    if (q.length < 3) { input.focus(); return; }
+    if (part == null && q.length < 3) { input.focus(); return; }
+    if (part != null) sendEvent(d.id, 'confused', { part });
     send.disabled = true;
     out.replaceChildren(el('p', { class: 'muted' }, el('span', { class: 'spinner' }), ' Thinking…'));
     try {
-      const r = await api('POST', `/api/videos/${d.id}/ask`, { q });
+      const r = await api('POST', `/api/videos/${d.id}/ask`, part != null ? { part } : { q });
       sendEvent(d.id, 'ask', { len: q.length, onTopic: r.onTopic });
-      out.replaceChildren(el('div', { class: 'ask-q' }, q), el('div', { class: 'ask-a' }, r.answer));
+      out.replaceChildren(el('div', { class: 'ask-q' }, part != null ? `Confused by: “${q}”` : q), el('div', { class: 'ask-a' }, r.answer));
+      out.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
       if (r.followUp) {
         out.append(el('button', { type: 'button', class: 'btn small', onclick: async (e) => {
           const b = e.currentTarget;
@@ -3322,8 +3338,9 @@ function openAsk(item) {
           sendEvent(d.id, 'ask_follow');
           if (await addCustomTopic(r.followUp)) b.textContent = `Lessons on "${r.followUp}" are coming to your feed`;
           else b.disabled = false;
-        } }, `Make me lessons on "${r.followUp}"`));
+        } }, part != null ? `Learn "${r.followUp}" first` : `Make me lessons on "${r.followUp}"`));
       }
+      out.append(el('button', { type: 'button', class: 'btn small ghost', onclick: () => closeSheet() }, 'Back to the lesson'));
       input.value = '';
     } catch (err) {
       out.replaceChildren(el('p', { class: 'ask-err' }, err.message || "Couldn't ask right now."));
@@ -3332,11 +3349,13 @@ function openAsk(item) {
   send.onclick = () => ask(input.value);
   input.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); ask(input.value); } });
   const body = el('div', { class: 'ask' },
-    el('p', { class: 'muted' }, `About "${d.title || d.unit?.title || 'this lesson'}". Only you see your questions.`),
+    // Which part lost you? One tap gets a simpler explanation of exactly that part.
+    parts.length ? el('div', { class: 'ask-parts' }, el('h4', {}, 'Which part lost you?'), ...parts.map((t, i) => el('button', { type: 'button', class: 'ask-part', onclick: () => ask(t, i) }, t))) : null,
+    el('h4', {}, parts.length ? 'Or ask anything' : 'Ask the tutor'),
     el('div', { class: 'chips' }, ...ASK_STARTERS.map((t) => el('button', { type: 'button', class: 'chip-btn', onclick: () => ask(t) }, t))),
-    input, el('div', { class: 'ask-actions' }, send), out);
-  openSheet('Ask about this lesson', body);
-  setTimeout(() => input.focus(), 50);
+    input, el('div', { class: 'ask-actions' }, send), el('p', { class: 'pref-hint' }, 'Only you see this.'), out);
+  openSheet("I'm confused", body);
+  if (!parts.length) setTimeout(() => input.focus(), 50);
 }
 
 // Talk: comments under a lesson, adults only (the server refuses minors whatever the app shows).
@@ -3361,6 +3380,9 @@ async function openComments(item) {
   if (talkOpen) talkOpen.close();
   sendEvent(d.id, 'comments_open');
   let replyTo = null; // { id, name }
+  let kindFilter = 'all', lastComments = [];
+  const KIND_LABEL = { question: 'Question', explanation: 'Explanation', correction: 'Correction', tip: 'Tip' };
+  const filters = el('div', { class: 'tk-filters', hidden: true });
   let refreshTimers = [];
   const count = el('strong', { class: 'tk-count' }, 'Comments');
   const list = el('div', { class: 'tk-list' }, el('div', { class: 'tk-empty' }, el('span', { class: 'spinner' })));
@@ -3389,7 +3411,7 @@ async function openComments(item) {
     else if (!c.ai) actions.append(el('button', { type: 'button', class: 'tk-link', onclick: async (e) => { const b = e.currentTarget; try { await api('POST', `/api/comments/${c.id}/report`); b.textContent = 'Reported'; b.disabled = true; } catch { toast("Couldn't report that."); } } }, 'Report'));
     return el('div', { class: `tk-row${reply ? ' reply' : ''}${c.ai ? ' ai' : ''}` }, talkAvatar(c),
       el('div', { class: 'tk-body' },
-        el('div', { class: 'tk-name' }, c.name, c.ai ? el('span', { class: 'tk-badge' }, 'AI tutor') : null, c.mine ? el('span', { class: 'tk-you' }, '· you') : null),
+        el('div', { class: 'tk-name' }, c.name, c.ai ? el('span', { class: 'tk-badge' }, 'AI tutor') : null, !c.ai && !reply && KIND_LABEL[c.kind] ? el('span', { class: `tk-kind ${c.kind}` }, KIND_LABEL[c.kind]) : null, c.mine ? el('span', { class: 'tk-you' }, '· you') : null),
         el('p', { class: 'tk-text' }, c.text), actions),
       c.ai ? el('span') : heart(c));
   };
@@ -3414,10 +3436,21 @@ async function openComments(item) {
     try {
       const r = await api('GET', `/api/videos/${d.id}/comments`);
       count.textContent = r.count ? `${fmtCount(r.count)} comment${r.count > 1 ? 's' : ''}` : 'Comments';
-      list.replaceChildren(...(r.comments.length ? r.comments.map(thread) : [el('div', { class: 'tk-empty' }, el('b', {}, 'No comments yet'), el('span', {}, 'Ask a question and the AI tutor answers it here, for everyone who watches this lesson.'))]));
+      lastComments = r.comments;
+      paint();
       // A tutor answer on its way: look again shortly.
       if (r.comments.some((c) => c.tutorPending)) { refreshTimers.forEach(clearTimeout); refreshTimers = [setTimeout(load, 4000), setTimeout(load, 9000), setTimeout(load, 16000)]; }
     } catch (err) { list.replaceChildren(el('div', { class: 'tk-empty' }, err.message || "Couldn't load comments.")); }
+  };
+  // Questions, explanations, corrections: the discussion sorted by what each comment is.
+  const paint = () => {
+    const kinds = ['question', 'explanation', 'correction', 'tip'].filter((k) => lastComments.some((c) => c.kind === k));
+    filters.hidden = kinds.length < 1 || lastComments.length < 3;
+    filters.replaceChildren(...['all', ...kinds].map((k) => el('button', { type: 'button', class: 'tk-filter', 'aria-pressed': String(kindFilter === k), onclick: () => { kindFilter = k; paint(); } },
+      k === 'all' ? 'All' : `${KIND_LABEL[k]}s`, k === 'all' ? null : el('small', {}, String(lastComments.filter((c) => c.kind === k).length)))));
+    if (kindFilter !== 'all' && !kinds.includes(kindFilter)) kindFilter = 'all';
+    const shown = lastComments.filter((c) => kindFilter === 'all' || c.kind === kindFilter);
+    list.replaceChildren(...(shown.length ? shown.map(thread) : [el('div', { class: 'tk-empty' }, el('b', {}, 'No comments yet'), el('span', {}, 'Ask a question and the AI tutor answers it here, for everyone who watches this lesson.'))]));
   };
   const startReply = (c, name) => {
     replyTo = { id: c.id, name };
@@ -3446,7 +3479,7 @@ async function openComments(item) {
 
   const panel = el('section', { class: 'tk-panel', role: 'dialog', 'aria-modal': 'true', 'aria-label': 'Comments' },
     el('div', { class: 'tk-head' }, el('span', { class: 'tk-grab', 'aria-hidden': 'true' }), count, el('button', { type: 'button', class: 'tk-close', 'aria-label': 'Close comments', onclick: () => close() }, '✕')),
-    list,
+    filters, list,
     el('div', { class: 'tk-foot' }, replying, note,
       el('div', { class: 'tk-compose' }, el('span', { class: 'tk-av', style: `background:${avColor(meName)}`, 'aria-hidden': 'true' }, meName[0].toUpperCase()), input, sendBtn),
       el('p', { class: 'tk-rules' }, 'Be kind, keep it about the lesson. No links or contact details.')));
@@ -3593,4 +3626,42 @@ async function maybeAskNotifications() {
       el('button', { type: 'button', class: 'btn ghost', onclick: later }, 'Not now'));
   }
   openSheet('', body, () => { if (!store.get('st_np_snooze')) store.set('st_np_snooze', JSON.stringify({ n: 1, until: Date.now() + 3 * 86400000 })); });
+}
+
+// ============================================================================ study materials
+// Flashcards, practice questions and a summary made from this lesson only (server/feed/study.js).
+async function openStudy(item) {
+  const d = item.data;
+  sendEvent(d.id, 'study_open');
+  const body = el('div', { class: 'study' }, el('p', { class: 'muted' }, el('span', { class: 'spinner' }), ' Making your study materials…'));
+  openSheet('Study materials', body);
+  let m;
+  try { m = await api('GET', `/api/videos/${d.id}/study`); } catch { body.replaceChildren(el('p', { class: 'ask-err' }, "Couldn't make them right now. Try again in a moment.")); return; }
+  const card = (c) => {
+    const b = el('button', { type: 'button', class: 'flash', 'aria-label': 'Flashcard: tap to flip' }, el('small', {}, 'Question'), el('span', {}, c.q));
+    let front = true;
+    b.onclick = () => { front = !front; haptic('tap'); b.classList.toggle('back', !front); b.replaceChildren(el('small', {}, front ? 'Question' : 'Answer'), el('span', {}, front ? c.q : c.a)); };
+    return b;
+  };
+  const question = (q, n) => {
+    const fb = el('p', { class: 'muted', 'aria-live': 'polite' });
+    const opts = q.options.map((o, k) => el('button', { type: 'button', class: 'mock-opt', onclick: () => {
+      const correct = k === q.answerIndex;
+      haptic(correct ? 'success' : 'error');
+      sendEvent(d.id, 'study_answer', { correct });
+      opts.forEach((x, j) => { x.disabled = true; x.classList.toggle('ok', j === q.answerIndex); x.classList.toggle('bad', j === k && !correct); });
+      fb.textContent = q.explanation || (correct ? 'Correct.' : `It's ${'ABC'[q.answerIndex]}.`);
+    } }, `${'ABC'[k]}. ${o}`));
+    return el('div', { class: 'study-q' }, el('b', {}, `${n}. ${q.question}`), el('div', { class: 'mock-opts' }, ...opts), fb);
+  };
+  const save = el('button', { type: 'button', class: 'btn primary small' }, d.saved ? 'Saved to your library' : 'Save to my library');
+  save.disabled = Boolean(d.saved);
+  save.onclick = () => { if (!item.data.saved) toggleFlag(item, 'saved', 'save', 'unsave'); save.textContent = 'Saved to your library'; save.disabled = true; };
+  body.replaceChildren(...[
+    el('p', { class: 'notes-kicker' }, `${d.unit?.title || d.topic.label} · made from this lesson only`),
+    m.summary ? el('p', { class: 'study-sum' }, m.summary) : null,
+    m.flashcards.length ? el('section', {}, el('h4', {}, `Flashcards · ${m.flashcards.length}`), el('div', { class: 'flash-row' }, ...m.flashcards.map(card))) : null,
+    m.questions.length ? el('section', {}, el('h4', {}, 'Practice questions'), ...m.questions.map((q, i) => question(q, i + 1))) : null,
+    el('div', { class: 'notes-actions' }, save, el('button', { type: 'button', class: 'btn small', onclick: () => openNotes(item) }, 'Full notes')),
+  ].filter(Boolean));
 }

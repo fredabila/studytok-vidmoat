@@ -25,6 +25,7 @@ export const REPORTS_TO_HIDE = 3;
 export const TUTOR_REPLIES_PER_LESSON_DAY = 40;
 export const TUTOR_NAME = 'StudyGraph Tutor';
 const KEEP = 500;
+const KINDS = ['question', 'explanation', 'correction', 'tip', 'other'];
 const REPLIES_SHOWN = 30;
 
 const LINK = /(https?:\/\/|www\.|\b[a-z0-9-]+\.(com|net|org|io|me|ly|gg|app|co|xyz|info|link|tv)\b)/i;
@@ -37,6 +38,7 @@ const QUESTION = /\?\s*$|^(how|why|what|when|where|which|who|is|are|can|could|do
 const VerdictSchema = z.object({
   ok: z.boolean().describe('true only for a respectful comment about the lesson or studying, fit for a public study app'),
   reason: z.string().describe('when not ok: a short, kind reason for the author (e.g. "Keep it about the lesson"); else ""'),
+  kind: z.enum(['question', 'explanation', 'correction', 'tip', 'other']).describe('what the comment is: a question, an explanation of the idea, a correction of the lesson or of another comment, a study tip, or other (thanks, reactions)'),
 });
 const SYSTEM = `You moderate comments under short study videos on StudyGraph, an education app. Approve (ok) questions, explanations, corrections, study tips, thanks and friendly reactions about the lesson. Reject: insults, harassment, hate, sexual content, violence, self-harm, drugs, spam or ads, requests to move to another app or meet up, personal information (names of others, schools, addresses, contacts), cheating services, and anything you are unsure about.`;
 
@@ -58,7 +60,7 @@ export async function checkComment(text, { moderate = moderateClaude } = {}) {
   if (moderate === moderateClaude && !config.anthropic.enabled) return { ok: false, reason: 'Comments are paused right now.' };
   try {
     const v = await moderate(text);
-    return v?.ok === true ? { ok: true, reason: '' } : { ok: false, reason: String(v?.reason || 'Keep it about the lesson.').slice(0, 120) };
+    return v?.ok === true ? { ok: true, reason: '', kind: KINDS.includes(v.kind) ? v.kind : 'other' } : { ok: false, reason: String(v?.reason || 'Keep it about the lesson.').slice(0, 120) };
   } catch (err) {
     console.warn('[comments] moderation failed:', err.message);
     return { ok: false, reason: "Couldn't check that comment. Try again in a moment." };
@@ -77,7 +79,7 @@ export function displayName(user) {
 const visible = (c) => c && !c.hidden && !c.deleted;
 async function view(c, userId) {
   return {
-    id: c.id, name: c.name, text: c.text, at: c.at, mine: c.userId === userId, ai: Boolean(c.ai),
+    id: c.id, name: c.name, text: c.text, at: c.at, mine: c.userId === userId, ai: Boolean(c.ai), kind: c.kind || (isQuestion(c.text) ? 'question' : 'other'),
     likes: c.likes || 0, liked: userId ? (await kv.sismember(`comment:${c.id}:likes`, userId)) === 1 : false,
     tutorPending: Boolean(c.tutorPending),
   };
@@ -124,8 +126,10 @@ export async function postComment({ user, videoId, text, parentId = null, modera
     await kv.hincrby(`events:day:${day}`, 'comment_blocked', 1);
     throw Object.assign(new Error(verdict.reason), { status: 400, code: 'moderated' });
   }
-  const tutor = !parent && isQuestion(body);
-  const c = { id: randomUUID(), videoId, parentId: parent?.id || null, userId: user.id, name: displayName(user), text: body, at: new Date(now).toISOString(), reports: 0, likes: 0, tutorPending: tutor };
+  // What kind of comment it is (the moderator says; the wording decides when it does not).
+  const kind = verdict.kind && verdict.kind !== 'other' ? verdict.kind : isQuestion(body) ? 'question' : 'other';
+  const tutor = !parent && kind === 'question';
+  const c = { id: randomUUID(), videoId, parentId: parent?.id || null, userId: user.id, name: displayName(user), text: body, kind, at: new Date(now).toISOString(), reports: 0, likes: 0, tutorPending: tutor };
   await kv.set(`comment:${c.id}`, c);
   if (parent) await kv.rpush(`comment:${parent.id}:replies`, c.id);
   else { await kv.lpush(`comments:${videoId}`, c.id); await kv.ltrim(`comments:${videoId}`, 0, KEEP - 1); }
