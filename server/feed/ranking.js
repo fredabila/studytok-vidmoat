@@ -10,7 +10,12 @@
 //         + progress      the syllabus "frontier": the first units not yet learned get a boost,
 //                         decaying along the course order, so the feed walks the syllabus
 //         + review        spaced repetition (Leitner boxes): a unit is due again 1, 3, 7 or 21
-//                         days after a correct answer, and 20 minutes after a wrong one
+//                         days after a correct answer, and 20 minutes after a wrong one; the
+//                         longer it has been overdue, the more it wants reviewing. A wrong answer
+//                         moves a unit back two boxes, not to the start: one slip on something
+//                         known for weeks is not the same as never having learned it
+//         × hold          while the unit a course is on keeps being answered wrong, the units
+//                         after it wait: the feed does not run ahead of the student
 //         - recency       just-served units are pushed back so the feed stays varied
 //         × less          "show me less" multiplies a unit down
 //   with a small, decaying chance of a random candidate (exploration).
@@ -19,13 +24,16 @@
 //     quality        everyone's engagement with that video (watch fraction, completion, likes,
 //                    saves, quiz accuracy, early leaves), Bayesian-smoothed
 //   × affinity       the student's own taste for the video's format and topic (Thompson sample)
-//   × diversity      not the same format as the last video, not the same topic twice running
+//   × diversity      not the same format as the last video, not the same topic twice running,
+//                    and no format taking over the last six videos
 //   × fatigue        later in a session, shorter and lighter formats win
 //   × difficulty     after wrong answers, gentler formats; after a right streak, exam drills
 //   × freshness      a small bonus for videos this student has never been served
 
 export const BOX_DAYS = [1, 3, 7, 21];
 const WRONG_RETRY_MS = 20 * 60 * 1000;
+/** A wrong answer moves a unit back this many boxes (not all the way to the first one). */
+export const LAPSE_BOXES = 2;
 const DAY = 24 * 60 * 60 * 1000;
 
 export const emptyState = () => ({ served: 0, views: 0, completes: 0, skips: 0, likes: 0, less: 0, quizRight: 0, quizWrong: 0, box: -1, lastSeen: 0, due: 0, watchN: 0, pctSum: 0 });
@@ -36,6 +44,19 @@ export function mastery(s) {
   const quiz = (s.quizRight + 0.5) / (s.quizRight + s.quizWrong + 1);
   const exposure = Math.min(1, s.completes / 3);
   return Math.round((0.6 * quiz * Math.min(1, (s.quizRight + s.quizWrong) / 2) + 0.4 * exposure) * 100) / 100;
+}
+
+/** How much the frontier boost of later units shrinks while the unit before them is not landing. */
+export const HOLD = 0.55;
+
+/**
+ * How overdue a unit's review is, 0..1: 0 on the day it falls due, 1 once it has waited as long
+ * again as its interval (a unit due after 3 days is fully overdue 3 days later).
+ */
+export function overdue(s, now = Date.now()) {
+  if (!s?.due || s.due > now) return 0;
+  const interval = BOX_DAYS[Math.max(0, Math.min(BOX_DAYS.length - 1, s.box ?? 0))] * DAY;
+  return +Math.min(1, (now - s.due) / interval).toFixed(3);
 }
 
 /** Applies one engagement event to a unit state (returns a new state). */
@@ -52,7 +73,7 @@ export function applyEvent(state, type, { correct, now = Date.now(), pct = 0 } =
     case 'leave': s.watchN++; s.pctSum = Math.round((s.pctSum + Math.max(0, Math.min(1, Number(pct) || 0))) * 1000) / 1000; break;
     case 'quiz_answer':
       if (correct) { s.quizRight++; s.box = Math.min(BOX_DAYS.length - 1, s.box + 1); s.due = now + BOX_DAYS[s.box] * DAY; }
-      else { s.quizWrong++; s.box = 0; s.due = now + WRONG_RETRY_MS; }
+      else { s.quizWrong++; s.box = Math.max(0, s.box - LAPSE_BOXES); s.due = now + WRONG_RETRY_MS; }
       break;
     default: break;
   }
@@ -97,6 +118,15 @@ export function scoreUnits(candidates, states, recent = [], { now = Date.now(), 
     perGroup.set(g, r + 1);
   }
 
+  // Hold: the unit each course is on (rank 0) is "stuck" while it has at least two quick-check
+  // answers and more wrong than right. The units after it wait until it lands.
+  const stuck = new Set();
+  for (const c of candidates) {
+    if (frontierRank.get(c.unit.id) !== 0) continue;
+    const st = states[c.unit.id];
+    if (st && (st.quizWrong || 0) + (st.quizRight || 0) >= 2 && (st.quizWrong || 0) > (st.quizRight || 0)) stuck.add(c.group || 'course');
+  }
+
   return candidates.map((c) => {
     const s = { ...emptyState(), ...states[c.unit.id] };
     // Watch fraction counts as fractional engagement: a video watched 80% is 0.8 of a completion.
@@ -112,6 +142,7 @@ export function scoreUnits(candidates, states, recent = [], { now = Date.now(), 
     if (c.kind === 'course') {
       const r = frontierRank.get(c.unit.id);
       progress = r == null ? 0.05 : Math.max(0.1, 1 - r * 0.3);
+      if (r > 0 && stuck.has(c.group || 'course')) progress = +(progress * HOLD).toFixed(3);
     } else if (c.kind === 'follow') {
       // A followed course is a stated interest: above casual interests, below the student's own syllabus.
       progress = hasCourse ? 0.25 : 0.5;
@@ -122,7 +153,7 @@ export function scoreUnits(candidates, states, recent = [], { now = Date.now(), 
     const intent = c.intent > 0 ? +(0.6 * Math.min(1, c.intent)).toFixed(3) : 0;
 
     // Due units; with an exam near, every unit the student has started is worth revisiting.
-    const review = (s.lastSeen && s.due && s.due <= now ? (s.quizWrong > s.quizRight ? 0.9 : 0.6) : s.lastSeen && urgency > 0 ? 0.3 * urgency : 0) * (1 + urgency);
+    const review = +((s.lastSeen && s.due && s.due <= now ? (s.quizWrong > s.quizRight ? 0.9 : 0.6) * (1 + 0.35 * overdue(s, now)) : s.lastSeen && urgency > 0 ? 0.3 * urgency : 0) * (1 + urgency)).toFixed(3);
     progress *= 1 - 0.3 * urgency;
 
     const idx = recent.indexOf(c.unit.id);
@@ -202,13 +233,13 @@ export function affinity(sig, rand = Math.random) {
 }
 
 // How heavy each format feels, for session fatigue (1 = light and short, 0 = long and dense).
-export const FORMAT_LIGHTNESS = { rapid: 1, flashcards: 0.9, truefalse: 0.9, wow: 0.9, onething: 0.95, mythbust: 0.8, eli5: 0.75, realworld: 0.7, chat: 0.7, mnemonic: 0.6, why: 0.5, whatif: 0.5, beforeafter: 0.5, explain: 0.4, story: 0.3, examdrill: 0.1 , detective: 0.6, teachback: 0.45, numbers: 0.75, zoom: 0.65, interview: 0.7, debate: 0.4, connect: 0.55, howto: 0.5 };
+export const FORMAT_LIGHTNESS = { rapid: 1, flashcards: 0.9, truefalse: 0.9, wow: 0.9, onething: 0.95, mythbust: 0.8, eli5: 0.75, realworld: 0.7, chat: 0.7, mnemonic: 0.6, why: 0.5, whatif: 0.5, beforeafter: 0.5, explain: 0.4, story: 0.3, examdrill: 0.1 , detective: 0.6, teachback: 0.45, numbers: 0.75, zoom: 0.65, interview: 0.7, debate: 0.4, connect: 0.55, howto: 0.5, redflags: 0.75, personify: 0.8, starterpack: 0.85, plottwist: 0.75, examiner: 0.3, translate: 0.6 };
 // How much a format needs eyes on the screen (1 = dense cards to read, 0 = narration carries it).
-export const FORMAT_VISUAL_DENSITY = { mnemonic: 0.85, truefalse: 0.7, beforeafter: 0.6, realworld: 0.35, eli5: 0.35, whatif: 0.3, wow: 0.3, spotmistake: 1, examdrill: 0.95, tierlist: 0.8, flashcards: 0.8, thisorthat: 0.7, speedrun: 0.7, rapid: 0.6, countdown: 0.6, levels: 0.5, guess: 0.5, explain: 0.5, why: 0.45, chat: 0.4, mythbust: 0.4, hottake: 0.35, wyr: 0.35, story: 0.25, pov: 0.25 , detective: 0.4, teachback: 0.5, numbers: 0.6, zoom: 0.45, interview: 0.8, debate: 0.35, connect: 0.5, howto: 0.55 };
+export const FORMAT_VISUAL_DENSITY = { mnemonic: 0.85, truefalse: 0.7, beforeafter: 0.6, realworld: 0.35, eli5: 0.35, whatif: 0.3, wow: 0.3, spotmistake: 1, examdrill: 0.95, tierlist: 0.8, flashcards: 0.8, thisorthat: 0.7, speedrun: 0.7, rapid: 0.6, countdown: 0.6, levels: 0.5, guess: 0.5, explain: 0.5, why: 0.45, chat: 0.4, mythbust: 0.4, hottake: 0.35, wyr: 0.35, story: 0.25, pov: 0.25 , detective: 0.4, teachback: 0.5, numbers: 0.6, zoom: 0.45, interview: 0.8, debate: 0.35, connect: 0.5, howto: 0.55, redflags: 0.6, personify: 0.35, starterpack: 0.5, plottwist: 0.4, examiner: 0.75, translate: 0.6 };
 // How much a format makes the student retrieve rather than re-read (review sessions: >1 wins, <1 loses).
-export const FORMAT_RETRIEVAL = { flashcards: 1.5, truefalse: 1.5, challenge: 1.45, examdrill: 1.35, spotmistake: 1.3, guess: 1.25, cheatsheet: 1.2, mnemonic: 1.2, thisorthat: 1.15, mistakes: 1.1, speedrun: 1.1, predict: 1, rapid: 1, mythbust: 1, countdown: 0.95, onething: 0.9, tierlist: 0.9, wyr: 0.9, realworld: 0.85, levels: 0.8, chat: 0.8, history: 0.8, hottake: 0.8, beforeafter: 0.8, why: 0.75, pov: 0.75, analogy: 0.75, whatif: 0.75, explain: 0.7, story: 0.7, wow: 0.7, eli5: 0.65 , teachback: 1.4, detective: 0.95, howto: 0.9, numbers: 0.8, connect: 0.85, debate: 0.75, zoom: 0.75, interview: 0.8 };
+export const FORMAT_RETRIEVAL = { flashcards: 1.5, truefalse: 1.5, challenge: 1.45, examdrill: 1.35, spotmistake: 1.3, guess: 1.25, cheatsheet: 1.2, mnemonic: 1.2, thisorthat: 1.15, mistakes: 1.1, speedrun: 1.1, predict: 1, rapid: 1, mythbust: 1, countdown: 0.95, onething: 0.9, tierlist: 0.9, wyr: 0.9, realworld: 0.85, levels: 0.8, chat: 0.8, history: 0.8, hottake: 0.8, beforeafter: 0.8, why: 0.75, pov: 0.75, analogy: 0.75, whatif: 0.75, explain: 0.7, story: 0.7, wow: 0.7, eli5: 0.65 , teachback: 1.4, detective: 0.95, howto: 0.9, numbers: 0.8, connect: 0.85, debate: 0.75, zoom: 0.75, interview: 0.8, examiner: 1.3, redflags: 1.15, translate: 0.95, starterpack: 0.9, plottwist: 0.8, personify: 0.75 };
 // How gentle each format is, for difficulty adaptation (1 = gentlest).
-export const FORMAT_GENTLENESS = { explain: 1, eli5: 1, wow: 0.95, realworld: 0.9, why: 0.9, chat: 0.9, whatif: 0.85, story: 0.8, beforeafter: 0.8, mnemonic: 0.7, mythbust: 0.6, rapid: 0.6, truefalse: 0.5, flashcards: 0.4, examdrill: 0 , interview: 0.9, zoom: 0.85, numbers: 0.75, connect: 0.75, detective: 0.7, howto: 0.65, debate: 0.6, teachback: 0.5 };
+export const FORMAT_GENTLENESS = { explain: 1, eli5: 1, wow: 0.95, realworld: 0.9, why: 0.9, chat: 0.9, whatif: 0.85, story: 0.8, beforeafter: 0.8, mnemonic: 0.7, mythbust: 0.6, rapid: 0.6, truefalse: 0.5, flashcards: 0.4, examdrill: 0 , interview: 0.9, zoom: 0.85, numbers: 0.75, connect: 0.75, detective: 0.7, howto: 0.65, debate: 0.6, teachback: 0.5, personify: 0.95, starterpack: 0.9, translate: 0.9, plottwist: 0.8, redflags: 0.6, examiner: 0.35 };
 
 /**
  * Scores one ready video for this student right now.
@@ -230,7 +261,11 @@ export function scoreVideo(video, stats, signals = {}, session = {}, { rand = Ma
 
   const lastFormats = session.lastFormats || [];
   const lastTopics = session.lastTopics || [];
-  const diversity = (lastFormats[0] === format ? 0.6 : lastFormats[1] === format ? 0.85 : 1) * (lastTopics[0] === video.topic && lastTopics[1] === video.topic ? 0.85 : 1);
+  // Variety over the last six, not only the last two: a format that already took two of them
+  // gives way (0.85), three or more gives way further (0.7).
+  const sameFormat = lastFormats.slice(0, 6).filter((f) => f === format).length;
+  const crowd = sameFormat >= 3 ? 0.7 : sameFormat === 2 ? 0.85 : 1;
+  const diversity = +((lastFormats[0] === format ? 0.6 : lastFormats[1] === format ? 0.85 : 1) * crowd * (lastTopics[0] === video.topic && lastTopics[1] === video.topic ? 0.85 : 1)).toFixed(3);
 
   const viewed = session.viewed || 0;
   const light = FORMAT_LIGHTNESS[format] ?? 0.5;

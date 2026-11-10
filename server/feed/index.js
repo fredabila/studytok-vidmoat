@@ -441,7 +441,9 @@ export async function nextItems(userId, count = 3) {
     const miss = await pickRecall(userId, { session });
     if (miss) { page.splice(1, 0, { moment: recallItem(miss) }); await noteRecall(userId, session); }
     // A mini game from lessons already watched, when no recall card took the slot.
-    const game = miss ? null : await pickGame(userId, { session });
+    // Units answered wrong more often than right, or due for review, are what a game should drill.
+    const weak = new Set(Object.entries(states).filter(([, st]) => (st.quizWrong || 0) > (st.quizRight || 0) || (st.lastSeen && st.due && st.due <= Date.now())).map(([id]) => id));
+    const game = miss ? null : await pickGame(userId, { session, played: signals.games?.byType || {}, weak });
     if (game) { page.splice(1, 0, { moment: game }); await noteGame(userId, game, session); }
     const watched = await db.countSet(userId, 'seen');
     const ctx = momentContext({ user, signals, saved: await db.countSet(userId, 'saved'), watched,

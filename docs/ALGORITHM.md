@@ -28,8 +28,15 @@ score = (affinity + progress + review + intent − recency) × lessFactor
   courses the student studies and for ones they only looked at. Calibration tracks units chosen
   this way under the `follow` and `intent` leads.
 * **review**: spaced repetition with Leitner boxes. A correct quiz answer moves the unit up a
-  box (due again in 1, 3, 7, 21 days); a wrong one drops it to box 0 (due in 20 minutes).
-  When due: +0.6, or +0.9 if the unit has more wrong than right answers.
+  box (due again in 1, 3, 7, 21 days); a wrong one moves it back two boxes (`LAPSE_BOXES`) and
+  brings it back in 20 minutes: one slip on something known for weeks is not the same as never
+  having learned it. When due: +0.6, or +0.9 if the unit has more wrong than right answers,
+  times up to ×1.35 as the review goes overdue (`overdue(s)`: 0 on the due day, 1 once it has
+  waited as long again as its interval), so the unit forgotten longest is reviewed first.
+* **hold**: while the unit a course is on (frontier rank 0) has two or more quick-check answers
+  and more wrong than right, the progress boost of the units after it is multiplied by `HOLD`
+  (0.55). The feed does not run ahead of a student who is stuck; once the unit lands, the
+  course moves on.
 * **recency**: the unit just served gets −1.6, then −0.9, −0.3, 0, so pages stay varied.
 * **lessFactor**: `0.35 ^ less` ("show me less" is strong and compounding).
 * **exploration**: a random candidate with probability `exploreRate(served)`: 0 for the first
@@ -55,7 +62,8 @@ score = quality × taste × diversity × fatigue × difficulty × freshness
   from the student's own `signals` for that format / topic (same formula as stage-1 affinity,
   over completes, likes, saves, right answers, watch fraction vs skips, less, wrong answers).
 * **diversity**: ×0.6 if the format equals the last one served, ×0.85 for the one before;
-  ×0.85 if the topic repeats twice running.
+  ×0.85 if the topic repeats twice running; and over the last six videos, ×0.85 for a format
+  that already took two of them, ×0.7 for three or more, so no format takes over a session.
 * **fatigue**: after ~6 videos in a session, light formats (rapid fire, flashcards, myth-bust)
   gain up to +25% and heavy ones (exam drill, story) lose up to 25% by the 18th video.
 * **difficulty**: two wrong answers in a row favour gentle formats (explainer, why, chat);
@@ -194,15 +202,30 @@ to what a student measurably finishes and gets right is ordinary good personalis
 
 ## Mini games (`feed/games.js`)
 
-Five games built from lessons the student has already watched, so each is retrieval practice
-on their own material and costs nothing to make: **Match it** (a term and its meaning, from
+Ten games built from lessons the student has already watched, so each is retrieval practice
+on their own material and costs nothing to make. Five are quick checks: **Match it** (a term and its meaning, from
 definitions and flashcards), **Put it in order** (step lists, timelines oldest first, cycles,
 worked-example steps), **Sort it** (each chip to its side of a compare table), **True or
 false?** (six seconds per statement, from true/false cards, myths and facts) and **Fill the
 gap** (the lesson's own sentence with its key term blanked, two distractors from other lessons).
+Five are arcade games (`ARCADE_TYPES`), the same material played the way phone games are:
+**Save Noti** (guess the key term a letter at a time from its meaning; each miss pops one of
+six balloons), **Flip and match** (a memory game of terms and meanings; a miss only counts once
+the partner card has been seen), **Unscramble** (three one-word key terms, letters shuffled),
+**Pop it** (bubbles from a compare table: pop only the ones on the named side, 25 seconds) and
+**Word hunt** (three or four key terms hidden in an 8×8 letter grid, found from their clues).
 
-* **Pacing**: never before the fifth lesson of a session, then one every seven lessons at most
-  and four a day, not the same kind twice running. A game takes the second slot when no recall
+* **Which game** (`gameWeights`): a weighted draw over the kinds the student's history can
+  make. A kind never played gets a first try (×1.4); kinds they finish win over kinds they open
+  and leave; accuracy near 75 % is the sweet spot (always right teaches nothing, mostly wrong
+  discourages); arcade kinds lead by ×1.25; the kind played last sits out.
+* **What it is made from**: units answered wrong more often than right, or due for review, come
+  first: when their lessons alone can make the chosen game, it is made from them.
+* **How often** (`gameGap`): after three games shown, a student who finishes at least 70 % of
+  them gets one every five lessons; one who finishes 30 % or fewer, one every eleven.
+
+* **Pacing**: never before the fifth lesson of a session, then one every seven lessons by
+  default (see above) and four a day at most, not the same kind twice running. A game takes the second slot when no recall
   card did, and a moment waits for the next page.
 * **Results**: the app checks answers on the device; the server kept which lesson each scored
   item came from (`game:{id}`, two days, one result per game). Each unit behind the game counts

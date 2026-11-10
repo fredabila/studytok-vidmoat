@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { applyEvent, emptyState, mastery, scoreUnits, pickUnits, sampleBeta, videoQuality, BOX_DAYS } from '../server/feed/ranking.js';
+import { applyEvent, emptyState, mastery, scoreUnits, pickUnits, sampleBeta, videoQuality, BOX_DAYS, overdue, HOLD, LAPSE_BOXES, scoreVideo } from '../server/feed/ranking.js';
 
 const seeded = (seed = 1) => () => ((seed = (seed * 9301 + 49297) % 233280) / 233280);
 const unit = (id) => ({ id, title: id, topic: 'math' });
@@ -121,4 +121,47 @@ test('review: retrieval formats outrank explainers for a due unit, nothing chang
   assert.ok(revF.score / plainF > 1.4 && revE.score / plainE < 0.75, 'review multiplies by the retrieval table');
   assert.equal(revF.parts.retrieval, FORMAT_RETRIEVAL.flashcards);
   assert.ok(Object.keys(FORMAT_RETRIEVAL).length >= 30, 'every format has a retrieval weight');
+});
+
+test('a slip on a well-known unit moves it back two boxes, not to the start', () => {
+  const now = 1_000_000_000_000;
+  let s = applyEvent(emptyState(), 'view', { now });
+  for (let i = 0; i < 3; i++) s = applyEvent(s, 'quiz_answer', { correct: true, now });
+  assert.equal(s.box, 3);
+  s = applyEvent(s, 'quiz_answer', { correct: false, now });
+  assert.equal(s.box, 3 - LAPSE_BOXES);
+  assert.ok(s.due - now <= 30 * 60 * 1000, 'and still comes back soon');
+});
+
+test('the longer a review is overdue, the more it wants reviewing', () => {
+  const now = 1_000_000_000_000, DAY = 86400000;
+  assert.equal(overdue({ box: 1, due: now + DAY }, now), 0);
+  assert.equal(overdue({ box: 1, due: now }, now), 0);
+  assert.equal(overdue({ box: 1, due: now - 1.5 * DAY }, now), 0.5);
+  assert.equal(overdue({ box: 1, due: now - 30 * DAY }, now), 1);
+  const state = (due) => ({ ...emptyState(), views: 3, completes: 3, quizRight: 2, box: 1, lastSeen: now - 10 * DAY, due });
+  const cands = [{ unit: unit('a'), kind: 'course', order: 0 }, { unit: unit('b'), kind: 'course', order: 1 }];
+  const ranked = scoreUnits(cands, { a: state(now - 60 * 1000), b: state(now - 20 * DAY) }, [], { now, rand: seeded(4) });
+  const part = (id) => ranked.find((r) => r.unit.id === id).parts.review;
+  assert.ok(part('b') > part('a'), `${part('b')} > ${part('a')}`);
+});
+
+test('hold: while the current unit keeps being answered wrong, the units after it wait', () => {
+  const now = 1_000_000_000_000;
+  const stuck = { ...emptyState(), views: 3, quizWrong: 2, quizRight: 0, box: 0, lastSeen: now, due: now + 20 * 60 * 1000 };
+  const part = (states) => scoreUnits(course, states, [], { now, rand: seeded(2) }).find((r) => r.unit.id === 'u2').parts.progress;
+  assert.equal(part({}), 0.7);
+  assert.equal(part({ u1: stuck }), +(0.7 * HOLD).toFixed(3));
+  assert.equal(part({ u1: { ...stuck, quizWrong: 1 } }), 0.7, 'one wrong answer is not being stuck');
+  assert.equal(part({ u1: { ...stuck, quizRight: 3 } }), 0.7, 'more right than wrong: move on');
+});
+
+test('variety: a format that already took the last six videos gives way', () => {
+  const v = { id: 'v', format: 'rapid', topic: 'math' };
+  const stats = { views: 10, completes: 8, likes: 1, skips: 1, quizRight: 3, quizWrong: 1 };
+  const d = (lastFormats) => scoreVideo(v, stats, {}, { lastFormats }, { rand: seeded(1) }).parts.diversity;
+  assert.equal(d(['explain', 'story', 'why']), 1);
+  assert.equal(d(['explain', 'story', 'rapid', 'why', 'rapid']), 0.85);
+  assert.equal(d(['explain', 'story', 'rapid', 'rapid', 'why', 'rapid']), 0.7);
+  assert.equal(d(['rapid', 'explain']), 0.6, 'straight after itself is still the strongest push');
 });

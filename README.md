@@ -88,9 +88,11 @@ they measurably finish and get right per way in, nudges the feed towards it (a c
 rule) and shows them the result with a suggestion. See
 [docs/ALGORITHM.md](docs/ALGORITHM.md#learning-profile-feedlearningjs-from-studygraph).
 
-**Mini games.** Between lessons, and on demand from the Library: match it, put it in order,
-sort it, a timed true-or-false round and fill the gap, all built from lessons the student has
-watched. Results move mastery and send missed lessons back as recall cards. See
+**Mini games.** Between lessons, and on demand from the Library, ten games built from lessons
+the student has watched. Five arcade ones: Save Noti (guess the word before the balloons run
+out), Flip and match (a memory game), Unscramble, Pop it (pop only the bubbles that belong) and
+Word hunt. Five quick checks: match it, put it in order, sort it, a timed true-or-false round
+and fill the gap. Which game comes next, what it drills and how often adapt to the student. Results move mastery and send missed lessons back as recall cards. See
 [docs/ALGORITHM.md](docs/ALGORITHM.md#mini-games-feedgamesjs).
 
 **An interactive player.** The app edits the lesson document before Vidmoat's player gets it,

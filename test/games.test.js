@@ -1,4 +1,4 @@
-// Mini games: material from watched lessons, the five builders, pacing, and how a result feeds
+// Mini games: material from watched lessons, the ten builders, pacing, and how a result feeds
 // unit mastery and the recall list.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -12,7 +12,7 @@ for (const k of Object.keys(process.env)) if (/REST_API_URL|REDIS_REST_URL/.test
 
 const { kv } = await import('../server/core/kv.js');
 const db = await import('../server/core/db.js');
-const { materialOf, playable, buildGame, gameFor, pickGame, noteGame, gameOutcome, GAME_TYPES, MIN_VIEWED, GAP, MAX_PER_DAY } = await import('../server/feed/games.js');
+const { materialOf, playable, buildGame, gameFor, pickGame, noteGame, gameOutcome, GAME_TYPES, ARCADE_TYPES, gameWeights, gameGap, huntGrid, HUNT_SIZE, MIN_VIEWED, GAP, MAX_PER_DAY } = await import('../server/feed/games.js');
 const { recordEvent, getProgress } = await import('../server/feed/index.js');
 const { getMisses } = await import('../server/feed/recall.js');
 const { EVENT_SPECS } = await import('../server/feed/events.js');
@@ -87,7 +87,7 @@ test('pacing: nothing early in a session, then one every GAP lessons, at most MA
   assert.ok(second); assert.notEqual(second.game.type, first.game.type, 'not the same kind twice running');
   let viewed = MIN_VIEWED + GAP;
   await noteGame(uid, second, { sid: 's', viewed });
-  for (let i = 2; i < MAX_PER_DAY; i++) { viewed += GAP; const g = await pickGame(uid, { session: { sid: 's', viewed }, videos, rand }); assert.ok(g); await noteGame(uid, g, { sid: 's', viewed }); }
+  for (let i = 2; i < MAX_PER_DAY; i++) { viewed += GAP; const g = await pickGame(uid, { session: { sid: 's', viewed }, videos, rand, gap: GAP }); assert.ok(g); await noteGame(uid, g, { sid: 's', viewed }); }
   assert.equal(await pickGame(uid, { session: { sid: 's', viewed: viewed + GAP }, videos, rand }), null, 'daily cap');
   assert.equal(await pickGame('fresh', { session: { sid: 's', viewed: 20 }, videos: [], rand }), null, 'no material, no game');
 });
@@ -118,4 +118,61 @@ test('a result updates each unit behind the game once, brings missed lessons bac
 test('game events are registered', () => {
   assert.deepEqual(Object.keys(EVENT_SPECS.game_result.fields), ['id', 'game', 'score', 'total', 'wrong', 'ms']);
   assert.ok(EVENT_SPECS.game_view && EVENT_SPECS.game_open);
+});
+
+test('arcade games: letters, cards, bubbles and a word grid, each with one source per scored item', () => {
+  const m = materialOf(videos);
+  assert.ok(m.words.some((w) => w.word === 'Inertia' && /resist/.test(w.clue)), 'a definition gives a word and its clue');
+  assert.equal(new Set(m.words.map((w) => w.word.toLowerCase())).size, m.words.length, 'one entry per word');
+  for (const t of ARCADE_TYPES) assert.ok(playable(m).includes(t), `${t} is playable`);
+  for (let seed = 1; seed <= 25; seed++) {
+    const rand = seeded(seed);
+    const hang = buildGame('hangman', m, rand);
+    assert.match(hang.game.word, /^[A-Z][A-Z' -]+$/); assert.ok(hang.game.clue); assert.equal(hang.key.length, 1);
+    assert.ok(!hang.game.clue.toUpperCase().includes(hang.game.word), 'the clue does not give the word away');
+    const mem = buildGame('memory', m, rand);
+    assert.ok(mem.game.pairs.length >= 3 && mem.game.pairs.length <= 4); assert.equal(mem.key.length, mem.game.pairs.length);
+    assert.equal(new Set(mem.game.pairs.map((p) => p.left.toLowerCase())).size, mem.game.pairs.length);
+    const scr = buildGame('scramble', m, rand);
+    assert.equal(scr.game.rounds.length, 3); assert.equal(scr.key.length, 3);
+    for (const r of scr.game.rounds) { assert.notEqual(r.letters, r.answer); assert.equal([...r.letters].sort().join(''), [...r.answer].sort().join('')); }
+    const pop = buildGame('pop', m, rand);
+    assert.ok(pop.game.chips.some((c) => c.hit) && pop.game.chips.some((c) => !c.hit)); assert.equal(pop.key.length, pop.game.chips.length);
+    assert.ok(pop.game.prompt.includes(pop.game.target));
+    const hunt = buildGame('hunt', m, rand);
+    assert.equal(hunt.game.grid.length, HUNT_SIZE); assert.ok(hunt.game.grid.every((row) => row.length === HUNT_SIZE && /^[A-Z]+$/.test(row)));
+    assert.equal(hunt.key.length, hunt.game.words.length);
+    const lines = [...hunt.game.grid, ...Array.from({ length: HUNT_SIZE }, (_, c) => hunt.game.grid.map((row) => row[c]).join(''))];
+    for (let d = -HUNT_SIZE + 1; d < HUNT_SIZE; d++) lines.push(hunt.game.grid.map((row, r) => row[r + d] || ' ').join(''));
+    for (const w of hunt.game.words) assert.ok(lines.some((l) => l.includes(w.word)), `${w.word} is in the grid`);
+  }
+  assert.equal(huntGrid(['ABCDEFGHIJ']), null, 'a word longer than the grid cannot be placed');
+});
+
+test('which game next: new kinds get a try, finished ones win, the sweet spot is ~75 % right, the last kind sits out', () => {
+  const w = (opts) => Object.fromEntries(gameWeights(['match', 'hangman', 'memory'], opts).map((x) => [x.type, x.weight]));
+  const fresh = w({});
+  assert.ok(fresh.hangman > fresh.match, 'arcade kinds lead');
+  assert.equal(w({ lastType: 'hangman' }).hangman, undefined, 'not the same kind twice running');
+  assert.deepEqual(gameWeights(['match'], { lastType: 'match' }).map((x) => x.type), ['match'], 'unless it is the only one');
+  const ignored = w({ served: { memory: 6 } });
+  assert.ok(ignored.memory < fresh.memory * 0.6, 'shown six times, never finished: less of it');
+  const sweet = w({ played: { hangman: { n: 4, items: 8, right: 6 }, memory: { n: 4, items: 8, right: 8 } }, served: { hangman: 4, memory: 4 } });
+  assert.ok(sweet.hangman > sweet.memory, '75 % right beats 100 % right');
+  const hard = w({ played: { hangman: { n: 4, items: 8, right: 1 } }, served: { hangman: 4 } });
+  assert.ok(hard.hangman < sweet.hangman, 'mostly wrong: less of it');
+  assert.equal(gameGap({}), GAP);
+  assert.equal(gameGap({ served: { match: 4 }, played: { match: { n: 4 } } }), GAP - 2, 'a student who finishes games gets them sooner');
+  assert.equal(gameGap({ served: { match: 5 }, played: {} }), GAP + 4, 'one who swipes past them gets fewer');
+});
+
+test('a game drills the shaky units first when their lessons can make it', async () => {
+  const weakUnit = videos.find((v) => v.format === 'explain').unitId;
+  for (let seed = 1; seed <= 8; seed++) {
+    const item = await gameFor('weak-1', { type: 'hangman', videos, rand: seeded(seed), weak: new Set([weakUnit]) });
+    const stored = await kv.get(`game:${item.game.id}`);
+    assert.equal(stored.key[0].unitId, weakUnit);
+  }
+  const other = await gameFor('weak-1', { type: 'order', videos, rand: seeded(2), weak: new Set(['no-such-unit']) });
+  assert.ok(other, 'falls back to everything watched');
 });
