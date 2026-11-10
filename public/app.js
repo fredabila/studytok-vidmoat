@@ -106,6 +106,7 @@ function validateWho() {
 
 function showStep(n) {
   if (n === 2 && ob.step === 1 && !validateWho()) return;
+  $('#onboard').dataset.dir = n < ob.step ? 'back' : n > ob.step ? 'next' : ''; // which way the step slides in
   ob.step = n;
   $$('#onboard .step').forEach((s) => { s.hidden = s.dataset.step !== String(n); });
   $$('#onboard [data-step-action]').forEach((b) => { b.hidden = b.dataset.stepAction !== String(n); });
@@ -2473,11 +2474,23 @@ async function doInstall() {
 }
 
 // ============================================================================ views
+document.addEventListener('scroll', (e) => {
+  const v = e.target;
+  if (v?.classList?.contains('view-page')) v.classList.toggle('scrolled', v.scrollTop > 6);
+}, { capture: true, passive: true });
 function showView(next) {
   view = next;
   document.body.dataset.view = next;
   setStatusBar(next === 'feed' ? '#141414' : '#f6f1e7'); // the status bar follows the screen
-  $$('.view').forEach((v) => { v.hidden = v.dataset.view !== next; });
+  $$('.view').forEach((v) => {
+    const shown = v.dataset.view === next;
+    if (shown && v.hidden && v.classList.contains('view-page')) { // cards rise in, one after another, when a tab opens
+      v.classList.add('enter');
+      clearTimeout(v._enterT);
+      v._enterT = setTimeout(() => v.classList.remove('enter'), 900);
+    }
+    v.hidden = !shown;
+  });
   $$('.tabbtn').forEach((t, i) => { t.setAttribute('aria-current', t.dataset.tab === next ? 'page' : 'false'); if (t.dataset.tab === next) $('.tab-blob').style.setProperty('--tab', String(i)); });
   if (next === 'feed') {
     renderGoalPill();
