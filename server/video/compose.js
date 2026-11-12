@@ -78,6 +78,14 @@ export function planTimeline(scenes, voice = null) {
     return { segments, duration: round(t), captions, voiceClips: [] };
   }
 
+  // Narration speed: the audio plays `speed` times faster, so every time measured in the recording
+  // (scene starts, cuts, word timings, its length) is divided by it; only where a clip starts in
+  // the source file (mediaStart) stays in recording seconds.
+  const speed = voice.speed > 1 ? voice.speed : 1;
+  if (speed !== 1) {
+    const q = (n) => n / speed;
+    voice = { ...voice, duration: q(voice.duration), parts: voice.parts.map((p) => ({ ...p, start: q(p.start), end: q(p.end), cutBefore: q(p.cutBefore) })), words: (voice.words || []).map((w) => ({ ...w, start: q(w.start), end: q(w.end) })) };
+  }
   const parts = voice.parts;
   const partOf = (id) => parts.find((p) => p.id === id);
   // Audio time -> timeline time: every cut at (or within rounding of) a pause pushes later audio back.
@@ -121,7 +129,7 @@ export function planTimeline(scenes, voice = null) {
   const voiceClips = [];
   for (let k = 0; k + 1 < cuts.length; k++) {
     if (cuts[k + 1] - cuts[k] < 0.05) continue;
-    voiceClips.push({ clipId: `voice${voiceClips.length}`, start: map(cuts[k]), mediaStart: round(cuts[k]), duration: round(cuts[k + 1] - cuts[k]) });
+    voiceClips.push({ clipId: `voice${voiceClips.length}`, start: map(cuts[k]), mediaStart: round(cuts[k] * speed), duration: round(cuts[k + 1] - cuts[k]), speed });
   }
   const duration = round(Math.max(end, segments.at(-1)?.start + segments.at(-1)?.duration || 0));
   return { segments, duration, captions, voiceClips };
@@ -165,7 +173,7 @@ function styled(skinText, over = {}) {
  */
 const butt = (start, d) => round6(round(start + d) - round(start) - 1e-6);
 
-function mediaClip(id, m, start, duration, track, { opacity = 1, zoom = 1 } = {}) {
+function mediaClip(id, m, start, duration, track, { opacity = 1, zoom = 1, punch = false } = {}) {
   const isImage = m.type === 'image';
   const scale = coverScale(m.width, m.height);
   const loop = !isImage && m.mediaDuration && m.mediaDuration < duration;
@@ -175,9 +183,32 @@ function mediaClip(id, m, start, duration, track, { opacity = 1, zoom = 1 } = {}
       ...(isImage ? {} : { mediaStart: 0, mediaDuration: m.mediaDuration }),
       patch: { scale, volume: 0, muted: true, opacity, ...(loop ? { loop: true } : {}) },
     },
-    { op: 'addKeyframe', clipId: id, prop: 'scale', time: 0, value: scale, easing: 'linear' },
-    { op: 'addKeyframe', clipId: id, prop: 'scale', time: round(duration), value: round(scale * (isImage ? 1.12 : 1.06) * zoom), easing: 'linear' },
+    ...(punch ? punchIns(id, scale, duration, isImage) : [
+      { op: 'addKeyframe', clipId: id, prop: 'scale', time: 0, value: scale, easing: 'linear' },
+      { op: 'addKeyframe', clipId: id, prop: 'scale', time: round(duration), value: round(scale * (isImage ? 1.12 : 1.06) * zoom), easing: 'linear' },
+    ]),
   ];
+}
+
+/**
+ * Punch-in cuts: a shot held longer than a few seconds goes dead, so the frame jumps in or out
+ * every PUNCH_EVERY seconds (a slow push in between), the way an editor cuts a talking head.
+ * One clip, scale keyframes only: nothing new on the track, nothing extra to decode.
+ */
+export const PUNCH_EVERY = 2.4;
+const PUNCH_LEVELS = [1, 1.2, 1.07, 1.28];
+function punchIns(id, scale, duration, isImage) {
+  const n = Math.max(1, Math.round(duration / PUNCH_EVERY));
+  const step = duration / n;
+  const drift = isImage ? 1.07 : 1.04;
+  const out = [];
+  for (let k = 0; k < n; k++) {
+    const from = scale * PUNCH_LEVELS[k % PUNCH_LEVELS.length];
+    const t0 = k * step, t1 = (k + 1) * step - (k + 1 < n ? 0.04 : 0);
+    out.push({ op: 'addKeyframe', clipId: id, prop: 'scale', time: round(t0), value: round(from), easing: 'linear' });
+    out.push({ op: 'addKeyframe', clipId: id, prop: 'scale', time: round(t1), value: round(from * drift), easing: 'linear' });
+  }
+  return out;
 }
 
 const sfxClip = (id, s, at, volume, extra = {}) => (s?.src ? [{
@@ -228,11 +259,11 @@ export function composeLesson(lesson, media = {}) {
     for (const [a, b] of covered) { if (a - t > 0.6) gaps.push([t, a]); t = Math.max(t, b); }
     if (duration - t > 0.6) gaps.push([t, duration]);
     gaps.forEach(([a, b], k) => {
-      cmds.push(...mediaClip(k === 0 ? 'ambient' : `ambient${k}`, media.ambient, a, b - a, T.ambient));
+      cmds.push(...mediaClip(k === 0 ? 'ambient' : `ambient${k}`, media.ambient, a, b - a, T.ambient, { punch: b - a > 6 }));
       if (skin.filter) cmds.push({ op: 'applyFilterPreset', clipId: k === 0 ? 'ambient' : `ambient${k}`, preset: skin.filter });
     });
   }
-  cmds.push(dim('scrim', 0, duration, T.scrim, '#000000', media.ambient ? skin.scrim ?? 0.62 : 0.2));
+  cmds.push(dim('scrim', 0, duration, T.scrim, '#000000', media.ambient ? Math.max(0.42, (skin.scrim ?? 0.62) - 0.1) : 0.2));
   // Tracks are created in the order they are first used and composite in that order, so pin the
   // media and card tracks now, before any captions (track 6) exist, with invisible placeholders.
   for (const [id, track] of [['pinMedia', T.media], ['pinCard', T.card], ['pinDim', T.quizDim]]) {
@@ -292,7 +323,7 @@ export function composeLesson(lesson, media = {}) {
       if (fullBleed) {
         // Back to back, not overlapping: a transition runs OUT of a clip into the next one on the same
         // track, and an overlapping clip is pushed up a track, over the scrim and the cards.
-        cmds.push(...mediaClip(`media${i}`, m, start, butt(start, d), T.media));
+        cmds.push(...mediaClip(`media${i}`, m, start, butt(start, d), T.media, { punch: true }));
         cmds.push({ op: 'setTransition', clipId: `media${i}`, type: skin.transition || 'dissolve', duration: 0.4 });
       }
       cmds.push(...teaching);
@@ -328,7 +359,7 @@ export function composeLesson(lesson, media = {}) {
       const i = seg.index;
       const m = media.itemMedia?.[i];
       if (m) {
-        cmds.push(...mediaClip(`item${i}`, m, start, butt(start, d), T.media, { zoom: 1.04 }));
+        cmds.push(...mediaClip(`item${i}`, m, start, butt(start, d), T.media, { zoom: 1.04, punch: true }));
         cmds.push({ op: 'setTransition', clipId: `item${i}`, type: skin.transition || 'whip-pan', duration: 0.35 });
       }
       cmds.push(...numberCard(card(`num${i}`, start, d), { index: seg.number != null ? seg.number - 1 : i, total: seg.total, title: seg.item.title }));
@@ -455,10 +486,10 @@ export function composeLesson(lesson, media = {}) {
   // ---- Narration, then music ducked under it.
   for (const c of voiceClips) {
     cmds.push({ op: 'addClip', clipId: c.clipId, type: 'audio', src: voice.src, start: round(c.start), duration: round(c.duration),
-      mediaStart: round(c.mediaStart), mediaDuration: voice.duration, trackIndex: T.voice, patch: { volume: 1 } });
+      mediaStart: round(c.mediaStart), mediaDuration: voice.duration, trackIndex: T.voice, patch: { volume: 1, ...(c.speed > 1 ? { speed: c.speed } : {}) } });
   }
   if (media.music?.src) {
-    cmds.push({ op: 'musicBed', clipId: 'music', src: media.music.src, volume: voice ? 0.18 : 0.3, fadeIn: 0.8, fadeOut: 1.5,
+    cmds.push({ op: 'musicBed', clipId: 'music', src: media.music.src, volume: voice ? 0.24 : 0.3, fadeIn: 0.8, fadeOut: 1.5,
       duck: Boolean(voice), ...(voice ? { voiceClipIds: voiceClips.map((c) => c.clipId) } : {}), loop: true, start: 0, end: duration });
   }
 

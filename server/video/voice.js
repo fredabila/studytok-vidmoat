@@ -13,6 +13,7 @@ import { scenesFor, format as formatOf } from './formats.js';
 import { bestVoiceFor, VOICES } from '../feed/events.js';
 
 const MAX_CHARS = 1000;
+const WINDOW = 3; // seconds either side of the estimate where a scene boundary is looked for
 const r2 = (n) => Math.round(n * 100) / 100;
 
 /**
@@ -54,25 +55,47 @@ export function narrationParts(lesson, { withAnswer = true } = {}) {
  * @returns {{ parts: Array<{id,kind,start,end,cutBefore,pauseBefore}> }}  cutBefore = silence midpoint before the part
  */
 export function alignParts(parts, duration, words = []) {
-  const total = parts.reduce((n, p) => n + p.text.length + 1, 0);
+  // Character share is a poor clock: figures, codes and abbreviations take far longer to say than
+  // to write ("172.16" is six characters and five words), so a number-heavy quiz at the end used
+  // to stretch every estimate and put the early boundaries on the wrong sentence: the narration
+  // ran a scene ahead of the pictures. Three things keep it honest: digits count for what they
+  // cost to say, each estimate is re-based on the boundary found before it, and the transcript
+  // is searched for the scene's own opening words before any pause is trusted.
+  const weight = (p) => p.text.length + 1 + 5 * (p.text.match(/\d/g) || []).length;
+  const total = parts.reduce((n, p) => n + weight(p), 0);
   let chars = 0;
-  const est = parts.map((p) => { const t = (chars / total) * duration; chars += p.text.length + 1; return t; });
+  const est = parts.map((p) => { const t = (chars / total) * duration; chars += weight(p); return t; });
   const starts = [0];
   const cuts = [0];
+  const norm = (t) => String(t || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+  const opening = (text) => String(text).split(/\s+/).map(norm).filter(Boolean).slice(0, 3);
   let from = 1;
   for (let k = 1; k < parts.length; k++) {
     if (!words.length) { starts.push(est[k]); cuts.push(est[k]); continue; }
+    const left = total - parts.slice(0, k - 1).reduce((n, p) => n + weight(p), 0);
+    const guess = starts[k - 1] + (weight(parts[k - 1]) / left) * (duration - starts[k - 1]);
+    const open = opening(parts[k].text);
     let best = null;
-    for (let j = from; j < words.length; j++) {
+    // 1. Where the transcript says this scene's opening words (two in a row, or one long word).
+    for (let j = from; j < words.length && open.length; j++) {
+      let n = 0;
+      while (n < open.length && norm(words[j + n]?.text) === open[n]) n++;
+      if (n < 2 && !(n === 1 && open[0].length >= 6)) continue;
       const w = words[j], prev = words[j - 1];
-      if (w.start < est[k] - 2.5) continue;
-      if (w.start > est[k] + 2.5) break;
-      const gap = w.start - prev.end;
-      const score = gap + (/[.?!:]$/.test(prev.text) ? 0.4 : 0) - Math.abs(w.start - est[k]) * 0.08;
+      const score = n * 3 - Math.abs(w.start - guess) * 0.25;
       if (!best || score > best.score) best = { j, score, start: w.start, cut: (prev.end + w.start) / 2 };
     }
-    if (!best) { starts.push(est[k]); cuts.push(est[k]); continue; }
-    starts.push(best.start); cuts.push(best.cut); from = best.j + 1;
+    // 2. Otherwise the longest pause near the estimate (the transcript worded it differently).
+    for (let j = from; j < words.length && !best?.j; j++) {
+      const w = words[j], prev = words[j - 1];
+      if (w.start < guess - WINDOW) continue;
+      if (w.start > guess + WINDOW) break;
+      const gap = w.start - prev.end;
+      const score = gap + (/[.?!:]$/.test(prev.text) ? 0.4 : 0) - Math.abs(w.start - guess) * 0.08;
+      if (!best || score > best.score) best = { score, start: w.start, cut: (prev.end + w.start) / 2, at: j };
+    }
+    if (!best) { const t = Math.max(guess, starts[k - 1]); starts.push(t); cuts.push(t); continue; }
+    starts.push(best.start); cuts.push(best.cut); from = (best.j ?? best.at) + 1;
   }
   return {
     parts: parts.map((p, k) => ({
@@ -143,6 +166,9 @@ export async function narrate(lesson) {
     return {
       src: speech.url,
       duration: r2(duration),
+      // Played this much faster than recorded (compose.js planTimeline). A script that still came out
+      // long is nudged further, up to 1.25x, so a lesson's narration lands near 40 seconds.
+      speed: r2(Math.min(1.25, Math.max(config.voice.speed, duration / 40))),
       parts: aligned.parts,
       words,
       credits: (speech.credits?.charged || 0) + (exact ? 5 : 0),

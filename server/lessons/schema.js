@@ -20,7 +20,7 @@ const Visual = z.object({
 });
 
 const Beat = z.object({
-  text: z.string().describe('One spoken sentence, 10-24 words, plain language; also shown as captions'),
+  text: z.string().describe('One spoken sentence, 6-14 words, plain spoken language with no symbols or long figures; also shown as captions'),
   keyTerm: z.string().describe('The concept (or, in a story, the dateline/chapter label), 1-3 words, shown big'),
   visual: Visual,
 });
@@ -59,9 +59,9 @@ export const LessonSchema = z.object({
     question: z.string().describe('Recall or apply question answerable from the video, max 70 chars (examdrill/flashcards: "")'),
     options: z.array(z.string()).describe('Exactly 3 short options, max 28 chars each (or [])'),
     answerIndex: z.number().int().describe('0-based index of the correct option'),
-    explanation: z.string().describe('Why it is right, one short sentence, max 100 chars'),
+    explanation: z.string().describe('Why it is right, one short spoken sentence, max 80 chars'),
   }),
-  takeaway: z.string().describe('The one sentence to remember, max 70 characters'),
+  takeaway: z.string().describe('The one line to remember, max 10 words, 60 characters'),
 });
 
 export const EpisodesSchema = z.object({ episodes: z.array(LessonSchema) });

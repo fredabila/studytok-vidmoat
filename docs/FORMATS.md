@@ -91,6 +91,12 @@ a `diagram` whenever the idea fits one.
 ```
 
 * `spoken` is what the narrator says (`''` for a silent scene such as the recap card).
+* **Pace.** A lesson is 20-40 seconds. The narration is played 1.1x faster than recorded
+  (`STUDYTOK_VOICE_SPEED`, up to 1.25x for a script that came out long; the player keeps the
+  pitch), the quiz question is spoken but its options are only shown, and footage held for more
+  than a few seconds gets punch-in cuts (`PUNCH_EVERY`, scale keyframes on the one clip).
+  Scene boundaries are found from the words the transcript heard (`alignParts`), not from
+  character counts, so the pictures stay with the sentence being said.
 * `pauseAfter` inserts silence after the scene: the narration audio is cut there and resumed
   later, so a question can be followed by thinking time and a flashcard by a beat to answer.
 * `minDur` is the length of a silent scene, or the minimum for a spoken one.
