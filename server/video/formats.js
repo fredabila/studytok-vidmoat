@@ -18,7 +18,9 @@ const quizScenes = (lesson, lead = 'Quick check.') => {
   return [
     // The app holds the video at the end of the question until the viewer answers (or skips), so
     // the answer is never spoken before they have had the chance; pauseAfter is the silent-video think time.
-    { id: 'quizQ', kind: 'quiz', spoken: `${lead} ${question(q.question)} ${q.options.map((o, i) => `${ABC[i]}, ${o}`).join('. ')}.`, pauseAfter: 4, minDur: 5 },
+    // The options are on screen and are not read out: reading three options aloud took a quarter of
+    // a lesson and was the point where viewers switched off.
+    { id: 'quizQ', kind: 'quiz', spoken: `${lead} ${question(q.question)}`, pauseAfter: 3, minDur: 4 },
     { id: 'reveal', kind: 'reveal', spoken: `It's ${ABC[q.answerIndex]}: ${sentence(q.options[q.answerIndex])} ${sentence(q.explanation)}`.trim(), short: `It's ${ABC[q.answerIndex]}: ${sentence(q.options[q.answerIndex])}`, minDur: 3, captions: false },
   ];
 };
@@ -97,7 +99,7 @@ export const FORMATS = {
       const e = l.exam;
       return [
         { id: 'hook', kind: 'hook', spoken: sentence(l.hook), minDur: 2.6 },
-        { id: 'question', kind: 'question', spoken: `Try this. ${question(e.question)} ${e.options.map((o, i) => `${ABC[i]}, ${o}`).join('. ')}.`, pauseAfter: 4, minDur: 6, exam: e },
+        { id: 'question', kind: 'question', spoken: `Try this. ${question(e.question)}`, pauseAfter: 3, minDur: 4, exam: e },
         ...e.steps.map((s, i) => ({ id: `step${i}`, kind: 'steps', index: i, spoken: sentence(s), captions: true, steps: e.steps, answer: i === 0 ? e : null })),
         { id: 'mistake', kind: 'callout', spoken: `Common mistake: ${sentence(e.mistake)}`, label: 'COMMON MISTAKE', text: e.mistake, color: '#e5484d', captions: false, minDur: 3 },
         { id: 'outro', kind: 'outro', spoken: `Marks tip: ${sentence(e.tip)}`, minDur: 3, label: 'Marks tip', text: e.tip },
@@ -353,7 +355,7 @@ export const FORMATS = {
       const e = l.exam;
       return [
         { id: 'hook', kind: 'hook', spoken: sentence(l.hook), minDur: 2.4 },
-        { id: 'question', kind: 'question', spoken: `${question(e.question)} ${e.options.map((o, i) => `${ABC[i]}, ${o}`).join('. ')}. Lock in your answer.`, pauseAfter: 4, minDur: 6, exam: e, label: 'Guess first' },
+        { id: 'question', kind: 'question', spoken: `${question(e.question)} Lock in your answer.`, pauseAfter: 3, minDur: 4, exam: e, label: 'Guess first' },
         { id: 'answer', kind: 'reveal', spoken: `It's ${ABC[e.answerIndex]}: ${sentence(e.options[e.answerIndex])}`, minDur: 2.5, captions: false, exam: e },
         ...l.beats.slice(0, 2).map((b, i) => ({ id: `beat${i}`, kind: 'beat', index: i, spoken: sentence(b.text), captions: true, beat: b, kicker: i === 0 ? 'BECAUSE' : 'AND' })),
         { id: 'outro', kind: 'outro', spoken: sentence(e.tip || l.takeaway), minDur: 3, label: 'Remember', text: e.tip || l.takeaway },
@@ -436,7 +438,7 @@ export const FORMATS = {
       const e = l.exam;
       return [
         { id: 'hook', kind: 'hook', spoken: sentence(l.hook), minDur: 2.4 },
-        { id: 'question', kind: 'question', spoken: `${question(e.question)} ${e.options.map((o, i) => `${ABC[i]}, ${o}`).join('. ')}. Make your call.`, pauseAfter: 4, minDur: 6, exam: e, label: 'What happens next?' },
+        { id: 'question', kind: 'question', spoken: `${question(e.question)} Make your call.`, pauseAfter: 3, minDur: 4, exam: e, label: 'What happens next?' },
         { id: 'answer', kind: 'reveal', spoken: `${ABC[e.answerIndex]}: ${sentence(e.options[e.answerIndex])}`, minDur: 2.5, captions: false, exam: e },
         ...l.beats.slice(0, 2).map((b, i) => ({ id: `beat${i}`, kind: 'beat', index: i, spoken: sentence(b.text), captions: true, beat: b, kicker: i === 0 ? 'BECAUSE' : 'WHICH MEANS' })),
         { id: 'outro', kind: 'outro', spoken: sentence(e.tip || l.takeaway), minDur: 3, label: 'The principle', text: e.tip || l.takeaway },
@@ -514,7 +516,7 @@ export const FORMATS = {
       const e = l.exam;
       return [
         { id: 'hook', kind: 'hook', spoken: sentence(l.hook), minDur: 2 },
-        { id: 'question', kind: 'question', spoken: `${question(e.question)} ${e.options.map((o, i) => `${ABC[i]}, ${o}`).join('. ')}. Ten seconds.`, pauseAfter: 10, minDur: 12, exam: e, label: '10 seconds' },
+        { id: 'question', kind: 'question', spoken: `${question(e.question)} Ten seconds.`, pauseAfter: 10, minDur: 12, exam: e, label: '10 seconds' },
         ...e.steps.slice(0, 2).map((s, i) => ({ id: `step${i}`, kind: 'steps', index: i, spoken: sentence(s), captions: true, steps: e.steps.slice(0, 2), answer: e })),
         { id: 'outro', kind: 'outro', spoken: `The trick: ${sentence(e.tip)}`, minDur: 3, label: 'The trick', text: e.tip },
       ];

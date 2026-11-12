@@ -88,7 +88,10 @@ export const config = {
     voiceId: process.env.STUDYTOK_VOICE_ID || '',
     maxCredits: num(process.env.STUDYTOK_VOICE_MAX_CREDITS, 15),
     // OpenAI voices only: how to deliver the narration.
-    instructions: process.env.STUDYTOK_VOICE_INSTRUCTIONS || 'A warm, clear teacher explaining to a student: upbeat but calm, natural pace, slight pauses between sentences.',
+    instructions: process.env.STUDYTOK_VOICE_INSTRUCTIONS || 'A lively young creator telling a friend something they just found out: energetic, expressive and quick, with real excitement, punchy emphasis on the key words, a smile in the voice and no long pauses. Never flat, never a lecture.',
+    // The narration is played this much faster than it was recorded (pitch is kept by the player).
+    // Speech models read at an audiobook pace; a feed needs a little more. 1 = as recorded.
+    speed: Math.min(1.3, Math.max(1, num(process.env.STUDYTOK_VOICE_SPEED, 1.1))),
     // 'exact': transcribe the narration for word timings (5 more credits; precise captions and
     // a clean pause before the quiz answer). 'estimated': free, timings estimated from text.
     timing: process.env.STUDYTOK_VOICE_TIMING === 'estimated' ? 'estimated' : 'exact',

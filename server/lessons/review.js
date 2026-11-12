@@ -27,7 +27,7 @@ const SYSTEM = `You review short study-video scripts before they are produced. F
 2. The quick check: exactly one option is correct, the question is answerable from the episode alone without seeing the options, it does not contain or hint at the answer, the wrong options are plausible and clearly wrong, and the explanation matches the correct option.
 3. Level and language: no jargon undefined at this level, no sentence a narrator cannot say in one breath (over 28 words), no British/American spelling mix within an episode.
 4. Internal consistency: beats do not contradict each other, the takeaway follows from the beats, key terms match the text.
-Make the smallest edits that fix a problem; keep the author's voice and length limits (hook ≤ 80 chars, beat 10-24 words, options ≤ 28 chars, quiz question ≤ 70 chars, takeaway ≤ 70). Prefer "ok" when nothing is actually wrong: do not rewrite for taste.`;
+Make the smallest edits that fix a problem; keep the author's voice and length limits (hook ≤ 80 chars, beat 6-14 words, options ≤ 28 chars, quiz question ≤ 70 chars, takeaway ≤ 70). Prefer "ok" when nothing is actually wrong: do not rewrite for taste.`;
 
 const LIMITS = { hook: 80, takeaway: 70, fact: 120, myth: 120, 'quiz.question': 70, 'quiz.explanation': 100, 'exam.question': 120, 'exam.tip': 120, 'exam.mistake': 120 };
 

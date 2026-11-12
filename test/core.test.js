@@ -7,7 +7,7 @@ import { join } from 'node:path';
 process.env.STUDYTOK_DATA_DIR = mkdtempSync(join(tmpdir(), 'studytok-test-')) + '/';
 process.env.STUDYTOK_KV_FILE = 'memory';
 
-const { composeLesson, planTimeline, coverScale, timeWords } = await import('../server/video/compose.js');
+const { composeLesson, planTimeline, coverScale, timeWords, PUNCH_EVERY } = await import('../server/video/compose.js');
 const { sanitizeLesson } = await import('../server/lessons/schema.js');
 const { BANK } = await import('../server/lessons/bank.js');
 const { INTEREST_TOPICS } = await import('../server/curriculum/topics.js');
@@ -68,12 +68,13 @@ test('narrated timeline follows the audio and pauses before the answer', () => {
   const parts = narrationParts(lesson);
   assert.deepEqual(parts.map((p) => p.kind), ['hook', 'beat', 'beat', 'beat', 'quiz', 'reveal', 'outro']);
   assert.ok(parts.reduce((n, p) => n + p.text.length + 1, 0) <= 1000);
-  assert.equal(parts.find((p) => p.kind === 'reveal').pauseBefore, 4, 'the think pause sits before the answer');
+  assert.equal(parts.find((p) => p.kind === 'reveal').pauseBefore, 3, 'the think pause sits before the answer');
+  assert.ok(!/\bA, /.test(parts.find((p) => p.kind === 'quiz').text), 'the options are shown, not read out');
   const aligned = alignParts(parts, 30, []);
   const voice = { src: 'https://x/v.mp3', duration: 30, parts: aligned.parts, words: [] };
   const { segments, voiceClips, duration } = planTimeline(scenesFor(lesson), voice);
   assert.equal(voiceClips.length, 2);
-  assert.ok(Math.abs(voiceClips[1].start - (voiceClips[0].start + voiceClips[0].duration) - 4) < 0.02, 'four-second think pause');
+  assert.ok(Math.abs(voiceClips[1].start - (voiceClips[0].start + voiceClips[0].duration) - 3) < 0.02, 'three-second think pause');
   const quiz = segments.find((s) => s.kind === 'quiz'), rev = segments.find((s) => s.kind === 'reveal');
   assert.ok(Math.abs(rev.start - voiceClips[1].start) < 0.05, 'reveal starts with the second voice clip');
   assert.ok(quiz.start < rev.start && duration > 30);
@@ -236,4 +237,68 @@ test('catalog matching handles degree names and levels', () => {
   assert.equal(matchProgram('LLB Law (Hons)', 'university').id, 'uni-law');
   assert.equal(matchProgram('Underwater basket weaving', 'university'), null);
   for (const p of CATALOG) assert.ok(p.units.length >= 6 && p.units.every((u) => u.title && u.topic));
+});
+
+test('scene boundaries follow the words that were said, not the character count', () => {
+  // A number-heavy quiz and takeaway take far longer to say than to write. Character share used
+  // to put every earlier boundary seconds late, so the narration ran a scene ahead of the pictures.
+  const said = [
+    ['hook', '4 things about private IP addresses your lecturer will test.', 3.8],
+    ['item0', 'The biggest private block, often used by large campuses and companies.', 5.3],
+    ['item1', 'The middle private range runs from 172.16 up to 172.31.', 5.4, 'The middle private range runs from 172 .16 up to 172 .31'],
+    ['item2', 'The range your home Wi-Fi router most likely hands out right now.', 4.0, 'The range your home Wi -Fi router most likely hands out right now'],
+    ['item3', 'Internet routers drop private addresses, so NAT swaps them for a public IP.', 5.0],
+    ['quizQ', 'Did you catch it? Is 172.20.5.1 a private or public IPv4 address, by RFC 1918?', 8.0, 'Did you catch it Is 172 .20 .5 .1 a private or public IPv4 address By RFC 1918'],
+    ['reveal', "It's B: Private, in 172.16/12. 172.16.0.0/12 covers 172.16 to 172.31, so 172.20 is private.", 16, "It's B private in 172 .16 slash 12 172 .16 .0 .0 slash 12 covers 172 .16 to 172 .31 so 172 .20 is private"],
+    ['outro', 'Private: 10/8, 172.16/12, 192.168/16, reached online via NAT.', 13, 'Private 10 slash 8 172 .16 slash 12 192 .168 slash 16 reached online via NAT'],
+  ];
+  const words = [], truth = [];
+  let t = 0.1;
+  for (const [, text, dur, heard] of said) {
+    truth.push(+t.toFixed(2));
+    const ws = (heard || text.replace(/[.,?:]/g, '')).split(/\s+/), step = (dur - 0.3) / ws.length;
+    ws.forEach((w, i) => words.push({ text: w, start: +(t + i * step + (i === Math.floor(ws.length / 2) ? 0.3 : 0)).toFixed(2), end: +(t + (i + 1) * step - 0.03).toFixed(2) }));
+    t += dur;
+  }
+  const { parts } = alignParts(said.map(([id, text]) => ({ id, text })), t, words);
+  parts.slice(1).forEach((p, k) => assert.ok(Math.abs(p.start - truth[k + 1]) < 0.2, `${p.id}: ${p.start} vs ${truth[k + 1]}`));
+  // A transcript that words a scene differently still gets a boundary at the nearest pause.
+  const loose = alignParts([{ id: 'a', text: 'First sentence here.' }, { id: 'b', text: 'Zebra crossing ahead.' }], 6, [
+    { text: 'First', start: 0, end: 0.4 }, { text: 'sentence', start: 0.45, end: 0.9 }, { text: 'here.', start: 0.95, end: 1.4 },
+    { text: 'Stripy', start: 2.6, end: 3 }, { text: 'crossing', start: 3.05, end: 3.5 }, { text: 'ahead', start: 3.55, end: 4 }]);
+  assert.equal(loose.parts[1].start, 2.6);
+});
+
+test('narration speed: the audio plays faster and every scene, caption and pause moves with it', () => {
+  const parts = narrationParts(lesson);
+  const aligned = alignParts(parts, 30, []);
+  const base = { src: 'https://x/v.mp3', duration: 30, parts: aligned.parts, words: [] };
+  const slow = planTimeline(scenesFor(lesson), base), fast = planTimeline(scenesFor(lesson), { ...base, speed: 1.2 });
+  assert.ok(fast.duration < slow.duration - 4, `${fast.duration} < ${slow.duration}`);
+  assert.equal(fast.voiceClips.length, slow.voiceClips.length);
+  fast.voiceClips.forEach((c, k) => {
+    assert.equal(c.speed, 1.2);
+    assert.ok(Math.abs(c.mediaStart - slow.voiceClips[k].mediaStart) < 0.02, 'the place in the recording does not move');
+    assert.ok(Math.abs(c.duration * 1.2 - slow.voiceClips[k].duration) < 0.05, 'the clip is shorter on the timeline');
+  });
+  assert.ok(Math.abs((fast.voiceClips[1].start - fast.voiceClips[0].start - fast.voiceClips[0].duration) - 3) < 0.02, 'the think pause is not sped up');
+  const { commands } = composeLesson(lesson, { ...media, voice: { ...base, speed: 1.2 } });
+  const voiceCmds = commands.filter((c) => /^voice\d/.test(c.clipId || ''));
+  assert.ok(voiceCmds.length && voiceCmds.every((c) => c.patch.speed === 1.2 && c.mediaDuration === 30));
+  assert.ok(composeLesson(lesson, { ...media, voice: base }).commands.filter((c) => /^voice\d/.test(c.clipId || '')).every((c) => c.patch.speed === undefined));
+});
+
+test('punch-in cuts: footage held for seconds jumps in and out instead of sitting still', () => {
+  const rapid = sanitizeLesson(SAMPLES.rapid, 'physics');
+  const { commands } = composeLesson(rapid, { ...media, itemMedia: rapid.items.map(() => media.ambient) });
+  const clip = commands.find((c) => c.op === 'addClip' && c.clipId === 'item0');
+  const kf = commands.filter((c) => c.op === 'addKeyframe' && c.clipId === 'item0' && c.prop === 'scale');
+  assert.ok(kf.length >= 2 && kf.length % 2 === 0);
+  assert.ok(kf.every((k) => k.time >= 0 && k.time <= clip.duration + 0.01), 'inside the clip');
+  for (let i = 1; i < kf.length; i++) assert.ok(kf[i].time > kf[i - 1].time, 'in time order');
+  if (clip.duration > PUNCH_EVERY * 1.5) {
+    const jumps = kf.filter((k, i) => i > 0 && i % 2 === 0 && Math.abs(k.value / kf[i - 1].value - 1) > 0.08);
+    assert.ok(jumps.length >= 1, 'at least one jump cut');
+    for (let i = 2; i < kf.length; i += 2) assert.ok(kf[i].time - kf[i - 1].time <= 0.05, 'a cut, not a zoom');
+  }
 });
