@@ -29,6 +29,7 @@
 //   × fatigue        later in a session, shorter and lighter formats win
 //   × difficulty     after wrong answers, gentler formats; after a right streak, exam drills
 //   × freshness      a small bonus for videos this student has never been served
+//   × world          a lesson set in a world the student is into (football, music...) is preferred
 
 export const BOX_DAYS = [1, 3, 7, 21];
 const WRONG_RETRY_MS = 20 * 60 * 1000;
@@ -249,7 +250,7 @@ export const FORMAT_GENTLENESS = { explain: 1, eli5: 1, wow: 0.95, realworld: 0.
  * @param session  { viewed, lastFormats, lastTopics, wrongStreak, rightStreak, earlyStreak }
  * @returns {{ score, parts }}
  */
-export function scoreVideo(video, stats, signals = {}, session = {}, { rand = Math.random, now = Date.now(), review = false, gentle: easeIn = false, weights = null, styleFit = null } = {}) {
+export function scoreVideo(video, stats, signals = {}, session = {}, { rand = Math.random, now = Date.now(), review = false, gentle: easeIn = false, weights = null, styleFit = null, worldFit = null } = {}) {
   // Calibration (feed/calibration.js): a fitted weight w in 0..1 per rule shrinks its multiplier
   // towards 1 (w = 1 keeps the rule as designed, w = 0 switches it off).
   const shrink = (rule, m) => (weights && weights[rule] != null ? 1 + weights[rule] * (m - 1) : m);
@@ -292,7 +293,9 @@ export function scoreVideo(video, stats, signals = {}, session = {}, { rand = Ma
   const easing = easeIn ? 0.75 + 0.5 * gentle : 1;
   // Learning profile (feed/learning.js): formats that use the student's stronger ways in, ±12 %.
   const style = styleFit ? styleFit(format) : 1;
+  // Worlds (feed/worlds.js): a lesson set somewhere the student is into wins; one they dropped loses.
+  const world = worldFit && video.world ? worldFit(video.world) : 1;
 
-  const score = quality * taste * shrink('diversity', diversity) * shrink('fatigue', fatigue) * shrink('difficulty', difficulty) * shrink('freshness', freshness) * shrink('context', context) * shrink('retrieval', retrieval) * shrink('easing', easing) * shrink('style', style);
-  return { score, parts: { quality: +quality.toFixed(3), formatAffinity: +formatAffinity.toFixed(3), topicAffinity: +topicAffinity.toFixed(3), diversity, fatigue: +fatigue.toFixed(3), difficulty: +difficulty.toFixed(3), freshness: +freshness.toFixed(3), context: +context.toFixed(3), ...(review ? { retrieval } : {}), ...(easeIn ? { easing: +easing.toFixed(3) } : {}), ...(styleFit ? { style } : {}) } };
+  const score = quality * taste * shrink('diversity', diversity) * shrink('fatigue', fatigue) * shrink('difficulty', difficulty) * shrink('freshness', freshness) * shrink('context', context) * shrink('retrieval', retrieval) * shrink('easing', easing) * shrink('style', style) * world;
+  return { score, parts: { quality: +quality.toFixed(3), formatAffinity: +formatAffinity.toFixed(3), topicAffinity: +topicAffinity.toFixed(3), diversity, fatigue: +fatigue.toFixed(3), difficulty: +difficulty.toFixed(3), freshness: +freshness.toFixed(3), context: +context.toFixed(3), ...(review ? { retrieval } : {}), ...(easeIn ? { easing: +easing.toFixed(3) } : {}), ...(styleFit ? { style } : {}), ...(world !== 1 ? { world } : {}) } };
 }

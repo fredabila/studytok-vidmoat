@@ -88,6 +88,12 @@ they measurably finish and get right per way in, nudges the feed towards it (a c
 rule) and shows them the result with a suggestion. See
 [docs/ALGORITHM.md](docs/ALGORITHM.md#learning-profile-feedlearningjs-from-studygraph).
 
+**Lessons in your world.** Students say what they are into outside school (football, music,
+gaming, food…), and the feed also works it out from what they finish, like, skip, search and ask.
+Some lessons are then set there: the same syllabus through a free kick or a recipe. The rules are
+fixed and explainable, with no randomness. See
+[docs/ALGORITHM.md](docs/ALGORITHM.md#worlds-what-the-student-is-into-outside-school-feedworldsjs).
+
 **Mini games.** Between lessons, and on demand from the Library, ten games built from lessons
 the student has watched. Five arcade ones: Save Noti (guess the word before the balloons run
 out), Flip and match (a memory game), Unscramble, Pop it (pop only the bubbles that belong) and

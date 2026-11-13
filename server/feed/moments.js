@@ -26,6 +26,9 @@ export const MOMENTS = [
   { id: 'tip-save', type: 'tip', theme: 'sun', emoji: '🔖', mood: 'happy', repeatDays: 45,
     title: 'Keep the keepers', lines: ['Tap the bookmark on any lesson.', 'It lands in Library › Saved.', 'Revise the lot the night before.'],
     cta: { label: 'See Saved', action: 'saved' }, when: (c) => c.saved === 0 && c.watched >= 3 },
+  { id: 'tip-worlds', type: 'tip', theme: 'rose', emoji: '⚽', mood: 'cheer', repeatDays: 30,
+    title: 'What are you into?', lines: ['Football, music, gaming, food, anything.', 'Pick a few and some lessons will be set there.', 'Same syllabus. Your world.'],
+    cta: { label: 'Pick mine', action: 'worlds' }, when: (c) => c.watched >= 4 && !(c.user.worlds?.length) && c.worldsFound === 0 },
   { id: 'tip-less', type: 'tip', theme: 'mint', emoji: '🙈', mood: 'think', repeatDays: 60,
     title: 'Teach the feed', lines: ['Not for you? Tap Less.', 'The algorithm takes the hint on the next page.', 'Like and Save do the opposite.'],
     cta: { label: 'Got it', action: 'feed' }, when: (c) => c.watched >= 5 && c.lessTaps === 0 },
@@ -149,11 +152,11 @@ export function openerMoment({ session = {}, signals = {}, stats = {}, exam = nu
 }
 
 /** The facts a moment's `when` can look at. */
-export function momentContext({ user = {}, signals = {}, saved = 0, watched = 0, invites = 0, pushEnabled = false, pushSubscribed = false } = {}) {
+export function momentContext({ user = {}, signals = {}, worldsFound = 0, saved = 0, watched = 0, invites = 0, pushEnabled = false, pushSubscribed = false } = {}) {
   const b = user.billing || {};
   const freeTotal = config.billing?.freeVideos || 0;
   return {
-    user, signals, saved, watched, invites, pushEnabled, pushSubscribed,
+    user, signals, worldsFound, saved, watched, invites, pushEnabled, pushSubscribed,
     minor: user.profile?.age != null && user.profile.age < 18,
     device: signals.device || {},
     customUnits: (user.units || []).some((id) => String(id).startsWith('cu:')),

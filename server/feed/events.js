@@ -67,6 +67,7 @@ export const EVENT_SPECS = {
   game_view: { fields: { id: 's', game: 's' } },
   game_open: { fields: { game: 's' } },
   style_set: { fields: { styles: 's', where: 's' } },
+  worlds_set: { fields: { worlds: 's', off: 's', where: 's' } },
   style_action: { fields: { action: 's' } },
   // wrong: the scored item indices the student missed, comma-separated ("0,3").
   game_result: { fields: { id: 's', game: 's', score: 'i', total: 'i', wrong: 's', ms: 'n' } },
@@ -271,6 +272,10 @@ export async function ingest(userId, batch) {
     const unitId = v ? v.unitId || (v.topic ? `topic:${v.topic}` : null) : null;
     const format = v?.format || 'explain';
     const topic = v?.topic || 'general';
+    // A lesson set in a world (feed/worlds.js) records the same signals against that world, which is
+    // how the feed learns what a student is into outside school from what they do, not only what they say.
+    const world = v?.world || null;
+    const fb = (field, by = 1) => { bump(signals.formats, format, field, by); if (world) { signals.worlds ||= {}; bump(signals.worlds, world, field, by); } };
     const unitEvent = (type, extra) => {
       if (!unitId || isBreatherUnit(unitId)) return; // breathers are a detour, not the syllabus
       const before = mastery(progress[unitId]);
@@ -304,7 +309,7 @@ export async function ingest(userId, batch) {
       case 'view': {
         if (await db.inSet(userId, 'seen', v.id)) break; // once per viewer
         writes.push(db.addToSet(userId, 'seen', v.id), stat(v.id, 'views'), fstat(v, 'views'));
-        bump(signals.formats, format, 'views'); bump(signals.topics, topic, 'views');
+        fb('views'); bump(signals.topics, topic, 'views');
         session.viewed++;
         signals.today = signals.today?.date === day(e.at) ? { date: day(e.at), n: signals.today.n + 1 } : { date: day(e.at), n: 1 }; // the daily goal
         if (v.readyKey) {
@@ -319,10 +324,10 @@ export async function ingest(userId, batch) {
       case 'heartbeat': writes.push(stat(v.id, 'heartbeats')); break;
       case 'scene': if (e.sceneId) writes.push(kv.hincrby(`video:${v.id}:scenes`, e.sceneId.slice(0, 24), 1)); break;
       case 'pause': writes.push(stat(v.id, 'pauses')); break;
-      case 'loop': writes.push(stat(v.id, 'loops'), fstat(v, 'loops')); bump(signals.formats, format, 'loops'); break;
+      case 'loop': writes.push(stat(v.id, 'loops'), fstat(v, 'loops')); fb('loops'); break;
       case 'complete': {
         writes.push(stat(v.id, 'completes'), fstat(v, 'completes'));
-        bump(signals.formats, format, 'completes'); bump(signals.topics, topic, 'completes');
+        fb('completes'); bump(signals.topics, topic, 'completes');
         signals.watch.completes++;
         unitEvent('complete');
         break;
@@ -332,7 +337,7 @@ export async function ingest(userId, batch) {
         const early = e.early ?? ((e.watched ?? e.watchedSec ?? 0) < 2);
         writes.push(stat(v.id, 'leaves'), stat(v.id, 'watchSec', Math.round(Math.min(600, e.watched ?? e.watchedSec ?? 0))), stat(v.id, 'pctSum', Math.round(pct * 100)), stat(v.id, WATCH_BUCKET(pct)));
         writes.push(fstat(v, 'leaves'), fstat(v, 'pctSum', Math.round(pct * 100)));
-        bump(signals.formats, format, 'n'); bump(signals.formats, format, 'pctSum', pct);
+        fb('n'); fb('pctSum', pct);
         bump(signals.topics, topic, 'n'); bump(signals.topics, topic, 'pctSum', pct);
         signals.watch.n++; signals.watch.pctSum += pct;
         if (isBreatherUnit(v.unitId)) { signals.breathers ||= { n: 0, pctSum: 0, less: 0 }; signals.breathers.n++; signals.breathers.pctSum += pct; writes.push(kv.hincrby(`events:day:${day(e.at)}`, 'breather_view', 1)); }
@@ -357,25 +362,25 @@ export async function ingest(userId, batch) {
         unitEvent('leave', { pct });
         if (early) {
           writes.push(stat(v.id, 'skips'), fstat(v, 'skips'));
-          bump(signals.formats, format, 'skips'); bump(signals.topics, topic, 'skips');
+          fb('skips'); bump(signals.topics, topic, 'skips');
           signals.watch.early++; session.earlyStreak++;
           unitEvent('skip');
         } else session.earlyStreak = 0;
         break;
       }
-      case 'skip': writes.push(stat(v.id, 'skips'), fstat(v, 'skips')); bump(signals.formats, format, 'skips'); unitEvent('skip'); break;
-      case 'rewatch': writes.push(stat(v.id, 'rewatches'), fstat(v, 'rewatches')); bump(signals.formats, format, 'rewatches'); break;
+      case 'skip': writes.push(stat(v.id, 'skips'), fstat(v, 'skips')); fb('skips'); unitEvent('skip'); break;
+      case 'rewatch': writes.push(stat(v.id, 'rewatches'), fstat(v, 'rewatches')); fb('rewatches'); break;
       case 'like': {
         if (await db.inSet(userId, 'liked', v.id)) break;
         writes.push(db.addToSet(userId, 'liked', v.id), stat(v.id, 'likes'), fstat(v, 'likes'));
-        bump(signals.formats, format, 'likes'); bump(signals.topics, topic, 'likes');
+        fb('likes'); bump(signals.topics, topic, 'likes');
         unitEvent('like');
         break;
       }
       case 'unlike': {
         if (!(await db.inSet(userId, 'liked', v.id))) break;
         writes.push(db.removeFromSet(userId, 'liked', v.id), stat(v.id, 'likes', -1), fstat(v, 'likes', -1));
-        bump(signals.formats, format, 'likes', -1);
+        fb('likes', -1);
         unitEvent('unlike');
         break;
       }
@@ -383,7 +388,7 @@ export async function ingest(userId, batch) {
         if (await db.inSet(userId, 'saved', v.id)) break;
         writes.push(db.addToSet(userId, 'saved', v.id), stat(v.id, 'saves'), fstat(v, 'saves'));
         writes.push(kv.get(`user:${userId}:savedAt`).then((m) => kv.set(`user:${userId}:savedAt`, { ...(m || {}), [v.id]: e.at })));
-        bump(signals.formats, format, 'saves'); bump(signals.topics, topic, 'saves');
+        fb('saves'); bump(signals.topics, topic, 'saves');
         break;
       }
       case 'unsave': {
@@ -391,7 +396,7 @@ export async function ingest(userId, batch) {
         writes.push(db.removeFromSet(userId, 'saved', v.id), stat(v.id, 'saves', -1), fstat(v, 'saves', -1));
         break;
       }
-      case 'less': writes.push(stat(v.id, 'less'), fstat(v, 'less')); bump(signals.formats, format, 'less'); bump(signals.topics, topic, 'less'); if (isBreatherUnit(v.unitId)) { signals.breathers ||= { n: 0, pctSum: 0, less: 0 }; signals.breathers.less++; } unitEvent('less'); break;
+      case 'less': writes.push(stat(v.id, 'less'), fstat(v, 'less')); fb('less'); bump(signals.topics, topic, 'less'); if (isBreatherUnit(v.unitId)) { signals.breathers ||= { n: 0, pctSum: 0, less: 0 }; signals.breathers.less++; } unitEvent('less'); break;
       case 'why_open': writes.push(stat(v.id, 'whyOpens')); break;
       // A question means something in this lesson did not land: counted per lesson for the writers.
       case 'ask': writes.push(stat(v.id, 'asks')); break;
@@ -404,7 +409,7 @@ export async function ingest(userId, batch) {
         writes.push(db.addToSet(userId, 'answered', v.id), stat(v.id, e.correct ? 'quizRight' : 'quizWrong'), fstat(v, e.correct ? 'quizRight' : 'quizWrong'));
         if (e.ms) writes.push(stat(v.id, 'answerMs', Math.round(Math.min(120000, e.ms))));
         if (Number.isInteger(e.choice)) writes.push(stat(v.id, `choice${Math.min(2, e.choice)}`));
-        bump(signals.formats, format, e.correct ? 'right' : 'wrong'); bump(signals.topics, topic, e.correct ? 'right' : 'wrong');
+        fb(e.correct ? 'right' : 'wrong'); bump(signals.topics, topic, e.correct ? 'right' : 'wrong');
         signals.quiz.n++; signals.quiz.msSum += Math.min(120000, e.ms || 0); if (e.correct) signals.quiz.right++;
         session.quizN = (session.quizN || 0) + 1; if (e.correct) session.quizRight = (session.quizRight || 0) + 1;
         if (!e.correct) writes.push(recordMiss(userId, v, e.at)); // comes back as a recall card
@@ -413,7 +418,7 @@ export async function ingest(userId, batch) {
         unitEvent('quiz_answer', { correct: Boolean(e.correct) });
         break;
       }
-      case 'quiz_skip': writes.push(stat(v.id, 'quizSkips'), fstat(v, 'quizSkips')); signals.quiz.skips++; bump(signals.formats, format, 'quizSkips'); break;
+      case 'quiz_skip': writes.push(stat(v.id, 'quizSkips'), fstat(v, 'quizSkips')); signals.quiz.skips++; fb('quizSkips'); break;
       case 'game_result': {
         // A game is retrieval practice on lessons already watched: each unit behind it counts one
         // quick-check answer (right if every item from it was right), and a missed lesson's own

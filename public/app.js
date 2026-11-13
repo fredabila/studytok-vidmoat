@@ -80,7 +80,7 @@ function toast(msg) {
 }
 
 // ============================================================================ onboarding
-const ob = { level: null, step: 1, profile: {}, interests: new Set(), programs: [], selected: new Set(), who: 'self', styles: new Set(), handles: {} };
+const ob = { level: null, step: 1, profile: {}, interests: new Set(), programs: [], selected: new Set(), who: 'self', styles: new Set(), worlds: new Set(), handles: {} };
 // StudyGraph's four learning styles, in StudyGraph's words.
 const LEARN_STYLES = [['visual', '👀', 'Seeing it', 'diagrams, cards, timelines'], ['listening', '🎧', 'Hearing it explained', 'stories, analogies'], ['reading', '📖', 'Reading it', 'flashcards, notes'], ['handson', '🧩', 'Doing it', 'guessing first, games']];
 const ageOf = () => { const n = Number($('#ob-age').value); return Number.isInteger(n) && n >= 5 && n <= 120 ? n : null; };
@@ -128,6 +128,32 @@ function renderStyles(box = $('#ob-styles'), chosen = ob.styles, onChange = () =
     b.onclick = () => { chosen.has(id) ? chosen.delete(id) : chosen.add(id); b.setAttribute('aria-pressed', String(chosen.has(id))); onChange(); };
     return b;
   }));
+}
+// What the student is into outside school (server/feed/worlds.js): some lessons are set there.
+function renderWorlds(box = $('#ob-worlds'), chosen = ob.worlds, found = new Set()) {
+  if (!box) return;
+  box.replaceChildren(...(cfg.worlds || []).map((w) => {
+    const b = el('button', { type: 'button', class: `chip-btn world-chip${found.has(w.id) ? ' found' : ''}`, 'aria-pressed': String(chosen.has(w.id)) }, `${w.emoji} ${w.label}`);
+    b.onclick = () => { chosen.has(w.id) ? chosen.delete(w.id) : chosen.add(w.id); b.setAttribute('aria-pressed', String(chosen.has(w.id))); haptic('select'); };
+    return b;
+  }));
+}
+function openWorldsPicker(where = 'profile') {
+  const into = me?.into || [];
+  const found = new Set(into.filter((w) => w.state === 'found').map((w) => w.id));
+  const chosen = new Set([...into.filter((w) => w.state === 'said').map((w) => w.id), ...found]);
+  const box = el('div', { class: 'chips' });
+  renderWorlds(box, chosen, found);
+  const reasons = into.filter((w) => w.state === 'found');
+  openSheet('What are you into?', el('div', {},
+    el('p', { class: 'muted' }, 'Pick a few. Some of your lessons will be set there: the same syllabus, explained through things you already care about. The quiz stays on the subject.'),
+    box,
+    reasons.length ? el('p', { class: 'muted world-note' }, `✨ Picked up from what you do: ${reasons.map((w) => `${w.label} (${w.why.slice(0, 2).join(', ')})`).join('; ')}. Untick any that are wrong.`) : null,
+    el('button', { type: 'button', class: 'btn primary', style: 'width:100%;margin-top:14px', onclick: async () => {
+      const off = [...found].filter((id) => !chosen.has(id));
+      track('worlds_set', { worlds: [...chosen].join(','), off: off.join(','), where });
+      try { await patchMe({ worlds: [...chosen], worldsOff: off }); me = (await api('GET', '/api/me')).user; closeSheet(); renderSettingsList(); toast(chosen.size ? 'Saved. New lessons will pick it up.' : 'Saved.'); } catch { toast("Couldn't save that."); }
+    } }, 'Save')));
 }
 function renderTopics() {
   $('#topics').replaceChildren(...cfg.topics.map((t) => {
@@ -289,7 +315,7 @@ async function buildSyllabus() {
 
 function profileBody() {
   const units = ob.programs.flatMap((p) => p.program.units.map((u) => u.id)).filter((id) => ob.selected.has(id));
-  return { handles: { ...ob.handles }, profile: { ...ob.profile, level: ob.level, age: ageOf(), managedBy: ob.who === 'child' ? 'guardian' : 'self' }, guardianConsent: ob.who === 'child' && $('#ob-consent-box').checked, programKeys: ob.programs.map((p) => p.program.key), units, interests: [...ob.interests], ref: captureRef() || undefined, pack: store.get('st_pack') || undefined, styles: [...ob.styles] };
+  return { handles: { ...ob.handles }, profile: { ...ob.profile, level: ob.level, age: ageOf(), managedBy: ob.who === 'child' ? 'guardian' : 'self' }, guardianConsent: ob.who === 'child' && $('#ob-consent-box').checked, programKeys: ob.programs.map((p) => p.program.key), units, interests: [...ob.interests], ref: captureRef() || undefined, pack: store.get('st_pack') || undefined, styles: [...ob.styles], worlds: [...ob.worlds] };
 }
 
 async function runOnboarding(prefill) {
@@ -298,6 +324,7 @@ async function runOnboarding(prefill) {
     ob.profile = { ...prefill.profile };
     ob.interests = new Set(prefill.interests || []);
     ob.styles = new Set(prefill.styles || []);
+    ob.worlds = new Set(prefill.worlds || []);
     const form = $('#details');
     for (const k of ['country', 'institution', 'program', 'exam', 'examDate']) form[k].value = prefill.profile[k] || '';
     ob.who = prefill.profile.managedBy === 'guardian' ? 'child' : 'self';
@@ -308,6 +335,7 @@ async function runOnboarding(prefill) {
   renderLevels();
   renderTopics();
   renderStyles();
+  renderWorlds();
   $('#countries').replaceChildren(...COUNTRIES.map((c) => el('option', { value: c })));
   $('#ob-signin-hint').hidden = !cfg.vidmoatSignIn || Boolean(me?.vidmoat);
   $('#onboard').hidden = false;
@@ -1098,6 +1126,7 @@ function momentAction(item, cta) {
     case 'install': showView('profile'); reveal('#install-card'); break;
     case 'reminders': showView('profile'); reveal('#push-card'); break;
     case 'tune': openTune(); break;
+    case 'worlds': openWorldsPicker('moment'); break;
     case 'url': if (/^https?:\/\//.test(cta.href || '')) window.open(cta.href, '_blank', 'noopener'); break;
     default: go(1);
   }
@@ -1526,6 +1555,7 @@ function openWhy(item) {
   if (w.explored) reasons.push(['🧭', 'Something a little different. A small share of your feed explores, so it never gets stale.']);
   if (w.kind === 'course' && w.progress >= 0.7) reasons.push(['📚', d.position ? `Next up in your syllabus: unit ${d.position.index} of ${d.position.total}.` : 'Next up in your syllabus.']);
   else if (w.kind === 'course') reasons.push(['📚', 'Part of your course.']);
+  if (d.world) reasons.push([d.world.emoji, `Set in ${d.world.label.toLowerCase()}${(me?.into || []).some((x) => x.id === d.world.id && x.state !== 'open' && x.state !== 'dropped') ? ', because you are into it' : ', to see if it is your thing'}. Same syllabus, different example.`]);
   if (w.kind === 'interest') reasons.push(['✨', `From your interests: ${d.topic.label}.`]);
   if (w.kind === 'follow') reasons.push(['➕', `From a course you follow${d.channel ? `: @${d.channel.handle}` : ''}.`]);
   if (w.intent > 0) reasons.push(['👀', `You just looked at ${d.channel ? `@${d.channel.handle}` : 'this course'}'s profile, so your feed leans towards it for a while.`]);
@@ -3449,14 +3479,15 @@ function renderSettingsList() {
   const rows = [
     ['credits-card', '🎟️', 'Credits', b ? (b.mode === 'own' ? 'Using your Vidmoat credits' : `${b.houseLeft ?? 0} free lesson${b.houseLeft === 1 ? '' : 's'} left`) : ''],
     ['studies-card', '🎓', 'Your studies', [p.program, lvl?.label].filter(Boolean).join(' · ') || 'Level, course and interests'],
+    ['worlds', '⚽', 'What you’re into', (me?.into || []).filter((w) => w.state === 'said' || w.state === 'found').map((w) => w.label).slice(0, 3).join(', ') || 'Football, music, gaming… lessons set in your world'],
     ['tune-card', '🎚️', 'Feed settings', 'Topics, narration, length, difficulty'],
     ['invite-card', '💌', 'Invite friends', `${me?.invites || 0} joined with your link`],
     ['push-card', '🔔', 'Reminders', 'Streak and review nudges'],
     ['account-card', '👤', 'Account', me?.vidmoat ? (me.vidmoat.email || me.vidmoat.name) : 'Sign in to keep your progress'],
     ['install-card', '📲', 'Install the app', 'Full screen, from your home screen'],
     ['reset-card', '♻️', 'Start fresh', 'Reset your feed or everything'],
-  ].filter(([id]) => $(`#${id}`) && !$(`#${id}`).hidden);
-  list.replaceChildren(...rows.map(([id, icon, title, sub]) => el('button', { type: 'button', class: 'set-row', onclick: () => (id === 'tune-card' ? (track('tune_open'), openTune()) : openSettingsCard(id, title)) },
+  ].filter(([id]) => id === 'worlds' || ($(`#${id}`) && !$(`#${id}`).hidden));
+  list.replaceChildren(...rows.map(([id, icon, title, sub]) => el('button', { type: 'button', class: 'set-row', onclick: () => (id === 'worlds' ? openWorldsPicker() : id === 'tune-card' ? (track('tune_open'), openTune()) : openSettingsCard(id, title)) },
     el('span', { class: 'set-ic', 'aria-hidden': 'true' }, icon), el('span', { class: 'set-text' }, el('strong', {}, title), sub ? el('small', {}, sub) : null), el('span', { class: 'set-go', 'aria-hidden': 'true' }, '›'))));
 }
 
