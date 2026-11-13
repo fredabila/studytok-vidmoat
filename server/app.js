@@ -10,7 +10,8 @@ import { LEVELS } from './curriculum/levels.js';
 import { catalogNames } from './curriculum/catalog.js';
 import { usingRedis, redisSource, redisLikeVarNames } from './core/kv.js';
 import * as db from './core/db.js';
-import { saveProfile, editProfile, prefetch, nextItems, publicVideo, library, topUpLibrary, cleanProfile, linkVidmoat, recordReferral, resetStudent, notesOf } from './feed/index.js';
+import { saveProfile, editProfile, prefetch, nextItems, publicVideo, library, topUpLibrary, cleanProfile, linkVidmoat, recordReferral, resetStudent, notesOf, worldsView, noteWorldMentions } from './feed/index.js';
+import { WORLDS } from './feed/worlds.js';
 import { extraMoments, setExtraMoments } from './feed/moments.js';
 import { resolveProgram, getProgram, getUnit, customUnitId } from './curriculum/index.js';
 import { getPlan } from './lessons/plan.js';
@@ -173,6 +174,7 @@ async function route(req, res, url) {
       freeVideos: config.billing.freeVideos,
       billingUrl: config.billing.billingUrl,
       formats: Object.entries(FORMATS).map(([id, f]) => ({ id, name: f.name, tag: f.tag, blurb: f.blurb })),
+      worlds: WORLDS.map((w) => ({ id: w.id, label: w.label, emoji: w.emoji })),
       levels: LEVELS.map(({ id, label, emoji }) => ({ id, label, emoji })),
       topics: INTEREST_TOPICS.map(({ id, label, emoji, accent }) => ({ id, label, emoji, accent })),
     });
@@ -507,8 +509,10 @@ async function route(req, res, url) {
     const { vidmoatTokens, ...safe } = u; // sealed tokens never leave the server
     waitUntil(syncUser(userId)); // keeps the admin sheet's row fresh (throttled)
     const invites = u.memberNo ? await db.referralCount(u.memberNo) : 0;
-    const learning = learningProfile(await getSignals(userId), u.styles);
-    return send(res, 200, { user: { ...safe, setupDone, seen, liked, billing, stats, invites, following, region: regionOf(u.profile?.country) || null, learning: { ...learning, insight: insightOf(learning) }, can: capabilitiesOf(u) } });
+    const mySignals = await getSignals(userId);
+    const learning = learningProfile(mySignals, u.styles);
+    const into = await worldsView(u, mySignals);
+    return send(res, 200, { user: { ...safe, into, setupDone, seen, liked, billing, stats, invites, following, region: regionOf(u.profile?.country) || null, learning: { ...learning, insight: insightOf(learning) }, can: capabilitiesOf(u) } });
   }
 
   // Credits: switch between the free allowance and the student's own account, or disconnect it.
@@ -607,6 +611,7 @@ async function route(req, res, url) {
     const user = await db.getUser(userId);
     const r = await discover.search(q, user);
     waitUntil(discover.noteSearch(userId, q, r.courses.length + r.lessons.length + r.packs.length > 0));
+    waitUntil(noteWorldMentions(userId, q));
     return send(res, 200, r);
   }
 
@@ -679,6 +684,7 @@ async function route(req, res, url) {
         if (what === 'ask' && req.method === 'POST') {
           requireCap(me, 'ask');
           const body = await readJson(req, 4096);
+          if (body.q) waitUntil(noteWorldMentions(userId, body.q));
           return send(res, 200, await askAboutLesson({ userId, video: v, question: body.q, part: body.part ?? null, audience: audienceFor(me) }));
         }
         if (what === 'study' && req.method === 'GET') return send(res, 200, await studyMaterials(v));

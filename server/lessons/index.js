@@ -16,6 +16,7 @@ import { sanitizeLesson } from './schema.js';
 import { writeEpisodes } from './claude.js';
 import { pickFormats, FORMAT_IDS, BREATHER_FORMATS, RETRIEVAL_FORMATS } from '../video/formats.js';
 import { formatPerformance, hookGuidance, quizGuidance } from '../feed/events.js';
+import { assignWorlds } from '../feed/worlds.js';
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -68,7 +69,14 @@ async function writeBatch(unit, audience, key, covered) {
   const facts = packFacts(unit);
   const plan = await unitPlan(unit, audience, key, { facts });
   const picks = await nextConcepts(plan, key, formats.length);
-  const written = await writeEpisodes({ extra: [...packContext(unit), ...planContext(plan, picks)],
+  // Worlds (feed/worlds.js): some episodes are set where this student's interests are (a free kick,
+  // a recipe), rotating past the worlds this unit used last. The lessons stay shared: the world is
+  // a tag, not part of the key. Pack units teach from their own source and are left plain.
+  const recentWorlds = (await kv.lrange(`worlds:${key}`, 0, 5)) || [];
+  const worlds = audience.worldScores && !packOfUnit(unit.id)
+    ? assignWorlds(formats.length, audience.worldScores, { recentUnit: recentWorlds, tried: audience.worldTried || 0, allowProbe: !audience.child && !audience.review })
+    : formats.map(() => null);
+  const written = await writeEpisodes({ extra: [...packContext(unit), ...planContext(plan, picks)], worlds,
     unit, audience, covered, formats, count: formats.length, accent: topicOf(unit.topic).accent, hooks, quizNote,
   });
   // A reviewer pass: facts, the quick check, level fit; small fixes applied, unsound episodes dropped.
@@ -83,12 +91,14 @@ async function writeBatch(unit, audience, key, covered) {
   review.episodes.forEach((raw, i) => {
     try {
       const concept = picks[i] ? { title: picks[i].title, objective: picks[i].objective, keyTerms: picks[i].keyTerms } : null;
-      lessons.push({ ...sanitizeLesson(raw, unit.topic), concept, reviewed: review.reviewed });
+      lessons.push({ ...sanitizeLesson(raw, unit.topic), concept, reviewed: review.reviewed, world: worlds[i] || null });
     } catch (err) { console.warn('[lessons] dropped an episode:', err.message); }
   });
   if (!lessons.length) throw new Error('No usable episodes');
   await kv.lpush(`covered:${key}`, ...lessons.flatMap((l) => [l.title, l.subtopic]));
   await kv.ltrim(`covered:${key}`, 0, 199);
+  const used = lessons.map((l) => l.world).filter(Boolean);
+  if (used.length) { await kv.lpush(`worlds:${key}`, ...used.reverse()); await kv.ltrim(`worlds:${key}`, 0, 9); }
   await kv.lpush(`formats:${key}`, ...lessons.map((l) => l.format).reverse());
   await kv.ltrim(`formats:${key}`, 0, 19);
   if (lessons.length > 1) await kv.rpush(`lessons:${key}`, ...lessons.slice(1));

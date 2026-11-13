@@ -72,6 +72,7 @@ acceleration samples never leave the device, and nothing is recorded when permis
 | `quiz_stamp` | | the viewer's quiz answer was stamped into the video over the reveal |
 | `style_set` | `styles`, `where` | the student said how they like to learn (onboarding sends it with the profile) |
 | `style_action` | `action` | a suggestion on the learning-profile card was tapped |
+| `worlds_set` | `worlds`, `off`, `where` | the student picked what they are into (and unticked worlds the feed had picked up) |
 | `game_view` / `game_open` | `id`, `game` / `game` | a mini game was shown / started from the Library |
 | `game_result` | `id`, `game`, `score`, `total`, `wrong` (item indices), `ms` | a mini game was finished (moves mastery; missed lessons return as recall cards) |
 | `drift` | `d` seconds, `t` | the player's picture and audio clocks were more than 0.25 s apart (worst gap, once per view) |

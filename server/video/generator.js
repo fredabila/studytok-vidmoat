@@ -108,7 +108,7 @@ async function buildVideo(video, unit, audience) {
       await updateVideo(video.id, { unitId: unit.id, unitTitle: unit.title, readyKey: readyKeyFor(unit.id, audience) });
     }
   }
-  await updateVideo(video.id, { lesson, lessonSource: source, format: lesson.format });
+  await updateVideo(video.id, { lesson, lessonSource: source, format: lesson.format, world: lesson.world || null });
   const lessonMs = Date.now() - started;
   const skin = formatOf(lesson.format).skin;
 

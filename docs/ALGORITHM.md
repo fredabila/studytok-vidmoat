@@ -200,6 +200,36 @@ to what a student measurably finishes and gets right is ordinary good personalis
   on, a game, lesson notes). They can change what they said at any time. The sheet's user row
   has "Learns best" and "Says they prefer".
 
+## Worlds: what the student is into outside school (`feed/worlds.js`)
+
+A lesson can be written inside a **world** (football, music, gaming, food, phones, money... 17 in
+all): the syllabus idea is unchanged, the hook and the main example come from somewhere the
+student already cares about. The quiz, key terms and takeaway stay on the syllabus.
+
+Everything is a pure function of the evidence: no sampling and no model call. The same history
+gives the same worlds in the same order, each with its reasons (shown in Profile).
+
+1. **Evidence.** What they said (onboarding, Profile › What you're into, an in-feed card after
+   four lessons); what they did with lessons set in a world (`signals.worlds`: finished, liked,
+   saved, rewatched, skipped, "show me less"); what they wrote (tutor questions, searches and
+   custom topics are matched against each world's words, whole words only).
+2. **Score** (`worldScores`, fixed `WEIGHTS`): picked +3, removed −6, finished +1, liked +2,
+   saved +2, rewatched +1, part-watched its fraction, skipped −1, "less" −3, each mention +1.5
+   (at most three count). Ties go to catalogue order.
+3. **Adopt.** A score of 2 or more is theirs (at most four at a time); −2 or less is not for them.
+4. **Assign** (`assignWorlds`, when a batch is written for this student): one episode in three
+   stays plain; the others take their worlds in rank order, starting after the ones this unit
+   used last. Every third world lesson is a **probe**: the world they have seen least, in
+   catalogue order, which is how interests they never mentioned are found. A student with no
+   worlds yet gets one probe per batch. No probes for under-13s or review sessions; pack units
+   stay plain.
+5. **Rank** (`worldFit`, a multiplier in stage 2): ×1.3 for a lesson in an adopted world, ×1.05
+   for a world never seen (so probes get watched), ×0.75 for a dropped one.
+
+Lessons stay shared: the world is a tag on the lesson, not part of the lesson key, so a football
+lesson written for one student serves every student who likes football. The writer is told not
+to invent scores, statistics or quotes and not to make claims about real people or teams.
+
 ## Mini games (`feed/games.js`)
 
 Ten games built from lessons the student has already watched, so each is retrieval practice

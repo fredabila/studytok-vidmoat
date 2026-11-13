@@ -18,6 +18,7 @@ import { noteDecision, getWeights } from './calibration.js';
 import { settingsFor } from './experiments.js';
 import { pickGame, noteGame, playable, materialOf, watchedVideos } from './games.js';
 import { learningProfile, styleFit, cleanStyles } from './learning.js';
+import { cleanWorlds, worldScores, worldFit, worldsIn, worldProfile, WORLD_BY_ID } from './worlds.js';
 import { ingest, getSignals, getSession, noteServed, noteBreather, studentStats, emptySignals } from './events.js';
 import { needsBreather, pickBreather, isBreatherUnit, BREATHER_REASONS } from './breathers.js';
 import { pickMoment, noteMoment, momentContext, momentItem } from './moments.js';
@@ -104,6 +105,9 @@ export async function saveProfile(userId, body) {
     packs: existing?.packs || [],
     // How the student says they like to learn (StudyGraph's questionnaire); only a starting point for the measured profile.
     styles: Array.isArray(body.styles) ? cleanStyles(body.styles) : existing?.styles || [],
+    // What the student is into outside school (feed/worlds.js): some lessons are set there.
+    worlds: Array.isArray(body.worlds) ? cleanWorlds(body.worlds) : existing?.worlds || [],
+    worldsOff: existing?.worldsOff || [],
     vidmoat: existing?.vidmoat || null,
     // A draft is saved while the student is still reading their syllabus, so the first videos
     // can start generating before they press "Start learning".
@@ -131,6 +135,21 @@ export function removePack(user, slug) {
   user.packs = (user.packs || []).filter((s) => s !== slug);
   user.units = user.units.filter((id) => !id.startsWith(`pack:${slug}:`));
 }
+
+/** Free text the student wrote (a tutor question, a search, a custom topic): count the worlds it mentions. */
+export async function noteWorldMentions(userId, text) {
+  for (const id of worldsIn(text)) await kv.hincrby(`user:${userId}:worldMentions`, id, 1);
+}
+/** The student's world scores (feed/worlds.js): what they said, did and wrote, by fixed weights. */
+export async function worldScoresFor(user, signals) {
+  const mentions = (await kv.hgetall(`user:${user.id}:worldMentions`)) || {};
+  return worldScores({ said: user.worlds || [], declined: user.worldsOff || [], watched: signals?.worlds || {}, mentions: Object.fromEntries(Object.entries(mentions).map(([k, v]) => [k, Number(v) || 0])) });
+}
+/** What the app shows on Profile: each world, whether it was said or found, and why. */
+export async function worldsView(user, signals) {
+  return worldProfile(await worldScoresFor(user, signals), user.worlds || []);
+}
+const worldTried = (signals) => Object.values(signals?.worlds || {}).reduce((n, w) => n + (w.views || 0), 0);
 
 export function audienceFor(user) {
   const p = user.profile || cleanProfile();
@@ -179,6 +198,14 @@ export async function editProfile(userId, body) {
   }
   if (typeof body.removePack === 'string') removePack(user, body.removePack);
   if (Array.isArray(body.styles)) user.styles = cleanStyles(body.styles);
+  if (Array.isArray(body.worlds)) {
+    // Unticking a world the student had picked, or one the feed picked up, says "not for me".
+    const next = cleanWorlds(body.worlds), before = user.worlds || [];
+    const dropped = [...before.filter((id) => !next.includes(id)), ...cleanWorlds(body.worldsOff || [])];
+    user.worldsOff = [...new Set([...(user.worldsOff || []), ...dropped])].filter((id) => !next.includes(id));
+    user.worlds = next;
+  }
+  if (body.addCustom?.title) await noteWorldMentions(userId, body.addCustom.title);
   if (!user.units.length && !user.interests.length) user.interests = INTEREST_TOPICS.map((t) => t.id);
   await db.saveUser(user);
   return { user, added };
@@ -241,7 +268,7 @@ export function poolKeys(unitId, audience) {
 /** Does a lesson suit this student's country? (Theirs, or one made with no country.) */
 export const fitsRegion = (v, audience) => !v?.loc || v.loc === regionOf(audience?.country);
 
-async function reusable(userId, readyKeys, taken, { signals, session, review = false, gentle = false, weights = null, fit = null } = {}) {
+async function reusable(userId, readyKeys, taken, { signals, session, review = false, gentle = false, weights = null, fit = null, wFit = null } = {}) {
   const keys = Array.isArray(readyKeys) ? readyKeys : [readyKeys];
   const lists = await Promise.all(keys.map((k) => db.readyIds(k, 60)));
   const ids = [...new Set(lists.flat())].filter((id) => !taken.has(id));
@@ -253,7 +280,7 @@ async function reusable(userId, readyKeys, taken, { signals, session, review = f
   const stats = await Promise.all(videos.map((v) => db.getStats(v.id)));
   let best = null;
   videos.forEach((v, i) => {
-    const r = scoreVideo(v, stats[i], signals, session, { review, gentle, weights, styleFit: fit });
+    const r = scoreVideo(v, stats[i], signals, session, { review, gentle, weights, styleFit: fit, worldFit: wFit });
     if (!best || r.score > best.score) best = { video: v, ...r };
   });
   return best;
@@ -332,6 +359,10 @@ export async function nextItems(userId, count = 3) {
   const intent = await profileIntent(userId);
   const { candidates, hasCourse } = await candidatesFor(user, { intent });
   const [states, signals, session] = await Promise.all([getProgress(userId), getSignals(userId), getSession(userId)]);
+  // Worlds: not part of the lesson key, only what new batches written for this student are set in.
+  const wScores = await worldScoresFor(user, signals);
+  audience.worldScores = wScores; audience.worldTried = worldTried(signals);
+  const wFit = (world) => worldFit(world, wScores);
   const recent = (await kv.lrange(`user:${userId}:recentUnits`, 0, 9)) || [];
 
   // No exploration for a new student's first videos (start at the beginning of the syllabus);
@@ -362,8 +393,8 @@ export async function nextItems(userId, count = 3) {
   for (const pick of picks) {
     // A unit due for review: its retrieval-practice pool first, else its ordinary pool scored for review.
     const review = (pick.parts?.review || 0) > 0 || (urgency >= 0.5 && Boolean(states[pick.unit.id]?.lastSeen));
-    const best = (review && await reusable(userId, poolKeys(pick.unit.id, reviewAudience(audience)), taken, { signals, session: pageSession, review, gentle, weights, fit }))
-      || await reusable(userId, poolKeys(pick.unit.id, audience), taken, { signals, session: pageSession, review, gentle, weights, fit });
+    const best = (review && await reusable(userId, poolKeys(pick.unit.id, reviewAudience(audience)), taken, { signals, session: pageSession, review, gentle, weights, fit, wFit }))
+      || await reusable(userId, poolKeys(pick.unit.id, audience), taken, { signals, session: pageSession, review, gentle, weights, fit, wFit });
     if (best) {
       taken.add(best.video.id);
       ready.push({ pick, video: best.video, videoParts: best.parts });
@@ -382,7 +413,7 @@ export async function nextItems(userId, count = 3) {
   if (breatherReason) {
     const topics = [...new Set(candidates.map((c) => c.unit.topic))];
     const unit = pickBreather({ topics, lastTopic: session.lastTopics?.[0] || null, recentUnits: recent });
-    const best = await reusable(userId, poolKeys(unit.id, audience), taken, { signals, session: pageSession });
+    const best = await reusable(userId, poolKeys(unit.id, audience), taken, { signals, session: pageSession, wFit });
     let video = best?.video || null;
     if (!video) {
       const existing = inFlight.find((v) => v.readyKey === readyKeyFor(unit.id, audience) && !taken.has(v.id));
@@ -446,7 +477,7 @@ export async function nextItems(userId, count = 3) {
     const game = miss ? null : await pickGame(userId, { session, played: signals.games?.byType || {}, weak });
     if (game) { page.splice(1, 0, { moment: game }); await noteGame(userId, game, session); }
     const watched = await db.countSet(userId, 'seen');
-    const ctx = momentContext({ user, signals, saved: await db.countSet(userId, 'saved'), watched,
+    const ctx = momentContext({ user, signals, worldsFound: wScores.filter((x) => x.score >= 2).length, saved: await db.countSet(userId, 'saved'), watched,
       invites: user.memberNo ? await db.referralCount(user.memberNo) : 0, pushEnabled: push.enabled(), pushSubscribed: push.enabled() && (await push.subscriptions(userId)).length > 0 });
     const stats = await studentStats(userId, { watched, progress: states, masteryOf: mastery });
     stats.unitsTotal = candidates.filter((c) => c.kind === 'course').length || candidates.length;
@@ -473,6 +504,7 @@ export async function nextItems(userId, count = 3) {
 export async function prefetch(userId) {
   const user = await db.getUser(userId);
   const audience = audienceFor(user);
+  audience.worldScores = await worldScoresFor(user, await getSignals(userId));
   const { candidates, hasCourse } = await candidatesFor(user);
   const picks = pickUnits(candidates, await getProgress(userId), [], Math.min(candidates.length, config.generation.readyAhead), { hasCourse, explore: 0 });
   const pending = [];
@@ -525,6 +557,7 @@ export async function publicVideo(v, userId, { withDocument = true, why, pos, qu
     errorCode: v.status === 'failed' ? v.errorCode || null : undefined,
     topic: { id: look.id, label: look.label, emoji: look.emoji, accent: look.accent },
     format: { id: v.format || 'explain', tag: formatOf(v.format).tag, name: formatOf(v.format).name },
+    world: WORLD_BY_ID[v.world] ? { id: v.world, label: WORLD_BY_ID[v.world].label, emoji: WORLD_BY_ID[v.world].emoji } : null,
     unit: v.unitId ? { id: v.unitId, title: v.unitTitle || null } : null,
     // The course profile this lesson belongs to (feed/channels.js), for the @handle on the slide.
     channel: channel ? { handle: channel.handle, name: channel.name, avatar: channel.avatar?.id ? `/a/${channel.avatar.id}` : null, following: await isFollowing(userId, channel.handle) } : undefined,

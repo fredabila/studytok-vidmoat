@@ -1585,3 +1585,6 @@ body[data-view="feed"] .tabbar { background: rgba(20, 20, 20, .7); -webkit-backd
 .game-slide[data-game="hunt"] .g-grid { width: min(100%, 276px); }
 .game-slide[data-game="hunt"] .g-hunt-list li span { -webkit-line-clamp: 1; }
 .game-slide[data-game="hunt"] .g-intro { display: none; }
+/* ---- worlds: what the student is into outside school */
+.world-chip.found::after { content: '✨'; margin-left: 2px; font-size: 12px; }
+.world-note { margin: 12px 0 0; font-size: 13px; line-height: 1.4; }
